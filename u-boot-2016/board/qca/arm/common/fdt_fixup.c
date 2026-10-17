@@ -12,6 +12,20 @@
  */
 
 #include <common.h>
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+#include <nand.h>
+#include <h3c_nand_ecc.h>
+#endif
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+#include <nand.h>
+#include <nx30_d_bootargs.h>
+#include <nx30_nor_autoecc.h>
+#endif
+#ifdef CONFIG_H3C_HW_D_STORAGE_PORT
+#include <nx30_d_fdt_nor_guard.h>
+extern volatile int nx30_d_oem_fit_handoff_verified;
+#endif
+
 #include <asm/arch-qca-common/smem.h>
 #include <asm/arch-qca-common/scm.h>
 #include <jffs2/load_kernel.h>
@@ -703,124 +717,187 @@ static int ipq40xx_patch_eth_params(void *blob, unsigned long gmac_no)
  *       setenv fdtedit2 /soc/usb3@8A00000/%32?4?reg%0x8AF8600?0x200?0x8A00000?0xcb00
  *       setenv fdtedit3 /reserved-memory/tzapp@49B00000/%64?2?reg%0x49A00000?0x500000
  */
-void parse_fdt_fixup(char* buf, void *blob)
+static int fdtedit_parse_uint(const char *text, unsigned int base,
+                              u64 max_value, u64 *value)
 {
-	int nodeoff, value, ret, num_values, i;
-	char *node, *property, *node_value, *sliced_string;
-	bool if_string = true, bit32 = true;
-	u32 *values32;
-	u64 *values64;
+        const char *p = text;
+        u64 result = 0;
+        unsigned int digit, actual_base = base;
 
-	/* env is split into <node>%<property>%<node_value>. '%' is separator */
-	node = strsep(&buf, "%");
-	property = strsep(&buf, "%");
-	node_value = strsep(&buf, "%");
+        if (!p || !*p || !value)
+                return -EINVAL;
+        if (!actual_base) {
+                actual_base = 10;
+                if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+                        actual_base = 16;
+                        p += 2;
+                        if (!*p)
+                                return -EINVAL;
+                }
+        }
+        for (; *p; p++) {
+                if (*p >= '0' && *p <= '9')
+                        digit = *p - '0';
+                else if (*p >= 'a' && *p <= 'f')
+                        digit = *p - 'a' + 10;
+                else if (*p >= 'A' && *p <= 'F')
+                        digit = *p - 'A' + 10;
+                else
+                        return -EINVAL;
+                if (digit >= actual_base || digit > max_value ||
+                    result > (max_value - digit) / actual_base)
+                        return -ERANGE;
+                result = result * actual_base + digit;
+        }
+        *value = result;
+        return 0;
+}
 
-	debug("node: %s  property: %s  node_value: %s\n", node, property, node_value);
+static int fdtedit_parse_array(char *property, char *values, void *blob,
+                               int nodeoff)
+{
+        char *width_text, *count_text, *property_name, *value_text, *cursor;
+        u64 count64, parsed;
+        u32 *values32 = NULL;
+        u64 *values64 = NULL;
+        size_t width, bytes, i;
+        int ret = -EINVAL;
 
-	/* if '?' is present then node_value is string;
-	 * else, node_value is 32bit value
-	 */
-	if (node_value && node_value[0] != '?') {
-		if_string = false;
-		value = simple_strtoul(node_value, NULL, 10);
-	} else {
-		/* skip '?' */
-		node_value++;
-	}
+        width_text = strsep(&property, "?");
+        count_text = strsep(&property, "?");
+        property_name = property;
+        if (!width_text || !count_text || !property_name || !*property_name ||
+            strchr(property_name, '?'))
+                return -EINVAL;
+        if (!strcmp(width_text, "32"))
+                width = sizeof(u32);
+        else if (!strcmp(width_text, "64"))
+                width = sizeof(u64);
+        else
+                return -EINVAL;
+        if (fdtedit_parse_uint(count_text, 10, ~0ULL, &count64) || !count64 ||
+            count64 > (u64)fdt_totalsize(blob) / width ||
+            count64 > 0x7fffffffULL / width)
+                return -EINVAL;
+        bytes = (size_t)count64 * width;
+        if (width == sizeof(u32)) {
+                values32 = malloc(bytes);
+                if (!values32)
+                        return -ENOMEM;
+        } else {
+                values64 = malloc(bytes);
+                if (!values64)
+                        return -ENOMEM;
+        }
+        cursor = values;
+        for (i = 0; i < (size_t)count64; i++) {
+                value_text = strsep(&cursor, "?");
+                if (!value_text || fdtedit_parse_uint(value_text, 0,
+                                width == sizeof(u32) ? 0xffffffffULL : ~0ULL,
+                                &parsed))
+                        goto out;
+                if (width == sizeof(u32))
+                        values32[i] = cpu_to_fdt32((u32)parsed);
+                else
+                        values64[i] = cpu_to_fdt64(parsed);
+        }
+        if (cursor)
+                goto out;
+        ret = fdt_setprop(blob, nodeoff, property_name,
+                          width == sizeof(u32) ? (void *)values32 : (void *)values64,
+                          (int)bytes);
+out:
+        free(values64);
+        free(values32);
+        return ret;
+}
 
-	nodeoff = fdt_path_offset(blob, node);
-	if (nodeoff < 0) {
-		printf("%s: unable to find node '%s'\n", __func__, node);
-		return;
-	}
+int parse_fdt_fixup(const char *edit, void *blob)
+{
+        char *copy, *node, *property, *node_value, *extra;
+        char *cursor;
+        size_t length;
+        u64 value;
+        int nodeoff, ret = -EINVAL;
 
-	if (!strncmp(property, "delete", strlen("delete"))) {
-		/* handle property deletes */
-		ret = fdt_delprop(blob, nodeoff, node_value);
-		if (ret) {
-			printf("%s: unable to delete %s\n", __func__, node_value);
-			return;
-		}
-	} else if (!strncmp(property, "32", strlen("32")) || !strncmp(property, "64", strlen("64"))) {
-		/* if property name starts with '32' or '64', then it is used
-		 * for patching array of 32bit / 64bit values correspondingly.
-		 * 32bit patching is usually used to patch reg = <addr> <size>;
-		 * but could also be used to patch multiple addresses & sizes
-		 * <property> = <addr1> <size1> <addr2> <size2> ..
-		 * 64bit patching is usually used to patch reserved memory nodes
-		 */
-		sliced_string = strsep(&property, "?");
-		if (simple_strtoul(sliced_string, NULL, 10) == 64)
-			bit32 = false;
-
-		/* get the number of array values */
-		sliced_string = strsep(&property, "?");
-		num_values = simple_strtoul(sliced_string, NULL, 10);
-
-		if (bit32 == true) {
-			values32 = malloc(num_values * sizeof(u32));
-
-			for (i = 0; i < num_values; i++)  {
-				sliced_string = strsep(&node_value, "?");
-				values32[i] =  cpu_to_fdt32(simple_strtoul(sliced_string, NULL, 10));
-			}
-
-			ret = fdt_setprop(blob, nodeoff, property, values32, num_values * sizeof(u32));
-			if (ret) {
-				printf("%s: failed to set prop %s\n", __func__, property);
-				return;
-			}
-		} else {
-			values64 = malloc(num_values * sizeof(u64));
-
-			for (i = 0; i < num_values; i++)  {
-				sliced_string = strsep(&node_value, "?");
-				values64[i] =  cpu_to_fdt64(simple_strtoul(sliced_string, NULL, 10));
-			}
-
-			ret = fdt_setprop(blob, nodeoff, property, values64, num_values * sizeof(u64));
-			if (ret) {
-				printf("%s: failed to set prop %s\n", __func__, property);
-				return;
-			}
-		}
-	} else if (!if_string) {
-		/* handle 32bit integer value patching */
-		ret = fdt_setprop_u32(blob, nodeoff, property, value);
-		if (ret) {
-			printf("%s: failed to set prop %s\n", __func__, property);
-			return;
-		}
-	} else {
-		/* handle string value patching
-		 * usually used to patch status = "ok"; status = "disabled";
-		 */
-		ret = fdt_setprop(blob, nodeoff, property,
-				node_value,
-				(strlen(node_value) + 1));
-		if (ret) {
-			printf("%s: failed to set prop %s\n", __func__, property);
-			return;
-		}
-	}
+        if (!edit || !blob)
+                return -EINVAL;
+        length = strlen(edit);
+        if (!length || length > 4096)
+                return -EINVAL;
+        copy = malloc(length + 1);
+        if (!copy)
+                return -ENOMEM;
+        memcpy(copy, edit, length + 1);
+        cursor = copy;
+        node = strsep(&cursor, "%");
+        property = strsep(&cursor, "%");
+        node_value = strsep(&cursor, "%");
+        extra = cursor;
+        if (!node || node[0] != '/' || !node[1] || !property || !*property ||
+            !node_value || extra)
+                goto out;
+        nodeoff = fdt_path_offset(blob, node);
+        if (nodeoff < 0) {
+                ret = nodeoff;
+                goto out;
+        }
+        if (!strcmp(property, "delete")) {
+                if (node_value[0] != '?' || !node_value[1])
+                        goto out;
+                ret = fdt_delprop(blob, nodeoff, node_value + 1);
+                if (ret == -FDT_ERR_NOTFOUND)
+                        ret = 0;
+                goto out;
+        }
+        if (!strncmp(property, "32?", 3) || !strncmp(property, "64?", 3)) {
+                ret = fdtedit_parse_array(property, node_value, blob, nodeoff);
+                goto out;
+        }
+        if (strchr(property, '?'))
+                goto out;
+        if (node_value[0] == '?') {
+                ret = fdt_setprop(blob, nodeoff, property, node_value + 1,
+                                  strlen(node_value + 1) + 1);
+                goto out;
+        }
+        ret = fdtedit_parse_uint(node_value, 0, 0xffffffffULL, &value);
+        if (ret)
+                goto out;
+        ret = fdt_setprop_u32(blob, nodeoff, property, (u32)value);
+out:
+        free(copy);
+        return ret;
 }
 
 /* check parse_fdt_fixup for detailed explanation */
-void ipq_fdt_fixup(void *blob)
+int ipq_fdt_fixup(void *blob)
 {
-	int i, fdteditnum;
+	int i, fdteditnum, ret;
 	char buf[sizeof(FDT_EDIT) + NUM_BUF_SIZE], num[NUM_BUF_SIZE];
 	char *s;
+	u64 parsed_count;
+	size_t blob_size;
+	void *staged;
 
 	/* fdteditnum - defines the number of envs to parse
 	 * starting from 0. eg: fdtedit0, fdtedit1, and so on.
 	 */
 	s = getenv("fdteditnum");
-	if (s)
-		fdteditnum = simple_strtoul(s, NULL, 10);
-	else
-		return;
+	if (!s)
+		return 0;
+	if (fdtedit_parse_uint(s, 10, 99, &parsed_count))
+		return -EINVAL;
+	fdteditnum = (int)parsed_count;
+	if (!blob || fdt_check_header(blob))
+		return -EINVAL;
+	blob_size = fdt_totalsize(blob);
+	if (!blob_size)
+		return -EINVAL;
+	staged = malloc(blob_size);
+	if (!staged)
+		return -ENOMEM;
+	memcpy(staged, blob, blob_size);
 
 	printf("%s: fixup fdtedits\n", __func__);
 
@@ -831,9 +908,18 @@ void ipq_fdt_fixup(void *blob)
 		strlcat(buf, num, sizeof(buf));
 
 		s = getenv(buf);
-		if (s)
-			parse_fdt_fixup(s, blob);
+		if (s) {
+			ret = parse_fdt_fixup(s, staged);
+			if (ret) {
+				printf("%s: invalid fdtedit%d (%d)\n", __func__, i, ret);
+				free(staged);
+				return ret;
+			}
+		}
 	}
+	memcpy(blob, staged, blob_size);
+	free(staged);
+	return 0;
 }
 
 __weak void fdt_fixup_sd_ldo_gpios_toggle(void *blob)
@@ -1125,7 +1211,11 @@ int ft_board_setup(void *blob, bd_t *bd)
 	}
 	mtdparts = parts_str;
 	if (mtdparts) {
-		qca_smem_part_to_mtdparts(mtdparts,len);
+		ret = qca_smem_part_to_mtdparts(mtdparts, len);
+		if (ret) {
+			printf("%s: failed selected rootfs MTD view (%d)\n", __func__, ret);
+			return ret;
+		}
 		if (mtdparts[0] != '\0') {
 			addparts = getenv("addmtdparts");
 			if (addparts) {
@@ -1142,7 +1232,14 @@ int ft_board_setup(void *blob, bd_t *bd)
 #if defined (CONFIG_IPQ_TINY) && !defined(CONFIG_NAND_FLASH)
 		ipq_nor_fdt_fixup(blob, nodes);
 #else
+#if defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+		/* Keep labels from the selected FIT when it already defines partitions. */
+		if (!getenv("h3c_hw_c_keep_fit_partitions") ||
+		    strcmp(getenv("h3c_hw_c_keep_fit_partitions"), "1"))
+			ipq_fdt_fixup_mtdparts(blob, nodes);
+#else
 		ipq_fdt_fixup_mtdparts(blob, nodes);
+#endif
 #endif
 	}
 
@@ -1168,7 +1265,12 @@ int ft_board_setup(void *blob, bd_t *bd)
 		if (gmac_no > 2 && gmac_no < 6)
 			ipq40xx_patch_eth_params(blob, gmac_no);
 	}
-	ipq_fdt_fixup(blob);
+	ret = ipq_fdt_fixup(blob);
+	if (ret) {
+		printf("%s: fdtedit transaction failed (%d); refusing handoff\n",
+		       __func__, ret);
+		return ret;
+	}
 	fdt_fixup_flash(blob);
 	ipq_fdt_fixup_usb_device_mode(blob);
 	fdt_fixup_auto_restart(blob);
@@ -1209,6 +1311,85 @@ int ft_board_setup(void *blob, bd_t *bd)
 #endif
 
 	fdt_fixup_ethernet(blob);
+#if defined(CONFIG_H3C_NAND_ECC_COMPAT) || defined(CONFIG_H3C_HW_D_RAM_WEB)
+ {
+  int chosen = fdt_path_offset(blob, "/chosen"), length;
+  const char *args = chosen >= 0 ? fdt_getprop(blob, chosen, "bootargs", &length) : NULL;
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+  unsigned int mode = h3c_nand_ecc_io_mode();
+  unsigned int spare = h3c_nand_ecc_spare();
+#else
+  unsigned int mode = nx30_nor_nand_autoecc_mode();
+  unsigned int spare = 128;
+#endif
+  char normalized[CONFIG_SYS_CBSIZE];
+  if (!args || length < 1 || length > CONFIG_SYS_CBSIZE || args[length - 1] ||
+      memchr(args, '\0', length - 1) || mode != nand_info[0].ecc_strength ||
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+      h3c_nand_ecc_bootargs(args, normalized, sizeof(normalized), spare, mode)) {
+#else
+      nx30_d_ecc_bootargs(args, normalized, sizeof(normalized), spare, mode)) {
+#endif
+   puts("H3C NAND: final FDT ECC handoff rejected\n");
+   return -EINVAL;
+  }
+  ret = fdt_setprop_string(blob, chosen, "bootargs", normalized);
+  if (ret) return ret;
+  printf("H3C NAND: final Linux handoff spare=%u ECC=%u\n", spare, mode);
+ }
+#endif
+#ifdef CONFIG_H3C_HW_D_STORAGE_PORT
+ {
+  qca_smem_flash_info_t boot_flash;
+  const char *root_compat, *parent_compat, *chip_compat;
+  const fdt32_t *reg;
+  int root_len = 0, parent_len = 0, chip_len = 0, reg_len = 0;
+  int parent, chip, node, matches = 0, disable = 0, ret;
+  int p1, p2;
+
+  if (nx30_d_oem_fit_handoff_verified) {
+   if (smem_get_boot_flash(&boot_flash.flash_type,
+          &boot_flash.flash_index, &boot_flash.flash_chip_select,
+          &boot_flash.flash_block_size, &boot_flash.flash_density))
+    return -EINVAL;
+   root_compat = fdt_getprop(blob, 0, "compatible", &root_len);
+   parent = fdt_path_offset(blob, "/soc/spi@78b5000");
+   chip = parent >= 0 ? fdt_subnode_offset(blob, parent, "m25p80@0") : -FDT_ERR_NOTFOUND;
+   parent_compat = parent >= 0 ? fdt_getprop(blob, parent, "compatible", &parent_len) : NULL;
+   chip_compat = chip >= 0 ? fdt_getprop(blob, chip, "compatible", &chip_len) : NULL;
+   reg = chip >= 0 ? fdt_getprop(blob, chip, "reg", &reg_len) : NULL;
+   for (node = 0; node >= 0; node = fdt_next_node(blob, node, NULL)) {
+    const char *compat;
+    int compat_len = 0;
+    compat = fdt_getprop(blob, node, "compatible", &compat_len);
+    if (!compat)
+     continue;
+    p1 = nx30_d_fdt_stringlist_has(compat, compat_len, "n25q128a11");
+    p2 = nx30_d_fdt_stringlist_has(compat, compat_len, "micron,n25q128a11");
+    if (p1 < 0 || p2 < 0)
+     return -EINVAL;
+    if (p1 || p2)
+     matches++;
+   }
+   ret = nx30_d_fdt_nor_guard_validate(1,
+       boot_flash.flash_type == SMEM_BOOT_NAND_FLASH ||
+       boot_flash.flash_type == SMEM_BOOT_QSPI_NAND_FLASH,
+       root_compat, root_len, parent >= 0 && chip >= 0 ? 1 : 0, matches,
+       parent_compat, parent_len, chip_compat, chip_len,
+       reg, reg_len, &disable);
+   if (ret) {
+    puts("NX30 D: OEM SPI-NOR FDT guard rejected\n");
+    return ret;
+   }
+   if (disable) {
+    ret = fdt_setprop_string(blob, chip, "status", "disabled");
+    if (ret)
+     return ret;
+    puts("NX30 D: disabled only OEM SPI-NOR child for NAND Linux handoff\n");
+   }
+  }
+ }
+#endif
 	return 0;
 }
 

@@ -1,0 +1,6 @@
+/dts-v1/;
+/ {
+    chosen {
+        bootargs-append = "mtdparts=qcom_nand.0:0x2800000@0x900000(oem_rootfs)ro,0x2800000@0x3100000(rootfs)";
+    };
+};

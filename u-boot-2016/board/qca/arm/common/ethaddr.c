@@ -11,7 +11,14 @@
  * GNU General Public License for more details.
  */
 
+#if defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#define RT3_MAC_BOARD_LABEL "H3C HW-C"
+#else
+#define RT3_MAC_BOARD_LABEL "RT3000-B"
+#endif
+
 #include <common.h>
+#include <net.h>
 #include <asm/errno.h>
 #include <nand.h>
 #include <part.h>
@@ -44,6 +51,112 @@ extern  struct sdhci_host mmc_host;
  */
 int get_eth_mac_address(uchar *enetaddr, uint no_of_macs)
 {
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	static const uchar generic_ethaddr[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
+	static const uchar generic_eth1addr[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x56 };
+	uchar base_mac[6];
+	uint i;
+	int j;
+
+	if (no_of_macs > 2)
+		return -EINVAL;
+
+	/* RT3000-B factory MAC lives in its own APPSBLENV, not ART. */
+	if (!eth_getenv_enetaddr("ethaddr", base_mac)) {
+		printf("%s: valid factory ethaddr is required\n", RT3_MAC_BOARD_LABEL);
+		return -EINVAL;
+	}
+	for (i = 0; i < no_of_macs; i++) {
+		uchar *mac = enetaddr + i * 6;
+		if (eth_getenv_enetaddr_by_index("eth", i, mac) &&
+		    !(i > 0 &&
+		      (!memcmp(mac, generic_ethaddr, sizeof(generic_ethaddr)) ||
+		       !memcmp(mac, generic_eth1addr, sizeof(generic_eth1addr)))))
+			continue;
+		/* Derive absent or generic secondary MACs from this base in RAM. */
+		memcpy(mac, base_mac, 6);
+		for (j = 5; j >= 0; j--) {
+			if (++mac[j])
+				break;
+		}
+		if (!is_valid_ethaddr(mac))
+			return -EINVAL;
+		/* The generic Ethernet layer otherwise reimports the OEM placeholder. */
+		if (i > 0 && eth_setenv_enetaddr("eth1addr", mac))
+			return -EINVAL;
+	}
+	return 0;
+#elif defined(CONFIG_H3C_HW_D_RAM_READONLY)
+	static const uchar temporary_ethaddr[6] = { 0x02, 0x4e, 0x58, 0x30, 0x00, 0x01 };
+	static const uchar temporary_eth1addr[6] = { 0x02, 0x4e, 0x58, 0x30, 0x00, 0x02 };
+	static const uchar generic_ethaddr[6] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
+	static const uchar generic_eth1addr[6] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x56 };
+	uchar base_mac[6], mac[6];
+	uint i;
+
+	if (no_of_macs > 2)
+		return -EINVAL;
+	if (!eth_getenv_enetaddr("ethaddr", base_mac) ||
+	    !is_valid_ethaddr(base_mac) ||
+	    !memcmp(base_mac, generic_ethaddr, sizeof(base_mac)) ||
+	    !memcmp(base_mac, generic_eth1addr, sizeof(base_mac))) {
+		memcpy(base_mac, temporary_ethaddr, sizeof(base_mac));
+		if (eth_setenv_enetaddr("ethaddr", base_mac))
+			return -EINVAL;
+		printf("NX30 D temporary ethaddr=02:4e:58:30:00:01 (RAM only)\n");
+	}
+	memcpy(enetaddr, base_mac, sizeof(base_mac));
+	for (i = 1; i < no_of_macs; i++) {
+		if (eth_getenv_enetaddr("eth1addr", mac) && is_valid_ethaddr(mac) &&
+		    memcmp(mac, generic_ethaddr, sizeof(mac)) &&
+		    memcmp(mac, generic_eth1addr, sizeof(mac))) {
+			memcpy(enetaddr + i * 6, mac, sizeof(mac));
+			continue;
+		}
+		memcpy(mac, temporary_eth1addr, sizeof(mac));
+		if (memcmp(base_mac, temporary_ethaddr, sizeof(base_mac))) {
+			memcpy(mac, base_mac, sizeof(mac));
+			for (int j = 5; j >= 0; j--)
+				if (++mac[j])
+					break;
+		}
+		if (!is_valid_ethaddr(mac) || eth_setenv_enetaddr("eth1addr", mac))
+			return -EINVAL;
+		memcpy(enetaddr + i * 6, mac, sizeof(mac));
+		if (!memcmp(mac, temporary_eth1addr, sizeof(mac)))
+			printf("NX30 D temporary eth1addr=02:4e:58:30:00:02 (RAM only)\n");
+	}
+	return 0;
+#elif defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	static const uchar generic_ethaddr[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
+	static const uchar generic_eth1addr[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x56 };
+	uchar base_mac[6];
+	uint i;
+	int j;
+
+	/* HW-A factory identity is already in the loaded OEM ENV; ART is invalid. */
+	if (no_of_macs > 2 || !eth_getenv_enetaddr("ethaddr", base_mac) ||
+	    !is_valid_ethaddr(base_mac) ||
+	    !memcmp(base_mac, generic_ethaddr, sizeof(generic_ethaddr)) ||
+	    !memcmp(base_mac, generic_eth1addr, sizeof(generic_eth1addr)))
+		return -EINVAL;
+	for (i = 0; i < no_of_macs; i++) {
+		uchar *mac = enetaddr + i * 6;
+		if (eth_getenv_enetaddr_by_index("eth", i, mac) &&
+		    is_valid_ethaddr(mac) &&
+		    memcmp(mac, generic_ethaddr, sizeof(generic_ethaddr)) &&
+		    memcmp(mac, generic_eth1addr, sizeof(generic_eth1addr)))
+			continue;
+		memcpy(mac, base_mac, 6);
+		for (j = 5; i && j >= 0; j--)
+			if (++mac[j])
+				break;
+		if (!is_valid_ethaddr(mac))
+			return -EINVAL;
+	}
+	return 0;
+#else
+
 	s32 ret = 0 ;
 	u32 start_blocks;
 	u32 size_blocks;
@@ -156,10 +269,15 @@ int get_eth_mac_address(uchar *enetaddr, uint no_of_macs)
 #endif
 	}
 	return ret;
+#endif
 }
 
 void set_ethmac_addr(void)
 {
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_D)
+	/* Keep the OEM RAM ethaddr unchanged; GMAC reads it directly. */
+	return;
+#else
 	int i, ret;
 	uchar enetaddr[CONFIG_IPQ_NO_MACS * 6];
 	uchar *mac_addr;
@@ -185,4 +303,5 @@ void set_ethmac_addr(void)
 		}
 		snprintf(ethaddr, sizeof(ethaddr), "eth%daddr", (i + 1));
 	}
+#endif
 }

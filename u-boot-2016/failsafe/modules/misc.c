@@ -160,8 +160,17 @@ static void index_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
         struct httpd_response *response)
 {
-	if (status == HTTP_CB_NEW)
+	if (status == HTTP_CB_NEW) {
+#if defined(CONFIG_H3C_HW_D_NAND_SERVICE)
 		output_plain_file(response, "index.html");
+#elif defined(CONFIG_H3C_HW_D_NAND_READONLY) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+		output_plain_file(response, "index_hw_d_nand_readonly.html");
+#elif defined(CONFIG_H3C_HW_D_RAM_WEB) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+		output_plain_file(response, "index_hw_d_ram_readonly.html");
+#else
+		output_plain_file(response, "index.html");
+#endif
+	}
 }
 
 static void version_handler(enum httpd_uri_handler_status status,
@@ -181,6 +190,7 @@ static void version_handler(enum httpd_uri_handler_status status,
 	response->info.content_type = "text/plain";
 }
 
+#if !defined(CONFIG_H3C_HW_D_RAM_WEB) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
 static void reboot_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
         struct httpd_response *response)
@@ -213,6 +223,8 @@ static void reboot_handler(enum httpd_uri_handler_status status,
 		do_reset(NULL, 0, 0, NULL);
 	}
 }
+
+#endif /* !CONFIG_H3C_HW_D_RAM_WEB */
 
 static void style_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
@@ -297,6 +309,10 @@ void index_register_uri_handlers(struct httpd_instance *inst)
 void html_register_uri_handlers(struct httpd_instance *inst)
 {
     httpd_register_uri_handler(inst, "/firmware.html", &upload_html_handler, NULL);
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+    httpd_register_uri_handler(inst, "/firmware-dual.html", &upload_html_handler, NULL);
+    httpd_register_uri_handler(inst, "/firmware-single.html", &upload_html_handler, NULL);
+#endif
 	httpd_register_uri_handler(inst, "/art.html", &upload_html_handler, NULL);
 	httpd_register_uri_handler(inst, "/cdt.html", &upload_html_handler, NULL);
 	httpd_register_uri_handler(inst, "/initramfs.html", &upload_html_handler, NULL);
@@ -320,9 +336,9 @@ void misc_register_uri_handlers(struct httpd_instance *inst)
 {
     httpd_register_uri_handler(inst, "/main.js", &js_handler, NULL);
 	httpd_register_uri_handler(inst, "/style.css", &style_handler, NULL);
-
-	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);
 	httpd_register_uri_handler(inst, "/version", &version_handler, NULL);
-
+#if !defined(CONFIG_H3C_HW_D_RAM_WEB) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);
 	httpd_register_uri_handler(inst, "", &not_found_handler, NULL);
+#endif
 }

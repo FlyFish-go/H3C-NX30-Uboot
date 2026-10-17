@@ -127,7 +127,14 @@ void uniphy_channel0_input_output_6_get(int mode, u32 gpio, u8 *status,
 
 static void ppe_uniphy_sgmii_mode_set(uint32_t mode, uint32_t phy_mode)
 {
-	writel(UNIPHY_MISC2_REG_SGMII_MODE,
+	uint32_t initial_phy_mode = UNIPHY_MISC2_REG_SGMII_MODE;
+
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	if (mode == PORT_WRAPPER_SGMII_PLUS)
+		initial_phy_mode = UNIPHY_MISC2_REG_SGMII_PLUS_MODE;
+#endif
+
+	writel(initial_phy_mode,
 		PPE_UNIPHY_BASE + UNIPHY_MISC2_REG_OFFSET);
 
 	writel(UNIPHY_PLL_RESET_REG_VALUE, PPE_UNIPHY_BASE +
@@ -193,6 +200,82 @@ void ppe_uniphy_mode_set(uint32_t mode, uint32_t phy_mode)
 	 * SGMII and SHMII plus confugure in same function
 	 */
 	ppe_uniphy_sgmii_mode_set(mode, phy_mode);
+}
+
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+void ppe_uniphy_channel0_adapter_reset(void)
+{
+	uint32_t reg_value;
+	uint32_t reg = PPE_UNIPHY_BASE + UNIPHY_DEC_CHANNEL_0_INPUT_OUTPUT_4;
+
+	reg_value = readl(reg);
+	reg_value &= ~UNIPHY_CH0_ADP_SW_RSTN;
+	writel(reg_value, reg);
+	reg_value = readl(reg);
+	reg_value |= UNIPHY_CH0_ADP_SW_RSTN;
+	writel(reg_value, reg);
+}
+#endif
+
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+static int ppe_uniphy_sgmii_mode_set_checked(uint32_t mode, uint32_t phy_mode)
+{
+	int ret;
+
+	if (mode != PORT_WRAPPER_SGMII0_RGMII4 ||
+	    (phy_mode & UNIPHY_MISC2_PHY_MODE_MASK) !=
+		UNIPHY_MISC2_REG_SGMII_MODE)
+		return -EINVAL;
+
+	writel(UNIPHY_MISC2_REG_SGMII_MODE,
+	       PPE_UNIPHY_BASE + UNIPHY_MISC2_REG_OFFSET);
+	writel(UNIPHY_PLL_RESET_REG_VALUE,
+	       PPE_UNIPHY_BASE + UNIPHY_PLL_RESET_REG_OFFSET);
+	mdelay(10);
+	writel(UNIPHY_PLL_RESET_REG_DEFAULT_VALUE,
+	       PPE_UNIPHY_BASE + UNIPHY_PLL_RESET_REG_OFFSET);
+	mdelay(10);
+
+	writel(0x0, GCC_UNIPHY_RX_CBCR);
+	udelay(500);
+	writel(0x0, GCC_UNIPHY_TX_CBCR);
+	udelay(500);
+	writel(0x0, GCC_GMAC1_RX_CBCR);
+	udelay(500);
+	writel(0x0, GCC_GMAC1_TX_CBCR);
+	udelay(500);
+
+	/* Fixed RTL CPU port force control, matching the QSDK SGMII path. */
+	ppe_uniphy_set_forceMode();
+
+	writel(UNIPHY_SG_MODE | UNIPHY_PSGMII_MAC_MODE,
+	       PPE_UNIPHY_BASE + PPE_UNIPHY_MODE_CONTROL);
+	writel(phy_mode, PPE_UNIPHY_BASE + PPE_UNIPHY_ALLREG_DEC_MISC2);
+
+	writel(0x1, GCC_UNIPHY_RX_CBCR);
+	udelay(500);
+	writel(0x1, GCC_UNIPHY_TX_CBCR);
+	udelay(500);
+	writel(0x1, GCC_GMAC1_RX_CBCR);
+	udelay(500);
+	writel(0x1, GCC_GMAC1_TX_CBCR);
+	udelay(500);
+
+	ret = ppe_uniphy_calibration();
+	if (ret)
+		printf("uniphy SGMII calibration failed\n");
+	return ret;
+}
+#endif
+
+int ppe_uniphy_mode_set_checked(uint32_t mode, uint32_t phy_mode)
+{
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	return ppe_uniphy_sgmii_mode_set_checked(mode, phy_mode);
+#else
+	ppe_uniphy_mode_set(mode, phy_mode);
+	return 0;
+#endif
 }
 
 void ppe_uniphy_set_forceMode(void)

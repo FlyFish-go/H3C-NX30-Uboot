@@ -90,6 +90,7 @@ obj-$(CONFIG_IPQ9574_EDMA) += ipq9574/ipq9574_ppe.o
 obj-$(CONFIG_IPQ9574_EDMA) += ipq9574/ipq9574_uniphy.o
 obj-$(CONFIG_IPQ9574_EDMA) += ipq9574/ipq9574_edma.o
 obj-$(CONFIG_IPQ5018_GMAC) += ipq5018/ipq5018_gmac.o
+obj-$(CONFIG_TARGET_IPQ5018_H3C_HW_C) += ipq5018/rtl8367s.o
 obj-$(CONFIG_IPQ5018_GMAC) += ipq5018/ipq5018_uniphy.o
 obj-$(CONFIG_IPQ5018_MDIO) += ipq5018/ipq5018_mdio.o
 obj-$(CONFIG_IPQ5018_GMAC) += ipq5018/athrs17_phy.o

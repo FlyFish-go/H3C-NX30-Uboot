@@ -87,6 +87,9 @@ struct httpd_uri_handler {
 extern u32 upload_id;
 
 /* Find existing http server instance */
+/* Base used by the general multipart upload allocator. */
+ulong httpd_upload_buffer_base(void);
+
 struct httpd_instance *httpd_find_instance(u16 port);
 
 /* Create new http server instance */

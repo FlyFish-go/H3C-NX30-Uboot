@@ -1,0 +1,58 @@
+{
+  "schema": "h3c-nx30-uboot-release-assets-v1",
+  "repository_name": "H3C-NX30-Uboot",
+  "component": "uboot",
+  "draft_tag": "uboot-v0.1.0-pre.1",
+  "tag_created": false,
+  "status": "PRERELEASE_READY_TO_UPLOAD",
+  "embedded_source_archive": {
+    "file": "source/ABCD-UBOOT-SOURCE-AND-CANDIDATES-20261016.tar.gz",
+    "bytes": 20670650,
+    "sha256": "bcca16ce8060b6f09094c10d0af40f9e48343d62da8e08ffe6cadbca8725c732"
+  },
+  "candidate_files": [
+    {
+      "hardware_class": "HW-A",
+      "file": "images/HW-A/appsbl.partition.bin",
+      "bytes": 1310720,
+      "sha256": "8ed8b32594d0ebbe3d5f23a8de1853b9ed3e7492c391361ffaf6f4cf7b1b4abb"
+    },
+    {
+      "hardware_class": "HW-B",
+      "file": "images/HW-B/appsbl.partition.bin",
+      "bytes": 1310720,
+      "sha256": "912159169a8b61adb40e572b5366a21da68b65d48fcd47f113e65de44c908589"
+    },
+    {
+      "hardware_class": "HW-C",
+      "file": "images/HW-C/appsbl.partition.bin",
+      "bytes": 1310720,
+      "sha256": "57d13d1dad2a7b7854799b7cc69bddec638dd61df70f1b75a4fd94650fc96d8e"
+    },
+    {
+      "hardware_class": "HW-D",
+      "file": "images/HW-D/appsbl.partition.bin",
+      "bytes": 1310720,
+      "sha256": "91e9d881ad1b5c88f942069908bfdd7484984521422ad7f1923738d2cc653362"
+    }
+  ],
+  "bootbridge_distribution_included": false,
+  "bootbridge_future_repository": "same repository, tools/bootbridge/",
+  "sources_rebuilt_for_this_preview": false,
+  "original_firmware_assets_modified": false,
+  "github_published": false,
+  "release_asset": {
+    "file": "H3C-NX30-Uboot-uboot-v0.1.0-pre.1.zip",
+    "bytes": 22244731,
+    "sha256": "d7781bdb789617a3935058fb50209ad83d955f9fd399b736ecc7830d21adaa61",
+    "members": 13
+  },
+  "previous_review_asset": {
+    "file": "H3C-UBOOT-ONLY-PRERELEASE-20261017-REVIEW.zip",
+    "bytes": 22244359,
+    "sha256": "88d046da91015e7e422a12cd41b153d95b38a5647139e1ebdf8a3a93526b98dc",
+    "members": 13,
+    "filename_is_existing_local_review_name": true
+  },
+  "public_description_edits_only": true
+}

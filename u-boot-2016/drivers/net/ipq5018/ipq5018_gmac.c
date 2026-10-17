@@ -20,9 +20,34 @@
 #include <net.h>
 #include <asm/global_data.h>
 #include "ipq_phy.h"
+#include "ipq5018_uniphy.h"
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+#include "rtl8367s.h"
+#endif
 #include <asm/arch-ipq5018/ipq5018_gmac.h>
 
 DECLARE_GLOBAL_DATA_PTR;
+
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) && \
+    defined(CONFIG_H3C_HW_C_RAM_READONLY)
+struct ipq_hwc_tx_diag {
+	unsigned int attempts;
+	unsigned int busy;
+	unsigned int completed;
+	unsigned int timeouts;
+	unsigned int errors;
+	unsigned int last_index;
+	u32 last_status;
+	int last_complete;
+};
+
+static struct ipq_hwc_tx_diag ipq_hwc_tx_diags[IPQ5018_GMAC_PORT];
+
+#define HWC_TX_ERROR_STATUS_MASK (DescTxIpv4ChkError | DescTxTimeout | \
+	DescTxFrameFlushed | DescTxPayChkError | DescTxLostCarrier | \
+	DescTxNoCarrier | DescTxLateCollision | DescTxExcCollisions | \
+	DescTxExcDeferral | DescTxUnderflow)
+#endif
 
 #define ipq_info        printf
 #define ipq_dbg         printf
@@ -93,11 +118,19 @@ static void ipq_eth_mac_cfg(struct eth_device *dev)
 	ipq_mac_framefilter = PROMISCUOUS_MODE_ON;
 
 	if (priv->mac_unit) {
-		if (priv->phy_type == QCA8081_1_1_PHY || priv->phy_type == QCA8033_PHY)
+		if ((priv->gmac_board_cfg &&
+		     priv->gmac_board_cfg->rtl8367s_switch_enable) ||
+		    priv->phy_type == QCA8081_1_1_PHY || priv->phy_type == QCA8033_PHY)
 			speed = priv->speed;
 
+		uint mac_tx_rx_enable = TX_ENABLE | RX_ENABLE;
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+		if (priv->mac_unit == 1 && priv->gmac_board_cfg &&
+		    priv->gmac_board_cfg->rtl8367s_switch_enable)
+			mac_tx_rx_enable = 0;
+#endif
 		ipq_mac_cfg |= (FRAME_BURST_ENABLE | JUMBO_FRAME_ENABLE | JABBER_DISABLE |
-				TX_ENABLE | RX_ENABLE | FULL_DUPLEX_ENABLE | speed);
+				mac_tx_rx_enable | FULL_DUPLEX_ENABLE | speed);
 
 		writel(ipq_mac_cfg, &mac_reg->conf);
 	} else {
@@ -361,13 +394,23 @@ static int ipq5018_phy_link_update(struct eth_device *dev)
 
 	phy_get_ops = priv->ops;
 
-	if (priv->ipq_swith) {
+	if (priv->gmac_board_cfg->rtl8367s_switch_enable) {
+		status = 0;
+		speed_clock1 = 1;
+		speed_clock2 = 0;
+		duplex = FAL_FULL_DUPLEX;
+		speed = FAL_SPEED_1000;
+		mode = PORT_WRAPPER_SGMII0_RGMII4;
+		phy_mode = UNIPHY_MISC2_REG_SGMII_MODE;
+		priv->speed = SGMII_PORT_SELECT;
+	} else if (priv->ipq_swith) {
 		speed_clock1 = 1;
 		speed_clock2 = 0;
 		status = ipq5018_s17c_Link_Update(priv);
 	}
 
-	if (priv->sfp_tx_gpio || phy_get_ops) {
+	if (!priv->gmac_board_cfg->rtl8367s_switch_enable &&
+	    (priv->sfp_tx_gpio || phy_get_ops)) {
 		if (phy_get_ops &&
 		    phy_get_ops->phy_get_link_status != NULL &&
 		    phy_get_ops->phy_get_speed != NULL &&
@@ -448,7 +491,18 @@ static int ipq5018_phy_link_update(struct eth_device *dev)
 	}
 
 	if (priv->mac_unit){
-		ppe_uniphy_mode_set(mode, phy_mode);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+		if (priv->gmac_board_cfg->rtl8367s_switch_enable) {
+			int ret = ppe_uniphy_mode_set_checked(mode, phy_mode);
+
+			if (ret < 0) {
+				printf("GMAC%d: UniPHY SGMII setup failed (%d)\n",
+				       priv->mac_unit, ret);
+				return ret;
+			}
+		} else
+#endif
+			ppe_uniphy_mode_set(mode, phy_mode);
 	} else {
 		ipq5018_enable_gephy();
 	}
@@ -464,6 +518,24 @@ int ipq_eth_init(struct eth_device *dev, bd_t *this)
 	struct eth_dma_regs *dma_reg = (struct eth_dma_regs *)priv->dma_regs_p;
 	u32 data;
 
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) && \
+    defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	if (priv->mac_unit < IPQ5018_GMAC_PORT)
+		memset(&ipq_hwc_tx_diags[priv->mac_unit], 0,
+		       sizeof(ipq_hwc_tx_diags[priv->mac_unit]));
+#endif
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	if (priv->mac_unit == 1 && priv->gmac_board_cfg &&
+	    priv->gmac_board_cfg->rtl8367s_switch_enable) {
+		int ret = rtl8367s_sgmii_link_down();
+
+		if (ret < 0) {
+			printf("GMAC%d: RTL8367S SGMII link-down failed (%d)\n",
+			       priv->mac_unit, ret);
+			return ret;
+		}
+	}
+#endif
 	if(ipq5018_phy_link_update(dev) < 0) {
 		return -1;
 	}
@@ -487,6 +559,23 @@ int ipq_eth_init(struct eth_device *dev, bd_t *this)
 	ipq_gmac_rx_desc_setup(priv);
 
 	writel((uint)priv->desc_tx[0], &dma_reg->txdesclistaddr);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	if (priv->mac_unit == 1 && priv->gmac_board_cfg &&
+	    priv->gmac_board_cfg->rtl8367s_switch_enable) {
+		int ret = rtl8367s_sgmii_link_up();
+
+		if (ret < 0) {
+			printf("GMAC%d: RTL8367S SGMII link-up failed (%d)\n",
+			       priv->mac_unit, ret);
+			ipq_mac_reset(dev);
+			return ret;
+		}
+		mdelay(50);
+		ppe_uniphy_channel0_adapter_reset();
+		setbits_le32(&((struct eth_mac_regs *)priv->mac_regs_p)->conf,
+			     TX_ENABLE | RX_ENABLE);
+	}
+#endif
 	setbits_le32(&dma_reg->opmode, (RXSTART));
 	setbits_le32(&dma_reg->opmode, (TXSTART));
 
@@ -499,6 +588,15 @@ static int ipq_eth_send(struct eth_device *dev, void *packet, int length)
 	struct eth_dma_regs *dma_p = (struct eth_dma_regs *)priv->dma_regs_p;
 	ipq_gmac_desc_t *txdesc = priv->desc_tx[priv->next_tx];
 	int i;
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) && \
+    defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	struct ipq_hwc_tx_diag *txdiag = NULL;
+
+	if (priv->mac_unit < IPQ5018_GMAC_PORT) {
+		txdiag = &ipq_hwc_tx_diags[priv->mac_unit];
+		txdiag->attempts++;
+	}
+#endif
 
 	invalidate_dcache_range((unsigned long)txdesc,
 		       (unsigned long)txdesc + DESC_FLUSH_SIZE);
@@ -506,19 +604,31 @@ static int ipq_eth_send(struct eth_device *dev, void *packet, int length)
 	/* Check if the dma descriptor is still owned by DMA */
 	if (ipq_gmac_owned_by_dma(txdesc)) {
 		ipq_info("BUG: Tx descriptor is owned by DMA %p\n", txdesc);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) && \
+    defined(CONFIG_H3C_HW_C_RAM_READONLY)
+		if (txdiag)
+			txdiag->busy++;
+#endif
 		return NETDEV_TX_BUSY;
 	}
 
 	txdesc->length |= ((length <<DescSize1Shift) & DescSize1Mask);
 	txdesc->status |= (DescTxFirst | DescTxLast | DescTxIntEnable);
 	txdesc->buffer1 = virt_to_phys(packet);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	/* Make packet data visible to DMA before publishing descriptor ownership. */
+	flush_dcache_range((unsigned long)(txdesc->buffer1),
+		(unsigned long)(txdesc->buffer1) + PKTSIZE_ALIGN);
+#endif
 	ipq_gmac_give_to_dma(txdesc);
 
 	flush_dcache_range((unsigned long)txdesc,
 			(unsigned long)txdesc + DESC_SIZE);
 
+#if !defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
 	flush_dcache_range((unsigned long)(txdesc->buffer1),
 		(unsigned long)(txdesc->buffer1) + PKTSIZE_ALIGN);
+#endif
 
 	/* Start the transmission */
 	writel(POLL_DATA, &dma_p->txpolldemand);
@@ -534,6 +644,20 @@ static int ipq_eth_send(struct eth_device *dev, void *packet, int length)
 			break;
 	}
 
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) && \
+    defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	if (txdiag) {
+		txdiag->last_index = priv->next_tx;
+		txdiag->last_status = txdesc->status;
+		txdiag->last_complete = !ipq_gmac_owned_by_dma(txdesc);
+		if (txdiag->last_complete)
+			txdiag->completed++;
+		if (i == MAX_WAIT)
+			txdiag->timeouts++;
+		if (txdesc->status & HWC_TX_ERROR_STATUS_MASK)
+			txdiag->errors++;
+	}
+#endif
 	if (i == MAX_WAIT) {
 		ipq_info("Tx Timed out\n");
 	}
@@ -610,10 +734,108 @@ static int ipq_eth_recv(struct eth_device *dev)
 	return length;
 }
 
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_C
+static void ipq_eth_netdiag(struct eth_device *dev)
+{
+	struct ipq_eth_dev *priv;
+	struct eth_mac_regs *mac_reg;
+	struct eth_dma_regs *dma_reg;
+#ifndef CONFIG_H3C_HW_C_RAM_READONLY
+	const char *enabled = getenv("hwc_netdiag");
+#endif
+	const u8 *header;
+	unsigned int rx_index;
+	int i;
+
+#ifndef CONFIG_H3C_HW_C_RAM_READONLY
+	if (!enabled || strcmp(enabled, "1"))
+		return;
+#endif
+	if (!dev || !dev->priv) {
+		printf("HWC-NETDIAG device/private state unavailable\n");
+		return;
+	}
+
+	priv = dev->priv;
+#if defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	if (priv->mac_unit < IPQ5018_GMAC_PORT) {
+		struct ipq_hwc_tx_diag *txdiag =
+			&ipq_hwc_tx_diags[priv->mac_unit];
+
+		printf("HWC-NETDIAG tx macunit=%u attempts=%u busy=%u completed=%u timeouts=%u errors=%u last_idx=%u last_status=%08x last_complete=%d\n",
+		       priv->mac_unit, txdiag->attempts, txdiag->busy,
+		       txdiag->completed, txdiag->timeouts, txdiag->errors,
+		       txdiag->last_index, txdiag->last_status,
+		       txdiag->last_complete);
+	}
+#endif
+	mac_reg = (struct eth_mac_regs *)priv->mac_regs_p;
+	dma_reg = (struct eth_dma_regs *)priv->dma_regs_p;
+	printf("HWC-NETDIAG dev=%s state=%d devmac=%02x:%02x:%02x:%02x:%02x:%02x netmac=%02x:%02x:%02x:%02x:%02x:%02x\n",
+	       dev->name, dev->state,
+	       dev->enetaddr[0], dev->enetaddr[1], dev->enetaddr[2],
+	       dev->enetaddr[3], dev->enetaddr[4], dev->enetaddr[5],
+	       net_ethaddr[0], net_ethaddr[1], net_ethaddr[2],
+	       net_ethaddr[3], net_ethaddr[4], net_ethaddr[5]);
+	if (mac_reg) {
+		printf("HWC-NETDIAG mac=%p conf=%08x framefilt=%08x\n",
+		       mac_reg, readl(&mac_reg->conf),
+		       readl(&mac_reg->framefilt));
+	} else {
+		printf("HWC-NETDIAG mac registers unavailable\n");
+	}
+	if (dma_reg) {
+		printf("HWC-NETDIAG dma=%p status=%08x opmode=%08x rxdesclist=%08x\n",
+		       dma_reg, readl(&dma_reg->status),
+		       readl(&dma_reg->opmode),
+		       readl(&dma_reg->rxdesclistaddr));
+	} else {
+		printf("HWC-NETDIAG DMA registers unavailable\n");
+	}
+	printf("HWC-NETDIAG next_rx=%u next_tx=%u rx_ring_count=%u\n",
+	       priv->next_rx, priv->next_tx, NO_OF_RX_DESC);
+
+	for (i = 0; i < NO_OF_RX_DESC; i++) {
+		if (!priv->desc_rx[i]) {
+			printf("HWC-NETDIAG rxdesc[%d] unavailable\n", i);
+			return;
+		}
+	}
+	/* Match the driver's normal RX descriptor cache invalidation; no payload
+	 * buffers are read or printed by this diagnostic.
+	 */
+	invalidate_dcache_range((unsigned long)priv->desc_rx[0],
+			(unsigned long)priv->desc_rx[NO_OF_RX_DESC - 1] +
+			DESC_FLUSH_SIZE);
+	for (i = 0; i < NO_OF_RX_DESC; i++) {
+		ipq_gmac_desc_t *desc = priv->desc_rx[i];
+
+		printf("HWC-NETDIAG rxdesc[%d]=%p status=%08x length=%08x buffer1=%08x\n",
+		       i, desc, desc->status, desc->length, desc->buffer1);
+	}
+
+	if (priv->next_rx) {
+		rx_index = (priv->next_rx + NO_OF_RX_DESC - 1) % NO_OF_RX_DESC;
+		header = net_rx_packets[rx_index];
+		if (header) {
+			invalidate_dcache_range((unsigned long)header,
+					(unsigned long)header + PKTSIZE_ALIGN);
+			printf("HWC-NETDIAG last-rx-l2[%u] dst=%02x:%02x:%02x:%02x:%02x:%02x src=%02x:%02x:%02x:%02x:%02x:%02x ethertype=%02x:%02x\n",
+			       rx_index, header[0], header[1], header[2], header[3],
+			       header[4], header[5], header[6], header[7], header[8],
+			       header[9], header[10], header[11], header[12], header[13]);
+		}
+	}
+}
+#endif
+
 static void ipq_eth_halt(struct eth_device *dev)
 {
 	if (dev->state != ETH_STATE_ACTIVE)
 		return;
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_C
+	ipq_eth_netdiag(dev);
+#endif
 	/* reset the mac */
 	ipq_mac_reset(dev);
 }
@@ -742,6 +964,7 @@ static void mdio_init(void)
 int ipq_gmac_init(ipq_gmac_board_cfg_t *gmac_cfg)
 {
 	struct eth_device *dev[CONFIG_IPQ_NO_MACS];
+	bool registered[CONFIG_IPQ_NO_MACS] = { false };
 	uchar enet_addr[CONFIG_IPQ_NO_MACS * 6];
 	int i;
 	uint32_t phy_chip_id, phy_chip_id1, phy_chip_id2;
@@ -749,22 +972,31 @@ int ipq_gmac_init(ipq_gmac_board_cfg_t *gmac_cfg)
 	int ret;
 
 	memset(enet_addr, 0, sizeof(enet_addr));
+	memset(dev, 0, sizeof(dev));
 
 	/* Mdio init */
 	mdio_init();
 
 	/* Getting the MAC address from ART partition */
 	ret = get_eth_mac_address(enet_addr, CONFIG_IPQ_NO_MACS);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	if (ret < 0)
+		return ret;
+#endif
 
 	for (i = 0; gmac_cfg_is_valid(gmac_cfg); gmac_cfg++, i++) {
 
 		dev[i] = malloc(sizeof(struct eth_device));
-		if (dev[i] == NULL)
+		if (dev[i] == NULL) {
+			ret = -ENOMEM;
 			goto init_failed;
+		}
 
 		ipq_gmac_macs[i] = malloc(sizeof(struct ipq_eth_dev));
-		if (ipq_gmac_macs[i] == NULL)
+		if (ipq_gmac_macs[i] == NULL) {
+			ret = -ENOMEM;
 			goto init_failed;
+		}
 
 		memset(dev[i], 0, sizeof(struct eth_device));
 		memset(ipq_gmac_macs[i], 0, sizeof(struct ipq_eth_dev));
@@ -821,6 +1053,11 @@ int ipq_gmac_init(ipq_gmac_board_cfg_t *gmac_cfg)
 		snprintf((char *)ipq_gmac_macs[i]->phy_name,
 				sizeof(ipq_gmac_macs[i]->phy_name), "IPQ MDIO%d", i);
 
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+		if (gmac_cfg->rtl8367s_switch_enable) {
+			phy_chip_id = 0;
+		} else
+#endif
 		if (gmac_cfg->unit){
 			phy_chip_id1 = ipq_mdio_read(
 					ipq_gmac_macs[i]->phy_address,
@@ -842,6 +1079,19 @@ int ipq_gmac_init(ipq_gmac_board_cfg_t *gmac_cfg)
 					NULL);
 			phy_chip_id = (phy_chip_id1 << 16) | phy_chip_id2;
 		}
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+		if (gmac_cfg->rtl8367s_switch_enable) {
+			if (gmac_cfg->unit != 1 || gmac_cfg->phy_addr != 29 ||
+			    !gmac_cfg->phy_external_link) {
+				printf("RTL8367S requires GMAC1, MDIO address 29, fixed external link\n");
+				ret = -EINVAL;
+				goto init_failed;
+			}
+			ret = rtl8367s_switch_init();
+			if (ret)
+				goto init_failed;
+		} else
+#endif
 		switch(phy_chip_id) {
 #ifdef CONFIG_QCA8081_PHY
 			/* NAPA PHY For GMAC1 */
@@ -887,29 +1137,41 @@ int ipq_gmac_init(ipq_gmac_board_cfg_t *gmac_cfg)
 				break;
 		}
 		/* Initialize 8337 switch */
-		if (gmac_cfg->ipq_swith &&
+		if (!gmac_cfg->rtl8367s_switch_enable &&
+			gmac_cfg->ipq_swith &&
 			ipq_gmac_macs[i]->phy_external_link &&
 			!ipq_gmac_macs[i]->ipq_swith){
 			ipq_gmac_macs[i]->ipq_swith =
 				QCA8337_switch_init(gmac_cfg);
 		}
 		/* Tx/Rx Descriptor initialization */
-		if (ipq_gmac_tx_rx_desc_ring(dev[i]->priv) == -1)
+		ret = ipq_gmac_tx_rx_desc_ring(dev[i]->priv);
+		if (ret == -1) {
+			ret = -EIO;
 			goto init_failed;
+		}
 
-		eth_register(dev[i]);
+		ret = eth_register(dev[i]);
+		if (ret)
+			goto init_failed;
+		registered[i] = true;
 	}
 	return 0;
 
 init_failed:
 	for (i = 0; i < IPQ5018_GMAC_PORT; i++) {
-		if (dev[i]) {
+		if (registered[i])
+			eth_unregister(dev[i]);
+	}
+	for (i = 0; i < IPQ5018_GMAC_PORT; i++) {
+		if (dev[i])
 			free(dev[i]);
-		}
-		if (ipq_gmac_macs[i])
+		if (ipq_gmac_macs[i]) {
 			free(ipq_gmac_macs[i]);
+			ipq_gmac_macs[i] = NULL;
+		}
 	}
 
-	return -ENOMEM;
+	return ret;
 }
 

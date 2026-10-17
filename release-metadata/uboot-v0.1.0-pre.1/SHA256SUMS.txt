@@ -1,0 +1,6 @@
+d7781bdb789617a3935058fb50209ad83d955f9fd399b736ecc7830d21adaa61  H3C-NX30-Uboot-uboot-v0.1.0-pre.1.zip
+bcca16ce8060b6f09094c10d0af40f9e48343d62da8e08ffe6cadbca8725c732  source/ABCD-UBOOT-SOURCE-AND-CANDIDATES-20261016.tar.gz
+8ed8b32594d0ebbe3d5f23a8de1853b9ed3e7492c391361ffaf6f4cf7b1b4abb  images/HW-A/appsbl.partition.bin
+912159169a8b61adb40e572b5366a21da68b65d48fcd47f113e65de44c908589  images/HW-B/appsbl.partition.bin
+57d13d1dad2a7b7854799b7cc69bddec638dd61df70f1b75a4fd94650fc96d8e  images/HW-C/appsbl.partition.bin
+91e9d881ad1b5c88f942069908bfdd7484984521422ad7f1923738d2cc653362  images/HW-D/appsbl.partition.bin

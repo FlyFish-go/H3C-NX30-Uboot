@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync((process.argv[2] || require('path').join(__dirname,'../failsafe/fsdata/main.js')),'utf8');const begin=source.indexOf('class FileUploadComponent {'),end=source.indexOf('// 全局统一上传管理器实例',begin);assert(begin>=0&&end>begin);
+let requests=[],alerts=[];
+class FakeForm {constructor(){this.entries=[]}append(k,v){this.entries.push([k,v])}get(k){return this.entries.find(e=>e[0]===k)?.[1]}}
+class XHR {constructor(){this.upload={addEventListener(){}};requests.push(this)}open(method,url){this.url=url}send(data){this.form=data}respond(j){this.status=200;this.readyState=4;this.responseText=JSON.stringify(j);this.onreadystatechange()}}
+const context={APP_STATE:{lang:'zh-cn',sysinfo:{board:{family:'HW-A'}}},FormData:FakeForm,XMLHttpRequest:XHR,document:{getElementById(){return null}},window:{location:{}},t:x=>x,is9008Mode:()=>false,alert:x=>alerts.push(x),console};vm.createContext(context);vm.runInContext(source.slice(begin,end)+'\nglobalThis.Component=FileUploadComponent;',context);
+function make(page){const c=new context.Component({}, {pageName:page,formDataKey:page});c.selectedFile={name:'own.bin'};c.elements.cdtTarget={value:'0:CDT'};for(const m of ['showProgress','updateProgress','showSuccess','showError','setTitleAndHint','showElementAndHideOthers'])c[m]=()=>{};return c}
+let c=make('cdt');c.elements.cdtTarget.value='';c.upload();assert.equal(requests.length,0);
+c=make('cdt');c.upload();let req=requests.at(-1);assert.equal(req.form.get('cdt_target'),'0:CDT');req.respond({status:'success',info:{target:'0:CDT',commit_token:'a'.repeat(64)}});assert.equal(c.commitToken,'a'.repeat(64));c.continue(false);req=requests.at(-1);assert.equal(req.url,'/write');assert.equal(req.form.get('cdt_target'),'0:CDT');assert.equal(req.form.get('commit_token'),'a'.repeat(64));let n=requests.length;c.continue(false);assert.equal(requests.length,n);
+c=make('cdt');c.upload();req=requests.at(-1);c.elements.cdtTarget.value='0:CDT_1';req.respond({status:'success',info:{target:'0:CDT',commit_token:'a'.repeat(64)}});assert.equal(c.commitToken,null);n=requests.length;c.continue(false);assert.equal(requests.length,n);
+c=make('cdt');c.upload();requests.at(-1).respond({status:'success',info:{target:'0:CDT_1',commit_token:'a'.repeat(64)}});assert.equal(c.commitToken,null);
+c=make('art');c.upload();req=requests.at(-1);assert.equal(req.form.get('cdt_target'),undefined);req.respond({status:'success',info:{target:'0:ART',commit_token:'b'.repeat(64)}});c.continue(false);assert.equal(requests.at(-1).form.get('cdt_target'),undefined);
+let beforeMibib=requests.length;c=make('mibib');c.upload();assert.equal(requests.length,beforeMibib);assert(alerts.includes('mibib.not_9008'));
+console.log('CDT UI actual upload/commit, changed target/file, single-use token, ART compatibility, non-9008 MIBIB guard PASS');

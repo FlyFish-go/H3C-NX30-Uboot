@@ -222,6 +222,12 @@ config CMD_ENV_EXISTS
 
 endmenu
 
+config CMD_HASH
+	bool "hash command"
+	default y if SHA256
+	help
+	  Expose hash for RAM-only NAND read verification.
+
 menu "Memory commands"
 
 config CMD_MEMORY

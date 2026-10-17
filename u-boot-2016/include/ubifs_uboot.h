@@ -16,6 +16,8 @@
 #define __UBIFS_UBOOT_H__
 
 int ubifs_init(void);
+int ubifs_ro_mount(char *vol_name);
+void ubifs_ro_umount(void);
 int uboot_ubifs_mount(char *vol_name);
 void uboot_ubifs_umount(void);
 int ubifs_is_mounted(void);
@@ -27,6 +29,16 @@ int ubifs_exists(const char *filename);
 int ubifs_size(const char *filename, loff_t *size);
 int ubifs_read(const char *filename, void *buf, loff_t offset,
 	       loff_t size, loff_t *actread);
+struct ubifs_ro_stat {
+	u32 mode;
+	u64 size;
+	u64 rdev;
+	u32 xattr_count;
+};
+/* Read-only stat that does not follow symlinks. */
+int ubifs_ro_stat_path(const char *filename, struct ubifs_ro_stat *stat);
+int ubifs_ro_read_path(const char *filename, void *buf, loff_t offset,
+		       loff_t size, loff_t *actread);
 void ubifs_close(void);
 
 #endif /* __UBIFS_UBOOT_H__ */

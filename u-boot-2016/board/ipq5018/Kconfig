@@ -68,6 +68,169 @@ config TARGET_IPQ5018_CMCC_MR3000D_CI
     help
 	  Enable support for CMCC MR3000D-CI board
 
+choice
+    prompt "H3C hardware identity"
+    optional
+
+config TARGET_IPQ5018_H3C_RT3000_B
+    bool "H3C RT3000-B board support"
+    select H3C_DEFAULT_WEB
+    help
+      Dedicated IPQ5000/GD5F1GQ5REYIG/QCA8337 target.
+      Uses the shared dual-slot recovery core with checked named write windows.
+
+config TARGET_IPQ5018_H3C_HW_A
+    bool "H3C HW-A board support"
+    help
+      Dedicated IPQ5018/external-DDR RC-A2-512 board identity.
+      This option selects HW-A hardware identity only.
+
+config TARGET_IPQ5018_H3C_HW_C
+    bool "H3C HW-C board support"
+    help
+      Dedicated IPQ5018/external-DDR/W25N01GWZEIG H3C HW-C identity.
+
+config TARGET_IPQ5018_H3C_HW_D
+    bool "H3C HW-D / NX30 board support"
+    help
+      NX30 IPQ5000 / integrated DDR / C8:41 diagnostic identity.
+
+endchoice
+
+
+
+config H3C_HW_A_RAM_READONLY
+    bool "H3C HW-A RAM-only validation profile"
+    depends on TARGET_IPQ5018_H3C_HW_A
+    default n
+    help
+      Force HTTP recovery and reject every persistent mutation. Intended for
+      RAM validation; it does not enable normal autoboot or NAND writes.
+
+config H3C_HW_A_PRODUCTION_PORT
+    bool "H3C HW-A dual-slot and metadata port"
+    depends on TARGET_IPQ5018_H3C_HW_A && !H3C_HW_A_RAM_READONLY
+    default n
+    help
+      Enable the HW-A-adapted dual-slot, OEM catalog, named boot, firmware,
+      metadata, environment, and MAC features. This is a build profile and is
+      not an authorization to program a device.
+
+
+config H3C_HW_C_RAM_READONLY
+    bool "H3C HW-C RAM-only validation profile"
+    depends on TARGET_IPQ5018_H3C_HW_C
+    default n
+    help
+      Force HTTP recovery and reject persistent mutations for HW-C RAM preview.
+
+config H3C_HW_D_RAM_READONLY
+    bool "NX30 HW-D RAM diagnostic profile"
+    depends on TARGET_IPQ5018_H3C_HW_D
+    default n
+    help
+      RAM-only NX30 diagnostic; disables ENV persistence and QPIC writes.
+
+config H3C_HW_D_RAM_WEB
+    bool "NX30 HW-D RAM read-only web preview"
+    depends on H3C_HW_D_RAM_READONLY
+    default n
+    help
+      Reuse the shared maintenance UI in RAM with a D-specific GET-only route allowlist.
+
+config H3C_HW_D_RAM_AUTOECC
+    bool "NX30 D RAM sampled ECC4/ECC8 reader"
+    depends on H3C_HW_D_RAM_WEB
+    default y
+    help
+      Reuse exact C8:41 read-only format switching and UBI metadata detection.
+      Does not determine ENV/ART/front-stage storage formats or enable writes.
+
+config H3C_HW_D_NAND_READONLY
+    bool "NX30 D NAND-resident read-only maintenance profile"
+    depends on H3C_HW_D_RAM_WEB && H3C_HW_D_RAM_AUTOECC && !H3C_HW_D_NOR_RESCUE
+    default n
+    help
+      Retain the D read-only driver and GET-only maintenance core in a
+      separately packaged NAND APPSBL candidate. This flag does not enable
+      program, erase, markbad or saveenv. Installation is limited to an
+      independently verified ECC4 front-stage/storage chain; it does not
+      certify ECC8 ENV/APPSBL or authorize device installation.
+
+config H3C_HW_D_STORAGE_PORT
+    bool
+    depends on TARGET_IPQ5018_H3C_HW_D && !H3C_HW_D_NOR_RESCUE
+    select H3C_HW_D_RAM_READONLY
+    select H3C_HW_D_RAM_WEB
+    select H3C_HW_D_RAM_AUTOECC
+    select H3C_HW_D_NAND_READONLY
+    help
+      ECC4 storage aperture, block-protection restoration and verified boot
+      handoff for HW-D. Public maintenance modules are chosen separately.
+
+config H3C_HW_D_NAND_SERVICE
+    bool "NX30 HW-D bounded NAND maintenance service"
+    depends on TARGET_IPQ5018_H3C_HW_D && !H3C_HW_D_NOR_RESCUE
+    select H3C_HW_D_STORAGE_PORT
+    default n
+    help
+      NX30-specific layout and per-transaction ECC4 write windows. Generic
+      NAND CLI writes, saveenv, ART and partition-table writes stay disabled.
+
+config H3C_HW_D_PRODUCTION_PORT
+    bool "H3C HW-D common recovery port"
+    depends on TARGET_IPQ5018_H3C_HW_D && !H3C_HW_D_NOR_RESCUE
+    select H3C_HW_D_STORAGE_PORT
+    select H3C_DEFAULT_WEB
+    default n
+    help
+      Use the same BootKit pages and public handlers as HW-A/B/C. The D
+      storage port supplies ECC4 protected program windows and the verified
+      Linux handoff; it does not replace ENV, upload, backup or terminal UI.
+
+config H3C_HW_D_SERVICE_RAM
+    bool "NX30 service candidate loaded through RAM bootstrap"
+    depends on H3C_HW_D_NAND_SERVICE
+    default n
+    help
+      Mark this candidate as RAM-loaded in the status API. This does not
+      authorize or certify any persistent write operation.
+
+config NX30_D_B_RECOVERY
+    bool "Temporary NX30 physical-B exact-backup recovery command"
+    depends on H3C_HW_D_SERVICE_RAM
+    default n
+    help
+      Add a temporary RAM-only command for one exact 40MiB backup and the
+      validated, fully erased physical B extent. Never enable for NAND-resident
+      or production images; this option is not part of normal service builds.
+
+config H3C_HW_D_NOR_RESCUE
+    bool "NX30 HW-D SPI NOR rescue profile"
+    depends on TARGET_IPQ5018_H3C_HW_D
+    select H3C_HW_D_RAM_READONLY
+    default n
+    help
+      Independent SPI NOR rescue boot. Defers QPIC until explicit ECC4 probe,
+      keeps NAND read-only, and always enters the D LAN HTTP service.
+
+config H3C_HW_C_PRODUCTION_PORT
+    bool "H3C HW-C dual-slot and metadata port"
+    depends on TARGET_IPQ5018_H3C_HW_C && !H3C_HW_C_RAM_READONLY
+    default n
+    help
+      Enable the HW-C adapted dual-slot, RT3000 OEM catalog, metadata, ENV, and MAC features.
+      This profile does not authorize device programming.
+
+config H3C_HW_C_OEM_CNSS_SKIP4
+    bool "Default the OEM HW-C CNSS skip mask to skip radio 0x42"
+    depends on H3C_HW_C_PRODUCTION_PORT
+    default n
+    help
+      For a verified OEM MP03.1-C2 FIT with the OEM partition layout, append
+      cnss2.skip_radio_bmap=4 only when no explicit skip mask is supplied.
+      Native FITs and other board profiles are not affected.
+
 config TARGET_IPQ5018_CMCC_PZ_L8
     bool "CMCC PZ-L8 board support"
 	default n
@@ -91,4 +254,40 @@ config TARGET_IPQ5018_JDCLOUD_AX3000
 	default n
     help
 	  Enable support for JDCloud AX3000 board
+config H3C_RELEASE_SYSTEM_DEFAULT
+    bool "H3C release: selected system by default, RESET recovery"
+    depends on TARGET_IPQ5018_H3C_RT3000_B || H3C_HW_A_PRODUCTION_PORT || H3C_HW_C_PRODUCTION_PORT || H3C_HW_D_PRODUCTION_PORT
+    default n
+    help
+      Explicit release-only power-on policy. Ignore imported bootcmd and boot
+      the audited BOOTCONFIG-selected system through bootipq. RESET or an
+      unconfirmed format enters eth1 recovery at 192.168.10.1 without saving
+      ENV. This overrides the legacy default-web flag, not RAM/NOR rescue.
+      It neither qualifies APPSBL installation nor enables NAND writes.
+
+config H3C_DEFAULT_WEB
+    bool "Enter the common recovery web UI at power-on"
+    depends on H3C_IPQ5018_COMMON
+    default n
+    help
+      Keep power-on at the common web UI while preserving the selected
+      default system for explicit boot. Does not save environment variables.
+
+config H3C_NAND_ECC_COMPAT
+    bool "Evidence-based NAND ECC compatibility"
+    depends on H3C_IPQ5018_COMMON && !H3C_HW_D_NOR_RESCUE
+    default y
+    help
+      Check complete ENV CRC before environment relocation, independently
+      sample system UBI metadata, and preserve the proven existing BCH mode.
+      Unknown or conflicting formats keep recovery available and reject
+      persistent windows and NAND Linux handoff. This does not certify an
+      APPSBL/front-stage format or enable NOR operations.
+
+config H3C_IPQ5018_COMMON
+    bool
+    default y if TARGET_IPQ5018_H3C_RT3000_B || H3C_HW_A_PRODUCTION_PORT || H3C_HW_A_RAM_READONLY || H3C_HW_C_PRODUCTION_PORT || H3C_HW_C_RAM_READONLY || H3C_HW_D_RAM_WEB || H3C_HW_D_NOR_RESCUE
+    help
+      Shared validated SMEM layout, dual-slot, metadata and recovery services.
+
 endif

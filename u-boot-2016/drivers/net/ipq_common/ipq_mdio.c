@@ -21,6 +21,15 @@
 #include <errno.h>
 #include "ipq_mdio.h"
 
+// The C board routes RTL8367S on external MDIO1 at physical base 0x90000.
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_C
+#define IPQ_MDIO_CTRL0_C22_VALUE 0x1502f
+#define IPQ_MDIO_CTRL0_C45_VALUE 0x1512f
+#else
+#define IPQ_MDIO_CTRL0_C22_VALUE CTRL_0_REG_DEFAULT_VALUE
+#define IPQ_MDIO_CTRL0_C45_VALUE CTRL_0_REG_C45_DEFAULT_VALUE
+#endif
+
 #ifdef DEBUG
 #define pr_debug(fmt, args...) printf(fmt, ##args);
 #else
@@ -186,7 +195,7 @@ int ipq_mdio_write(int mii_id, int regnum, u16 value)
 			unsigned int mmd = (regnum >> 16) & 0x1F;
 			unsigned int reg = regnum & 0xFFFF;
 
-			writel(CTRL_0_REG_C45_DEFAULT_VALUE,
+			writel(IPQ_MDIO_CTRL0_C45_VALUE,
 				IPQ_MDIO_BASE + MDIO_CTRL_0_REG);
 
 			/* Issue the phy address and reg */
@@ -204,7 +213,7 @@ int ipq_mdio_write(int mii_id, int regnum, u16 value)
 			if (ipq_mdio_wait_busy())
 				return -ETIMEDOUT;
 		} else {
-			writel(CTRL_0_REG_DEFAULT_VALUE,
+			writel(IPQ_MDIO_CTRL0_C22_VALUE,
 				IPQ_MDIO_BASE + MDIO_CTRL_0_REG);
 
 			/* Issue the phy addreass and reg */
@@ -252,7 +261,7 @@ int ipq_mdio_read(int mii_id, int regnum, ushort *data)
 			unsigned int mmd = (regnum >> 16) & 0x1F;
 			unsigned int reg = regnum & 0xFFFF;
 
-			writel(CTRL_0_REG_C45_DEFAULT_VALUE,
+			writel(IPQ_MDIO_CTRL0_C45_VALUE,
 				IPQ_MDIO_BASE + MDIO_CTRL_0_REG);
 
 			/* Issue the phy address and reg */
@@ -267,7 +276,7 @@ int ipq_mdio_read(int mii_id, int regnum, ushort *data)
 					MDIO_CTRL_4_ACCESS_CODE_C45_ADDR;
 		} else {
 
-			writel(CTRL_0_REG_DEFAULT_VALUE,
+			writel(IPQ_MDIO_CTRL0_C22_VALUE,
 				IPQ_MDIO_BASE + MDIO_CTRL_0_REG);
 
 			/* Issue the phy address and reg */

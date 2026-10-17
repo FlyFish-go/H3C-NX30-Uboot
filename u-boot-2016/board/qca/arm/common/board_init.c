@@ -12,6 +12,7 @@
  */
 
 #include <common.h>
+#include <net.h>
 #include <environment.h>
 #include <asm/arch-qca-common/qca_common.h>
 #include <asm/arch-qca-common/smem.h>
@@ -258,6 +259,19 @@ int board_init(void)
 		printf("BUG: unsupported flash type : %d\n", sfi->flash_type);
 		BUG();
 	}
+#if (defined(CONFIG_H3C_HW_D_RAM_READONLY) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	/* D production retains the guarded storage driver flag, but must select
+	 * the actual NAND ENV backend. Diagnostic profiles remain volatile. */
+	saveenv = NULL;
+	env_ptr = NULL;
+#ifdef CONFIG_H3C_HW_D_RAM_READONLY
+	env_name_spec = "NX30 D RAM diagnostic (volatile ENV)";
+#elif defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	env_name_spec = "HW-C RAM-only validation";
+#else
+	env_name_spec = "HW-A RAM-only validation";
+#endif
+#else
 	if (sfi->flash_type == SMEM_BOOT_SPI_FLASH) {
 #ifdef CONFIG_ENV_IS_IN_SPI_FLASH
 		saveenv = sf_saveenv;
@@ -280,6 +294,7 @@ int board_init(void)
 
 #endif
 	}
+#endif /* !CONFIG_TARGET_IPQ5018_H3C_HW_A */
 #endif
 	ret = ipq_board_usb_init();
 	if (ret < 0) {
@@ -513,6 +528,27 @@ int board_late_init(void)
 	board_flash_protect();
 #endif
 	set_ethmac_addr();
+#ifdef CONFIG_H3C_HW_D_RAM_READONLY
+	{
+		uchar env_mac[6];
+		if (!eth_getenv_enetaddr("ethaddr", env_mac) ||
+		    !is_valid_ethaddr(env_mac)) {
+			if (setenv("ethaddr", "02:4e:58:30:00:01")) {
+				puts("NX30 D RAM diagnostic: cannot set temporary MAC\n");
+				return -1;
+			}
+			puts("NX30 D RAM diagnostic temporary ethaddr=02:4e:58:30:00:01 (RAM only; do not save)\n");
+		}
+		if (!eth_getenv_enetaddr("eth1addr", env_mac) ||
+		    !is_valid_ethaddr(env_mac)) {
+			if (setenv("eth1addr", "02:4e:58:30:00:02")) {
+				puts("NX30 D RAM diagnostic: cannot set temporary eth1addr\n");
+				return -1;
+			}
+			puts("NX30 D RAM diagnostic temporary eth1addr=02:4e:58:30:00:02 (RAM only; do not save)\n");
+		}
+	}
+#endif
 
 	/*
 	 * set fdt_high parameter so that u-boot will not

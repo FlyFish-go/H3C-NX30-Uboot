@@ -22,6 +22,7 @@
 #include <cli.h>
 #include <errno.h>
 #include <ipq_api.h>
+#include <ipq_led.h>
 #include <fdtdec.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <part.h>
@@ -60,8 +61,13 @@ void ipq_gpio_init(void)
 		if (node >= 0)
 			qca_gpio_init(node);
 	}
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_D)
+	led_all_off();
+	led_on("system_led");
+#endif
 }
 
+#ifndef CONFIG_H3C_HW_D_RAM_WEB
 // =============================================================================
 // httpd 触发检测（按键、环境变量、9008 模式）
 // =============================================================================
@@ -94,6 +100,12 @@ static bool is_any_button_pressed(button_info_t *button_info)
 		return false;
 
 	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+		/* HW-B and C production recovery are RESET-only; WPS/MESH remains a normal key. */
+		const char *name = fdt_get_name(gd->fdt_blob, node, NULL);
+		if (!name || strcmp(name, "reset"))
+			continue;
+#endif
 		gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", GPIO_NOT_FOUND);
 		active_level = fdtdec_get_uint(gd->fdt_blob, node, "active_level", GPIO_ACTIVE_LOW);
 		if (gpio != GPIO_NOT_FOUND && is_button_pressed(gpio, active_level)) {
@@ -116,6 +128,11 @@ static bool is_any_button_pressed_for_enough_time(void)
 
     if (!is_any_button_pressed(&button))
 		return false;
+
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	/* Green would mask the red RESET countdown on the shared status lamp. */
+	led_all_off();
+#endif
 
 	printf("%s button pressed, enter web failsafe mode after: %-2d", button.name, counter);
 
@@ -140,6 +157,12 @@ static bool is_any_button_pressed_for_enough_time(void)
 
 	putc('\n');
 	led_on("power_led");
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+	if (!still_pressed) {
+		led_all_off();
+		led_on("system_led");
+	}
+#endif
 
 	return still_pressed;
 }
@@ -154,7 +177,11 @@ static bool failsafe_env_exists(void)
 	if (strcmp(failsafe_start_mode, "always")) {
 		/* 非 always 模式，删除 failsafe 环境变量，防止重启后再次启动 httpd */
 		setenv("failsafe", NULL);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+		puts("Failsafe setting cleared in RAM only; environment save is disabled\n");
+#else
 		saveenv();
+#endif
 	}
 
 	return true;
@@ -206,13 +233,27 @@ static bool check_9008_mode_and_failsafe_env(void)
 	return true;
 }
 
+#endif /* !CONFIG_H3C_HW_D_RAM_WEB */
+
 void do_httpd_check(void)
 {
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+	/* D web preview is entered explicitly after selecting eth1 in autoboot. */
+	return;
+#else
 	if (check_9008_mode_and_failsafe_env() ||
 		is_any_button_pressed_for_enough_time()) {
+#ifdef CONFIG_H3C_HW_C_PRODUCTION_PORT
+		/* RESET recovery runs before C's autoboot selects the LAN link. */
+		if (setenv("ethact", "eth1")) {
+			puts("HW-C: unable to select LAN for web recovery\n");
+			return;
+		}
+#endif
 		run_command("httpd", 0);
 		cli_loop();
 	}
+#endif
 }
 
 // =============================================================================
@@ -225,6 +266,36 @@ void do_httpd_check(void)
  */
 void do_network_check(void)
 {
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+	/* Pin initial selection and NetLoop retries to the verified D LAN. */
+	setenv("ethprime", "eth1");
+	setenv("ethact", "eth1");
+	/* LAN link may settle after the first init; never rotate to WAN. */
+	setenv("ethrotate", "no");
+#elif defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B)
+	/* Migrate the old always-web test setting in RAM only. */
+	const char *bootcmd = getenv("bootcmd");
+	if (!bootcmd || !*bootcmd || !strcmp(bootcmd, "httpd"))
+		setenv("bootcmd", "bootipq");
+	setenv("bootdelay", "3");
+	/* Default rescue page to the three verified QCA8337 LAN ports. */
+	setenv("ethact", "eth1");
+#elif (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+	/*
+	 * Normalize only the two observed legacy C defaults in RAM. The long
+	 * c-native command is the exact C bring-up bootcmd observed on 2026-10-10;
+	 * do not match c-native fragments because operators may have custom commands.
+	 */
+	const char *bootcmd = getenv("bootcmd");
+	if (bootcmd &&
+	    (!strcmp(bootcmd, "httpd") ||
+	     !strcmp(bootcmd, "setenv mtdids nand0=nand0 && setenv mtdparts mtdparts=nand0:0x02800000@0x03100000(c-native) && ubi part c-native && ubi read 0x44000000 kernel && bootm 0x44000000#config@mp03.1-c2"))) {
+		const char *bootdelay = getenv("bootdelay");
+		setenv("bootcmd", "bootipq");
+		if (bootdelay && !strcmp(bootdelay, "0"))
+			setenv("bootdelay", "3");
+	}
+#endif
 	if (getenv("custom_network"))
 		return;
 
@@ -274,7 +345,11 @@ void do_network_check(void)
 		printf("    ipaddr: %s\n", default_ipaddr);
 		printf("    netmask: %s\n", default_netmask);
 		printf("    serverip: %s\n", default_serverip);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)
+		puts("Network defaults updated in RAM only; environment save is disabled\n");
+#else
 		saveenv();
+#endif
 	}
 }
 
@@ -286,6 +361,7 @@ typedef struct {
 	bool spi;
 	bool nand;
 	bool mmc;
+	struct spi_flash *spi_flash;
 } detected_flash_device_t;
 
 static detected_flash_device_t detected_flash_device;
@@ -302,12 +378,14 @@ void detect_flash_device(void)
 	dfd->spi = false;
 	dfd->nand = false;
 	dfd->mmc = false;
+	dfd->spi_flash = NULL;
 
 	spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
 			CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
 	if (spi && spi->size > 0) {
 		len += strlcpy(flash_list + len, "SPI", sizeof(flash_list));
 		dfd->spi = true;
+		dfd->spi_flash = spi;
 	}
 
 	nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
@@ -330,6 +408,11 @@ void detect_flash_device(void)
 bool has_spi(void)
 {
 	return detected_flash_device.spi;
+}
+
+const struct spi_flash *get_detected_spi_flash(void)
+{
+	return detected_flash_device.spi_flash;
 }
 
 bool has_nand(void)

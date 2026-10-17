@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+#include "ipq5018-soc.dtsi"
+/ {
+	host_name = "H3C HW-A";
+	model = "H3C HW-A";
+	h3c,board-family = "HW-A";
+	compatible = "h3c,hw-a", "qca,ipq5018";
+	/* Verified on the HW-A OEM control FDT and runtime: machine ID 0x08040001. */
+	machid = <0x08040001>;
+	config_name = "config@mp03.1", "config-mp03.1";
+
+	ddr_size = <512>; /* SMEM RAM table is authoritative; fallback 512 MiB. */
+
+	aliases {
+		console = "/serial@78AF000";
+		nand = "/nand-controller@79B0000";
+	};
+	console: serial@78AF000 {
+		status = "ok";
+		serial_gpio {
+			blsp0_uart_rx {
+				gpio = <20>;
+				func = <1>;
+				pull = <GPIO_PULL_UP>;
+				drvstr = <GPIO_8MA>;
+				od_en = <GPIO_OD_DISABLE>;
+			};
+			blsp0_uart_tx {
+				gpio = <21>;
+				func = <1>;
+				pull = <GPIO_NO_PULL>;
+				drvstr = <GPIO_8MA>;
+				od_en = <GPIO_OD_DISABLE>;
+			};
+		};
+	};
+
+	nand: nand-controller@79B0000 {
+		status = "okay";
+		nand_gpio {
+			qspi_dat3 {
+				gpio = <4>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_dat2 {
+				gpio = <5>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_dat1 {
+				gpio = <6>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_dat0 {
+				gpio = <7>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_cs_n {
+				gpio = <8>;
+				func = <2>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_clk {
+				gpio = <9>;
+				func = <2>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+		};
+	};
+
+	/* Causal HW-A LED test: green GPIO24 and red GPIO23, active-high. */
+	leds {
+		compatible = "gpio-leds";
+		status-green {
+			label = "blink_led", "system_led";
+			gpio = <24>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_UP>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+		status-red {
+			label = "power_led";
+			gpio = <23>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_UP>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	gmac_cfg {
+		ext_mdio_gpio = <36 37>;
+		/* OEM control FDT advertises GPIO46, but R1 leaves it untouched. */
+
+		gmac1_cfg {
+			unit = <0>;
+			base = <0x39C00000>;
+			phy_address = <7>;
+		};
+		gmac2_cfg {
+			unit = <1>;
+			base = <0x39D00000>;
+			mac_pwr = <0xaa545>;
+			s17c_switch_enable = <1>;
+			/* Entity OEM control FDT: external switch PHY addresses 0-3. */
+			switch_port_count = <4>;
+			switch_phy_address = <0 1 2 3>;
+			switch_gpio = <39>;
+		};
+	};
+};

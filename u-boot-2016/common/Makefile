@@ -51,6 +51,15 @@ obj-$(CONFIG_ENV_IS_IN_FLASH) += env_flash.o
 obj-$(CONFIG_ENV_IS_IN_MMC) += env_mmc.o
 obj-$(CONFIG_ENV_IS_IN_FAT) += env_fat.o
 obj-$(CONFIG_ENV_IS_IN_NAND) += env_nand.o
+ifneq ($(filter y,$(CONFIG_H3C_HW_A_RAM_READONLY) $(CONFIG_H3C_HW_A_PRODUCTION_PORT)),)
+ifneq ($(CONFIG_ENV_IS_IN_NAND),y)
+obj-y += env_nand.o
+endif
+endif
+ifeq ($(CONFIG_ENV_IS_IN_NAND),)
+obj-$(CONFIG_H3C_HW_A_RAM_READONLY) += env_nand.o
+obj-$(CONFIG_H3C_HW_A_PRODUCTION_PORT) += env_nand.o
+endif
 obj-$(CONFIG_ENV_IS_IN_NVRAM) += env_nvram.o
 obj-$(CONFIG_ENV_IS_IN_ONENAND) += env_onenand.o
 obj-$(CONFIG_ENV_IS_IN_SPI_FLASH) += env_sf.o
@@ -147,6 +156,8 @@ obj-$(CONFIG_CMD_MMC_SPI) += cmd_mmc_spi.o
 obj-$(CONFIG_MP) += cmd_mp.o
 obj-$(CONFIG_CMD_MTDPARTS) += cmd_mtdparts.o
 obj-$(CONFIG_CMD_NAND) += cmd_nand.o
+# Temporary RAM-only recovery candidate; absent from normal NAND profiles.
+obj-$(CONFIG_NX30_D_B_RECOVERY) += cmd_nx30restore.o
 obj-$(CONFIG_CMD_NET) += cmd_net.o
 obj-$(CONFIG_CMD_ONENAND) += cmd_onenand.o
 obj-$(CONFIG_CMD_OTP) += cmd_otp.o

@@ -19,6 +19,10 @@
  */
 
 #include <common.h>
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#include <exports.h>
+#endif
+#include <asm/errno.h>
 #include <spi.h>
 #include <spi_flash.h>
 #include <mmc.h>
@@ -31,6 +35,13 @@
 #include <u-boot/md5.h>
 #include <capture.h>
 #include <bootconfig.h>
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#include <rt3000_b_metadata.h>
+#endif
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+#include <rt3000_b_initramfs.h>
+DECLARE_GLOBAL_DATA_PTR;
+#endif
 
 #include "untar.h"
 
@@ -79,6 +90,19 @@ static ulong factory_fw_kernel_size;
 static char info[666];
 static char resp[888];
 static fw_type_t fw_type;
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+static struct rt3_hw_b_initramfs_validation validated_initramfs;
+
+void failsafe_initramfs_invalidate(void)
+{
+	rt3_hw_b_initramfs_invalidate(&validated_initramfs);
+}
+
+bool failsafe_initramfs_is_validated(ulong data_addr, ulong data_size)
+{
+	return rt3_hw_b_initramfs_matches(&validated_initramfs, data_addr, data_size);
+}
+#endif
 
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
 extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
@@ -131,11 +155,13 @@ static void handle_wrong_fw_type(const char *expected_file_type_str)
 		expected_file_type_str, actual_file_type_str);
 }
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static void handle_wrong_upgrade_type(void)
 {
 	strlcpy(info, "{\"type\":\"wrong_upgrade_type\"}", sizeof(info));
 	puts("Error: not supported upgrade type\n");
 }
+#endif
 
 static void handle_file_too_big(const char *file_name, ulong file_size,
 		const char *part_name, unsigned long long part_size)
@@ -191,6 +217,7 @@ static void handle_invalid_qsdk_fw(const char *node_prefix)
 		"{\"type\":\"fit_node_not_found\",\"node_prefix\":\"%s\"}", node_prefix);
 }
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static void handle_command_too_long(const char *file, const char *func, int line, int len)
 {
 	snprintf(info, sizeof(info),
@@ -201,7 +228,9 @@ static void handle_command_too_long(const char *file, const char *func, int line
 	printf("\nError at %s:%d/%s()\nCommand too long (len: %d, maxlen: %d), "
 		"please increase MAX_CMD_LEN\n", file, line, func, len, MAX_CMD_LEN);
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static void handle_too_many_commands(const char *file, const char *func, int line)
 {
 	snprintf(info, sizeof(info),
@@ -212,7 +241,9 @@ static void handle_too_many_commands(const char *file, const char *func, int lin
 	printf("\nError at %s:%d/%s()\nToo many commands (max: %d), "
 		"please increase MAX_CMD_COUNT\n", file, line, func, MAX_CMD_COUNT);
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static void handle_run_command_failed(const char *cmd, const char *output)
 {
 	char esc_cmd[MAX_CMD_LEN * 2];
@@ -227,6 +258,7 @@ static void handle_run_command_failed(const char *cmd, const char *output)
 		"{\"type\":\"run_cmd_failed\",\"cmd\":\"%s\",\"output\":\"%s\"}",
 		esc_cmd, esc_output);
 }
+#endif
 
 // =============================================================================
 // 帮助函数（验证相关）
@@ -380,6 +412,7 @@ void get_image_md5_str(const void *data_addr, ulong data_size, char *buf, size_t
 			return ret;	\
     } while (0)
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static int _add_cmd_to_list(const char *file, const char *func, int line, const char *fmt, ...)
 {
 	va_list args;
@@ -400,7 +433,9 @@ static int _add_cmd_to_list(const char *file, const char *func, int line, const 
 
 	return RET_SUCCESS;
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static void print_upgrade_hint(const char *upgrade_type_str)
 {
 	printf("\n"
@@ -409,7 +444,9 @@ static void print_upgrade_hint(const char *upgrade_type_str)
 		" DO NOT POWER OFF DEVICE\n"
 		"********************************\n", upgrade_type_str);
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static int make_gpt_write_cmd(ulong data_addr, ulong data_size)
 {
 	block_dev_desc_t *mmc_dev;
@@ -427,7 +464,9 @@ static int make_gpt_write_cmd(ulong data_addr, ulong data_size)
 
 	return RET_SUCCESS;
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static ulong get_nand_writable_data_size(uint32_t data_size)
 {
 	uint32_t adj_size, writable_size = data_size;
@@ -441,12 +480,16 @@ static ulong get_nand_writable_data_size(uint32_t data_size)
 
 	return (ulong)writable_size;
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static int failsafe_run_command(void *cmd)
 {
 	return run_command((const char *)cmd, 0);
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static int failsafe_run_command_capture(const char *cmd)
 {
 	char output[FAILSAFE_CAPTURE_OUTPUT_SIZE];
@@ -462,7 +505,9 @@ static int failsafe_run_command_capture(const char *cmd)
 
 	return ret;
 }
+#endif
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static int failsafe_run_command_list(void)
 {
     for (int i = 0; i < runcmd->count; i++)
@@ -471,12 +516,13 @@ static int failsafe_run_command_list(void)
 
     return RET_SUCCESS;
 }
+#endif
 
 // =============================================================================
 // 文件验证函数
 // =============================================================================
 
-static int failsafe_validate_firmware(const void *data_addr, ulong data_size)
+static int __maybe_unused failsafe_validate_firmware(const void *data_addr, ulong data_size)
 {
     int ret = RET_SUCCESS;
 	size_t kernel_size, rootfs_size;
@@ -548,7 +594,7 @@ static int failsafe_validate_firmware(const void *data_addr, ulong data_size)
     return ret;
 }
 
-static int failsafe_validate_uboot(const void *data_addr, ulong data_size)
+static int __maybe_unused failsafe_validate_uboot(const void *data_addr, ulong data_size)
 {
     if (fw_type != FW_TYPE_ELF) {
         handle_wrong_fw_type("U-BOOT ELF");
@@ -558,7 +604,7 @@ static int failsafe_validate_uboot(const void *data_addr, ulong data_size)
     return validate_file_size("U-BOOT", "0:APPSBL", data_size);
 }
 
-static int failsafe_validate_art(const void *data_addr, ulong data_size)
+static int __maybe_unused failsafe_validate_art(const void *data_addr, ulong data_size)
 {
     /*
      * ART 没有固定的魔数，所以无法识别一个文件是否为 ART。
@@ -587,7 +633,7 @@ static int failsafe_validate_art(const void *data_addr, ulong data_size)
     }
 }
 
-static int failsafe_validate_cdt(const void *data_addr, ulong data_size)
+static int __maybe_unused failsafe_validate_cdt(const void *data_addr, ulong data_size)
 {
     if (fw_type != FW_TYPE_CDT) {
         handle_wrong_fw_type("CDT");
@@ -597,7 +643,7 @@ static int failsafe_validate_cdt(const void *data_addr, ulong data_size)
     return validate_file_size("CDT", "0:CDT", data_size);
 }
 
-static int failsafe_validate_ptable(const void *data_addr, ulong data_size)
+static int __maybe_unused failsafe_validate_ptable(const void *data_addr, ulong data_size)
 {
 	switch(fw_type) {
 	case FW_TYPE_GPT:
@@ -615,7 +661,7 @@ static int failsafe_validate_ptable(const void *data_addr, ulong data_size)
     }
 }
 
-static int failsafe_validate_simg(const void *data_addr, ulong data_size)
+static int __maybe_unused failsafe_validate_simg(const void *data_addr, ulong data_size)
 {
 	struct mmc *mmc;
 	struct spi_flash *spi;
@@ -652,13 +698,26 @@ static int failsafe_validate_simg(const void *data_addr, ulong data_size)
 	return RET_SUCCESS;
 }
 
-static int failsafe_validate_initramfs(const void *data_addr, ulong data_size)
+static int __maybe_unused failsafe_validate_initramfs(const void *data_addr, ulong data_size)
 {
     if (fw_type != FW_TYPE_FIT) {
         handle_wrong_fw_type("FIT INITRAMFS UIMAGE");
         return RET_WRONG_FW_TYPE;
     }
 
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	/* /upload owns 0x41000000..0x43000000; stage only at 0x44000000. */
+	if (!rt3_hw_b_initramfs_range_valid((rt3_hw_b_addr_t)data_addr, data_size,
+					   CONFIG_SYS_SDRAM_BASE, gd->ram_size) ||
+	    !is_memory_region_available(RT3_HW_B_INITRAMFS_STAGE_START, data_size) ||
+	    !rt3_hw_b_fit_extent_valid(data_addr, data_size) ||
+	    fit_check_format(data_addr, data_size)) {
+		strlcpy(info, "{\"type\":\"invalid_initramfs\"}", sizeof(info));
+		return -EINVAL;
+	}
+	rt3_hw_b_initramfs_record(&validated_initramfs,
+				   (rt3_hw_b_addr_t)data_addr, data_size);
+#endif
     return RET_SUCCESS;
 }
 
@@ -666,6 +725,7 @@ static int failsafe_validate_initramfs(const void *data_addr, ulong data_size)
 // 文件刷写函数
 // =============================================================================
 
+#ifndef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 static int failsafe_write_firmware(ulong data_addr, ulong data_size)
 {
 	print_upgrade_hint("FIRMWARE");
@@ -827,90 +887,194 @@ static int failsafe_write_simg(ulong data_addr, ulong data_size)
 	return failsafe_run_command_list();
 }
 
+#endif /* !CONFIG_TARGET_IPQ5018_H3C_RT3000_B */
+
 // =============================================================================
 // 暴露给外部的 API
 // =============================================================================
 
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+static bool failsafe_initramfs_ram_available(rt3_hw_b_addr_t start, size_t size)
+{
+	return is_memory_region_available(start, size);
+}
+
+static void failsafe_initramfs_copy(rt3_hw_b_addr_t destination, rt3_hw_b_addr_t source,
+				    size_t size)
+{
+	memmove_wd((void *)destination, (void *)source, size, CHUNKSZ);
+}
+#endif
+
 int boot_from_mem(ulong data_addr)
 {
-    int ret;
-	char rcmd[99], bootm_arg[66];
+	char rcmd[99];
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	ulong data_size = rt3_hw_b_initramfs_validated_size(
+		&validated_initramfs, data_addr);
+	rt3_hw_b_addr_t staged_addr;
+	char original_bootargs[CONFIG_SYS_CBSIZE];
+	char ram_bootargs[CONFIG_SYS_CBSIZE];
+	const char *current_bootargs = getenv("bootargs");
+	int ret;
 
-	puts("\n"
-        "********************************\n"
-        " INITRAMFS BOOTING\n"
-        " DO NOT POWER OFF DEVICE\n"
-        "********************************\n");
+	if (!failsafe_initramfs_is_validated(data_addr, data_size)) {
+		failsafe_initramfs_invalidate();
+		puts("Error: initramfs upload is no longer validated\n");
+		return -EINVAL;
+	}
+	/* Bound and sanitize before staging so overflow cannot copy or boot. */
+	if (strlcpy(original_bootargs, current_bootargs ? current_bootargs : "",
+		    sizeof(original_bootargs)) >= sizeof(original_bootargs) ||
+	    !rt3_hw_b_ram_bootargs(original_bootargs, ram_bootargs,
+				   sizeof(ram_bootargs))) {
+		failsafe_initramfs_invalidate();
+		puts("Error: RAM bootargs exceed the bounded buffer\n");
+		return -E2BIG;
+	}
+	/* Consume validation once before touching the staging window. */
+	failsafe_initramfs_invalidate();
+	if (!rt3_hw_b_stage_initramfs(data_addr, data_size,
+				      CONFIG_SYS_SDRAM_BASE, gd->ram_size,
+				      failsafe_initramfs_ram_available,
+				      failsafe_initramfs_copy, &staged_addr)) {
+		puts("Error: initramfs staging range is unavailable\n");
+		return -EINVAL;
+	}
+	snprintf(rcmd, sizeof(rcmd), "bootm 0x%lx", (ulong)staged_addr);
+	if (setenv("bootargs", ram_bootargs)) {
+		puts("Error: could not set RAM bootargs\n");
+		return -EINVAL;
+	}
+	puts("RAM initramfs bootargs prepared in volatile environment\n");
+	ret = run_command(rcmd, 0);
+	if (setenv("bootargs", original_bootargs)) {
+		puts("Error: could not restore volatile bootargs\n");
+		return -EIO;
+	}
+	return ret;
+#else
+	int ret;
+	char bootm_arg[66];
 
-    ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
-
-    if (!ret)
+	ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
+	if (!ret)
 		snprintf(rcmd, sizeof(rcmd), "bootm %s", bootm_arg);
 	else
 		snprintf(rcmd, sizeof(rcmd), "bootm 0x%lx", data_addr);
-
+#endif
+	puts("\n********************************\n INITRAMFS BOOTING\n********************************\n");
 	printf("\n### Executing: %s\n", rcmd);
-
 	return run_command(rcmd, 0);
 }
 
 int failsafe_validate_image(upgrade_type_t upgrade_type, const char *filename,
-		const void *data_addr, ulong data_size, struct httpd_response *response)
+		enum rt3_md_target metadata_target, const void *data_addr,
+		ulong data_size, struct httpd_response *response)
 {
 	int ret;
-
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	enum rt3_md_kind md_kind = 0;
+	const char *md_target = NULL;
+	char commit_token[65] = { 0 }, digest_hex[65] = { 0 };
+	u32 target_offset = 0, target_size = 0, second_target_offset = 0, second_target_size = 0;
+	(void)filename;
+#endif
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	failsafe_initramfs_invalidate();
+	fw_type = data_addr && data_size >= sizeof(u32) ?
+		check_fw_type((rt3_hw_b_addr_t)data_addr, data_size) : FW_TYPE_UNKNOWN;
+#else
 	fw_type = check_fw_type((uintptr_t)data_addr, data_size);
-
+#endif
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
-
 	httpd_debug("fw_type = %d (%s), data_addr = 0x%lx, data_size = %lu (0x%lx)\n",
 		fw_type, fw_type_to_string(fw_type), (ulong)data_addr, data_size, data_size);
-
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	failsafe_initramfs_invalidate();
+#endif
 	switch (upgrade_type) {
-	case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
-		ret = failsafe_validate_firmware(data_addr, data_size);
-		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT:
-		ret = failsafe_validate_uboot(data_addr, data_size);
+		md_kind=RT3_MD_UBOOT;
+#if defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+		md_target="0:APPSBL";
+#else
+		md_target="0:APPSBL + 0:APPSBL_1";
+#endif
 		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_ART:
-		ret = failsafe_validate_art(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_CDT:
-		ret = failsafe_validate_cdt(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE:
-		ret = failsafe_validate_ptable(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_SIMG:
-		ret = failsafe_validate_simg(data_addr, data_size);
-		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_ART: md_kind=RT3_MD_ART; md_target="0:ART"; break;
+	case WEBFAILSAFE_UPGRADE_TYPE_CDT: md_kind=RT3_MD_CDT; md_target=rt3_metadata_target_name(metadata_target); break;
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 	case WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS:
-		ret = failsafe_validate_initramfs(data_addr, data_size);
+		rt3_metadata_invalidate();
+		ret=failsafe_validate_initramfs(data_addr, data_size);
 		break;
+#endif
 	default:
-		handle_wrong_upgrade_type();
-		ret = RET_WRONG_UPGRADE_TYPE;
+		rt3_metadata_invalidate();
+		strlcpy(info, "{\"type\":\"read_only_stage0\"}", sizeof(info));
+		ret=-EROFS; break;
 	}
-
+	if (md_kind) {
+		if (data_size > 0xffffffffUL) ret=-EFBIG;
+		else ret=rt3_metadata_validate_target(md_kind,metadata_target,data_addr,(u32)data_size,commit_token,digest_hex);
+		if (!ret && rt3_metadata_pending_target(md_kind,&target_offset,&target_size,
+			&second_target_offset,&second_target_size)) {
+			rt3_metadata_invalidate();ret=-EINVAL;
+		}
+		if (ret) snprintf(info, sizeof(info), "{\"type\":\"%s\"}",
+			rt3_metadata_validation_error(ret));
+	}
+#else
+	switch (upgrade_type) {
+	case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE: ret=failsafe_validate_firmware(data_addr,data_size); break;
+	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT: ret=failsafe_validate_uboot(data_addr,data_size); break;
+	case WEBFAILSAFE_UPGRADE_TYPE_ART: ret=failsafe_validate_art(data_addr,data_size); break;
+	case WEBFAILSAFE_UPGRADE_TYPE_CDT: ret=failsafe_validate_cdt(data_addr,data_size); break;
+	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE: ret=failsafe_validate_ptable(data_addr,data_size); break;
+	case WEBFAILSAFE_UPGRADE_TYPE_SIMG: ret=failsafe_validate_simg(data_addr,data_size); break;
+	case WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS: ret=failsafe_validate_initramfs(data_addr,data_size); break;
+	default: handle_wrong_upgrade_type(); ret=RET_WRONG_UPGRADE_TYPE; break;
+	}
+#endif
 	if (!ret) {
-		char md5_str[33], esc_filename[512];
-
+		char md5_str[33];
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+		const char *md_name = NULL;
+#endif
 		get_image_md5_str(data_addr, data_size, md5_str, sizeof(md5_str));
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+		if (upgrade_type == WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS) {
+			snprintf(info, sizeof(info),
+				"{\"type\":\"initramfs\",\"size\":\"%lu\",\"md5\":\"%s\",\"name\":\"H3C HW-B Initramfs\",\"target\":\"RAM 0x44000000\"}",
+				data_size, md5_str);
+		} else
+#endif
+		{
+			md_name = rt3_metadata_preview_name(md_kind, data_addr, (u32)data_size);
+			if (!md_name)
+				md_name = "H3C U-Boot ELF";
+			snprintf(info, sizeof(info),
+				"{\"type\":\"%s\",\"size\":\"%lu\",\"md5\":\"%s\",\"name\":\"%s\",\"target\":\"%s\",\"target_offset\":\"0x%08x\",\"target_size\":\"0x%08x\",\"second_target_offset\":\"0x%08x\",\"second_target_size\":\"0x%08x\",\"sha256\":\"%s\",\"commit_token\":\"%s\"}",
+				fw_type_to_string(fw_type), data_size, md5_str,
+				md_name, md_target,target_offset,target_size,second_target_offset,second_target_size,digest_hex,commit_token);
+		}
+#else
+		char esc_filename[512];
 		json_escape(filename, esc_filename, sizeof(esc_filename));
-
 		snprintf(info, sizeof(info),
 			"{\"type\":\"%s\",\"size\":\"%lu\",\"md5\":\"%s\",\"name\":\"%s\"}",
-			fw_type_to_string(fw_type), data_size, md5_str, esc_filename[0] ? esc_filename : "NONE");
+			fw_type_to_string(fw_type), data_size, md5_str,
+			esc_filename[0] ? esc_filename : "NONE");
+#endif
 	}
-
-	snprintf(resp, sizeof(resp),
-		"{\"status\":\"%s\",\"info\":%s}",
-		ret ? "fail" : "success", info);
+	snprintf(resp, sizeof(resp), "{\"status\":\"%s\",\"info\":%s}",
+		 ret ? "fail" : "success", info);
 	response->data = resp;
 	response->size = strlen(response->data);
-
 	return ret;
 }
 
@@ -922,11 +1086,20 @@ int failsafe_write_image(upgrade_type_t upgrade_type, ulong data_addr,
 
 	runcmd = &cmdlist;
 	runcmd->count = 0;
+	#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	fw_type = data_addr && data_size >= sizeof(u32) ?
+		check_fw_type((rt3_hw_b_addr_t)data_addr, data_size) : FW_TYPE_UNKNOWN;
+#else
 	fw_type = check_fw_type((uintptr_t)data_addr, data_size);
+#endif
 
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
 
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	strlcpy(info, "{\"type\":\"read_only_stage0\"}", sizeof(info));
+	ret = -EROFS;
+#else
 	switch (upgrade_type) {
     case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
         ret = failsafe_write_firmware(data_addr, data_size);
@@ -951,6 +1124,7 @@ int failsafe_write_image(upgrade_type_t upgrade_type, ulong data_addr,
         ret = RET_WRONG_UPGRADE_TYPE;
 	}
 
+#endif
 	if (ret) {
 		snprintf(resp, sizeof(resp),
 			"{\"status\":\"fail\",\"info\":%s}", info);

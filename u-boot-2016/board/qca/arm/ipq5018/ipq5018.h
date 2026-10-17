@@ -504,6 +504,8 @@ typedef struct {
 	int phy_type;
 	u32 mac_pwr;
 	int ipq_swith;
+	int rtl8367s_switch_enable;
+	int rtl8367s_reset_gpio;
 	int phy_external_link;
 	int switch_port_count;
 	int switch_port_phy_address[S17C_MAX_PORT];

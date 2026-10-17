@@ -24,51 +24,22 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <ipq_led.h>
 
-typedef struct {
-	unsigned int gpio;
-	unsigned int active_level;
-} led_info_t;
-
-static struct {
-	const char *label;
-	led_info_t info;
-} last_used_led;
-
 DECLARE_GLOBAL_DATA_PTR;
 
-static int led_get_info_by_label(const char *led_label, led_info_t *led_info)
+static bool led_node_has_label(int node, const char *label)
 {
-	int parent, node;
-	int ret, strings_count;
+	int strings_count;
 	const char *node_label;
 
-	if (!led_label)
-		return -EINVAL;
-
-	if (last_used_led.label && !strcmp(last_used_led.label, led_label)) {
-		led_info->gpio = last_used_led.info.gpio;
-		led_info->active_level = last_used_led.info.active_level;
-		return 0;
+	strings_count = fdt_count_strings(gd->fdt_blob, node, "label");
+	for (int i = 0; i < strings_count; i++) {
+		node_label = NULL;
+		if (!fdt_get_string_index(gd->fdt_blob, node, "label", i,
+					  &node_label) &&
+		    node_label && !strcmp(node_label, label))
+			return true;
 	}
-
-	parent = fdt_path_offset(gd->fdt_blob, "/leds");
-	if (parent < 0)
-		return -ENOENT;
-
-	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
-		strings_count = fdt_count_strings(gd->fdt_blob, node, "label");
-		for (int i = 0; i < strings_count; i++) {
-			node_label = NULL;
-			ret = fdt_get_string_index(gd->fdt_blob, node, "label", i, &node_label);
-			if (!ret && node_label && !strcmp(node_label, led_label)) {
-				led_info->gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", GPIO_NOT_FOUND);
-				led_info->active_level = fdtdec_get_uint(gd->fdt_blob, node, "active_level", GPIO_ACTIVE_HIGH);
-				return 0;
-			}
-		}
-	}
-
-	return -ENOENT;
+	return false;
 }
 
 static int led_get_out_value(led_op_t op, unsigned int gpio,
@@ -96,23 +67,27 @@ static int led_get_out_value(led_op_t op, unsigned int gpio,
 
 void led_control(led_op_t op, const char *label)
 {
-	int ret;
-	led_info_t led;
-    unsigned int value;
+	int parent, node;
+	unsigned int gpio, active_level, value;
 
-	ret = led_get_info_by_label(label, &led);
-	if (ret || led.gpio == GPIO_NOT_FOUND)
+	if (!label)
+		return;
+	parent = fdt_path_offset(gd->fdt_blob, "/leds");
+	if (parent < 0)
 		return;
 
-    ret = led_get_out_value(op, led.gpio, led.active_level, &value);
-    if (ret)
-        return;
-
-	gpio_set_value(led.gpio, value);
-
-	last_used_led.label = label;
-	last_used_led.info.gpio = led.gpio;
-	last_used_led.info.active_level = led.active_level;
+	/* Apply a logical label to every matching physical LED GPIO. */
+	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
+		if (!led_node_has_label(node, label))
+			continue;
+		gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", GPIO_NOT_FOUND);
+		if (gpio == GPIO_NOT_FOUND)
+			continue;
+		active_level = fdtdec_get_uint(gd->fdt_blob, node, "active_level",
+					       GPIO_ACTIVE_HIGH);
+		if (!led_get_out_value(op, gpio, active_level, &value))
+			gpio_set_value(gpio, value);
+	}
 }
 
 void led_control_all(led_op_t op)

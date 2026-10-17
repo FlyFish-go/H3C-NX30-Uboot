@@ -27,6 +27,12 @@
 #include <flashrw.h>
 #include <bootconfig.h>
 
+#if defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#define H3C_BOOTCFG_POLICY_LABEL "H3C HW-C"
+#else
+#define H3C_BOOTCFG_POLICY_LABEL "RT3000-B"
+#endif
+
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
 #else
@@ -34,6 +40,65 @@ extern struct sdhci_host mmc_host;
 #endif
 
 static const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_D) && defined(CONFIG_H3C_RELEASE_SYSTEM_DEFAULT)
+#include <nand.h>
+#include <h3c_bootconfig_readonly.h>
+
+/* Release boot consumes BC without entering the legacy repair/write path.
+ * These are the audited ordinary OEM MIBIB physical windows, not MTD aliases. */
+struct h3c_bc_release_context {
+	nand_info_t *nand;
+	uint32_t offset[2];
+};
+static int h3c_bc_release_read(void *opaque, unsigned int copy,
+	unsigned char *record, unsigned int requested, unsigned int *actual)
+{
+	struct h3c_bc_release_context *context = opaque;
+	size_t length = requested;
+	int ret;
+	*actual = 0;
+	if (copy > 1 || requested != H3C_BC_RO_BYTES)
+		return -EINVAL;
+	/* Do not move a record out of its physical copy or skip to another block. */
+	ret = nand_block_isbad(context->nand, context->offset[copy]);
+	if (ret)
+		return -EIO;
+	ret = nand_read(context->nand, context->offset[copy], &length, record);
+	if (length <= requested)
+		*actual = (unsigned int)length;
+	/* Any transport/ECC warning, short read, or impossible length is unusable. */
+	if (ret || length != requested)
+		return -EIO;
+	return 0;
+}
+static int h3c_bc_release_get(const char *part_name)
+{
+	struct h3c_bc_release_context context;
+	struct h3c_bc_ro_result result;
+	uint32_t size[2];
+	int ret;
+	if ((sfi->flash_type != SMEM_BOOT_NAND_FLASH &&
+	     sfi->flash_type != SMEM_BOOT_QSPI_NAND_FLASH) || !has_nand())
+		return -ENODEV;
+	context.nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+	if (context.nand->size != 0x8000000ULL ||
+	    context.nand->writesize != 2048 || context.nand->erasesize != 0x20000)
+		return -EINVAL;
+	ret = getpart_offset_size(BOOTCONFIG_PART_NAME, &context.offset[0], &size[0]);
+	if (ret)
+		return -EINVAL;
+	ret = getpart_offset_size(BOOTCONFIG_BACKUP_PART_NAME, &context.offset[1], &size[1]);
+	if (ret || context.offset[0] != 0x100000 || context.offset[1] != 0x140000 ||
+	    size[0] != 0x40000 || size[1] != 0x40000)
+		return -EINVAL;
+	ret = h3c_bc_ro_select(h3c_bc_release_read, &context, part_name, &result);
+	if (ret)
+		return -EINVAL;
+	return (int)result.selector;
+}
+#endif
+
 
 /**
  * get_bootconfig_part_offset - Get bootconfig partition offset
@@ -141,6 +206,9 @@ int read_bootconfig(bootconfig_info_t *bootcfg, bool skip_validation, bool quiet
 	}
 
 	if (bootcfg->info.numaltpart > NUM_ALT_PARTITION) {
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+		return -EINVAL; /* Do not guess a slot from a malformed table. */
+#endif
 		if (!quiet)
 			printf("Warning: numaltpart (%u) exceeds maximum (%d), truncating\n",
 				bootcfg->info.numaltpart, NUM_ALT_PARTITION);
@@ -159,6 +227,23 @@ int read_bootconfig_and_write_back_if_needed(bootconfig_info_t *bootcfg)
 	bootcfg->size = sizeof(struct bootconfig_info);
 
 	ret = read_bootconfig(bootcfg, false, false);
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	if (!ret)
+		return 0;
+	backup_bootcfg.part_name = BOOTCONFIG_BACKUP_PART_NAME;
+	backup_bootcfg.size = sizeof(struct bootconfig_info);
+	printf("Primary BOOTCONFIG invalid; trying backup %s\n", backup_bootcfg.part_name);
+	ret = read_bootconfig(&backup_bootcfg, false, false);
+	if (ret) {
+		puts("BOOTCONFIG invalid; stage-0 will not repair it\n");
+		return ret;
+	}
+	memcpy(&bootcfg->info, &backup_bootcfg.info, backup_bootcfg.size);
+	bootcfg->part_name = backup_bootcfg.part_name;
+	bootcfg->offset = backup_bootcfg.offset;
+	printf("Using validated %s in RAM only\n", bootcfg->part_name);
+	return 0;
+#else
 	if (ret == 0 || ret == -ENOENT)
 		return ret;
 
@@ -176,6 +261,7 @@ int read_bootconfig_and_write_back_if_needed(bootconfig_info_t *bootcfg)
 	printf("Write bootconfig data back to partition %s\n", bootcfg->part_name);
 	memcpy(&bootcfg->info, &backup_bootcfg.info, backup_bootcfg.size);
 	return write_bootconfig(bootcfg);
+#endif
 }
 
 /**
@@ -183,6 +269,10 @@ int read_bootconfig_and_write_back_if_needed(bootconfig_info_t *bootcfg)
  */
 int write_bootconfig(bootconfig_info_t *bootcfg)
 {
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	printf("BOOTCONFIG writes blocked by %s stage-0 policy\n", H3C_BOOTCFG_POLICY_LABEL);
+	return -EROFS;
+#else
 	int ret;
 
 	switch (sfi->flash_type) {
@@ -211,6 +301,7 @@ int write_bootconfig(bootconfig_info_t *bootcfg)
 		printf("Failed to write bootconfig data back to partition %s\n", bootcfg->part_name);
 
 	return ret;
+#endif
 }
 
 bool validate_bootconfig(void)
@@ -237,6 +328,10 @@ done:
  */
 int sync_bootconfig(bool reverse)
 {
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	printf("BOOTCONFIG sync blocked by %s stage-0 policy\n", H3C_BOOTCFG_POLICY_LABEL);
+	return -EROFS;
+#else
 	bootconfig_info_t src, dst;
 	int ret;
 
@@ -289,6 +384,7 @@ int sync_bootconfig(bool reverse)
 		printf("failure (errno: %d)\n\n", ret);
 
 	return ret;
+#endif
 }
 
 /**
@@ -304,6 +400,9 @@ int print_bootconfig(void)
 		return ret;
 
 	puts("\n========== Bootconfig Information ==========\n");
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	printf("Source Partition: %s\n", bootcfg.part_name);
+#endif
 	printf("Magic Start:      0x%08x %s\n", bootcfg.info.magic_start,
 	       bootcfg.info.magic_start == BOOTCONFIG_MAGIC_START ? "(Normal)" :
 	       bootcfg.info.magic_start == BOOTCONFIG_MAGIC_START_TRYMODE ? "(Try Mode)" : "(Unknown)");
@@ -327,8 +426,14 @@ int print_bootconfig(void)
  */
 int get_bootconfig(const char *part_name)
 {
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_D) && defined(CONFIG_H3C_RELEASE_SYSTEM_DEFAULT)
+	return h3c_bc_release_get(part_name);
+#else
 	bootconfig_info_t bootcfg;
 	int ret;
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	int found = -1;
+#endif
 
 	ret = read_bootconfig_and_write_back_if_needed(&bootcfg);
 	if (ret)
@@ -337,12 +442,23 @@ int get_bootconfig(const char *part_name)
 	for (int i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
 		if (strncmp(bootcfg.info.per_part_entry[i].name, part_name,
 			    ALT_PART_NAME_LENGTH) == 0) {
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+			if (found >= 0)
+				return -EINVAL; /* Duplicate selector is ambiguous. */
+			found = i;
+#else
 			return bootcfg.info.per_part_entry[i].primaryboot;
+#endif
 		}
 	}
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	if (found >= 0)
+		return bootcfg.info.per_part_entry[found].primaryboot;
+#endif
 
 	printf("Entry '%s' not found\n", part_name);
 	return -ENOENT;
+#endif
 }
 
 /**
@@ -350,6 +466,10 @@ int get_bootconfig(const char *part_name)
  */
 int set_bootconfig(const char *name, uint32_t value)
 {
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	printf("BOOTCONFIG changes blocked by %s stage-0 policy\n", H3C_BOOTCFG_POLICY_LABEL);
+	return -EROFS;
+#else
 	bootconfig_info_t bootcfg;
 	int idx, modified = 0;
 	int ret;
@@ -432,4 +552,5 @@ int set_bootconfig(const char *name, uint32_t value)
 
 	/* Always sync 0:BOOTCONFIG -> 0:BOOTCONFIG1 */
 	return sync_bootconfig(false);
+#endif
 }

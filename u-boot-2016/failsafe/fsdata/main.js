@@ -83,6 +83,10 @@ function detectTheme() {
  * 翻译函数
  * 注：该函数来自项目：Yuzhii0718/bl-mt798x-dhcpd
  */
+function isRt3000BProtectedEnvName(name, bPersistentMode) {
+    return bPersistentMode && ["bootcmd", "bootargs", "bootdelay", "ethact", "mtdparts", "mtdids"].includes(name);
+}
+
 function t(key) {
     const lang = APP_STATE.lang || "en";
 
@@ -324,6 +328,8 @@ class SidebarManager {
             '/index.html': 'sysinfo',
             '/syslog.html': 'syslog',
             '/firmware.html': 'firmware',
+            '/firmware-dual.html': 'firmware',
+            '/firmware-single.html': 'firmware',
             '/art.html': 'art',
             '/cdt.html': 'cdt',
             '/ptable.html': 'ptable',
@@ -364,6 +370,12 @@ class SidebarManager {
      * 导航配置
      */
     getNavigationConfig() {
+        if (document.body.classList.contains("nx30-d-ram-readonly")) {
+            return { overview: {
+                titleKey: "nav.overview",
+                items: [{ path: "/", labelKey: "nav.sysinfo", id: "sysinfo" }]
+            } };
+        }
         return {
             overview: {
                 titleKey: "nav.overview",
@@ -471,7 +483,8 @@ class SidebarManager {
             navContainer.appendChild(this.createNavigationSection(sectionKey, sectionConfig));
         });
 
-        navContainer.appendChild(this.createRebootSection());
+        if (!document.body.classList.contains("nx30-d-ram-readonly"))
+            navContainer.appendChild(this.createRebootSection());
 
         this.sidebarElement.appendChild(navContainer);
 
@@ -1031,12 +1044,16 @@ const versionRenderer = (() => {
  */
 const pageConfigs = {
     firmware: {
-        needUpload: true,
-        formDataKey: 'firmware',
-        warningItems: {
-            common: true,
-            custom: 1
-        }
+        needUpload: false,
+        init: () => firmwareModeManager.initLanding()
+    },
+    'firmware-dual': {
+        needUpload: false,
+        init: () => firmwareModeManager.initMode('dual')
+    },
+    'firmware-single': {
+        needUpload: false,
+        init: () => firmwareModeManager.initMode('single')
     },
     uboot: {
         needUpload: true,
@@ -1168,6 +1185,12 @@ function appInit(pageName) {
         config.init();
     } else if (!APP_STATE.sysinfo) {
         sysinfoManager.fetchAndStore();
+    }
+
+    if (pageName === 'sysinfo') {
+        bootSlotsManager.init();
+        if (!document.body.classList.contains("nx30-d-ram-readonly"))
+            boardButtonsManager.init();
     }
 
     // 添加准备完成的类
@@ -1343,6 +1366,33 @@ const messageBuilder = (() => {
      * @returns {string} HTML字符串
      */
     function buildErrorMessage(info) {
+        const metadataCommitErrors = {
+            stale_or_mismatched_commit: "metadata.error.stale_commit",
+            staged_image_invalid: "metadata.error.staged_invalid",
+            staged_bytes_changed: "metadata.error.bytes_changed",
+            partition_layout_mismatch: "metadata.error.layout_changed",
+            metadata_staging_unavailable: "metadata.error.staging_unavailable",
+            metadata_write_or_readback_failed: "metadata.error.write_failed",
+            owned_staging_validation_failed: "metadata.error.staging_failed",
+            uboot_update_preflight_failed: "metadata.error.uboot_preflight",
+            uboot_update_failed: "metadata.error.uboot_failed",
+            uboot_update_partial: "metadata.error.uboot_partial",
+            uboot_update_locked_after_partial: "metadata.error.uboot_locked"
+        };
+        const metadataErrorKey = info && metadataCommitErrors[info.type];
+        if (metadataErrorKey) {
+            let html = buildErrorTable("error.title", [
+                { label: "error.title", value: t(metadataErrorKey) }
+            ]);
+            if (info.type === 'uboot_update_partial' ||
+                    info.type === 'uboot_update_locked_after_partial') {
+                html += '<p><a href="/uboot/backup/appsbl.bin" download="appsbl-before.bin">' +
+                    escapeHtml(t('metadata.backup.primary')) + '</a> ' +
+                    '<a href="/uboot/backup/appsbl_1.bin" download="appsbl_1-before.bin">' +
+                    escapeHtml(t('metadata.backup.secondary')) + '</a></p>';
+            }
+            return html;
+        }
         switch (info?.type) {
             case "file_too_big":
                 return buildFileTooBigMessage(info);
@@ -1359,14 +1409,47 @@ const messageBuilder = (() => {
         }
     }
 
-    /**
-     * 构建成功信息
-     * @param {object} info - 成功信息对象
-     * @param {string} info.type - 文件类型
-     * @param {number} info.size - 文件大小
-     * @param {string} info.md5 - MD5哈希值
-     * @returns {string} HTML字符串
-     */
+    function parseMetadataExtentValue(value, allowZero) {
+        let number = value;
+        if (typeof value === "string" && /^0x[0-9a-f]+$/i.test(value))
+            number = Number(value);
+        if (typeof number !== "number" || !Number.isSafeInteger(number) ||
+            number < 0 || (!allowZero && number === 0))
+            return null;
+        return number;
+    }
+
+    function formatMetadataExtent(offsetValue, sizeValue) {
+        const offset = parseMetadataExtentValue(offsetValue, true);
+        const size = parseMetadataExtentValue(sizeValue, false);
+        if (offset === null || size === null)
+            return "";
+        return " (0x" + offset.toString(16) + " + 0x" + size.toString(16) + ")";
+    }
+
+    function metadataTargetRows(info) {
+        if (typeof info.target !== "string" || !info.target.length)
+            return "";
+
+        const targetNames = info.target.split(/\s*\+\s*/);
+        const targetExtent = formatMetadataExtent(info.target_offset, info.target_size);
+        const secondExtent = formatMetadataExtent(
+            info.second_target_offset, info.second_target_size);
+        const row = (labelKey, target, extent) => `
+                    <tr>
+                        <td class="info-label" data-i18n="${labelKey}">${t(labelKey)}</td>
+                        <td class="info-value">${escapeHtml(target)}${extent}</td>
+                    </tr>`;
+
+        if (targetNames.length === 2 && targetNames[0] && targetNames[1] &&
+            targetExtent && secondExtent) {
+            return row("label.target", targetNames[0], targetExtent) +
+                row("label.second_target", targetNames[1], secondExtent);
+        }
+        return row("label.target", info.target, targetExtent);
+    }
+
+    /** Build the success preview for a validated upload. */
     function buildSuccessMessage(info) {
         let html = `
             <table class="info-table">
@@ -1404,6 +1487,7 @@ const messageBuilder = (() => {
                     </tr>`;
         }
 
+        html += metadataTargetRows(info);
         html += `
                 </tbody>
             </table>`;
@@ -1488,6 +1572,9 @@ class FileUploadComponent {
         };
 
         this.selectedFile = null;
+        this.commitToken = null;
+        this.commitCdtTarget = null;
+        this.commitAttempted = false;
         this.elements = {};
         this.isUploading = false;
     }
@@ -1516,6 +1603,15 @@ class FileUploadComponent {
 
                         <div id="upload-container" class="upload-wrapper">
                             <div class="upload-card">
+                                ${pageName === 'cdt' ? `<div class="card-hint-section">
+                                    <label for="cdtTarget">${APP_STATE.lang === 'zh-cn' ? '写入目标' : 'Write target'}</label>
+                                    <select id="cdtTarget" class="input">
+                                        <option value="">${APP_STATE.lang === 'zh-cn' ? '请选择 CDT 分区' : 'Select a CDT partition'}</option>
+                                        <option value="0:CDT">CDT</option>
+                                        <option value="0:CDT_1">CDT_1</option>
+                                    </select>
+                                    <p>${APP_STATE.lang === 'zh-cn' ? '仅更新所选的一份；请使用与本机硬件和内存配置匹配的 CDT。' : 'Only the selected copy is updated. Use a CDT matching this device and RAM configuration.'}</p>
+                                </div>` : ''}
                                 <div class="upload-area" id="uploadArea">
                                     <!-- 文件选择区域（正常状态） -->
                                     <div class="upload-selector" id="uploadSelector">
@@ -1665,7 +1761,8 @@ class FileUploadComponent {
             resultSuccessInfo: document.getElementById('result-success-info'),
             errorInfo: document.getElementById('error-info'),
             continueBtn: document.getElementById('continueBtn'),
-            updateRebootBtn: document.getElementById('updateRebootBtn')
+            updateRebootBtn: document.getElementById('updateRebootBtn'),
+            cdtTarget: document.getElementById('cdtTarget')
         };
     }
 
@@ -1673,6 +1770,13 @@ class FileUploadComponent {
      * 绑定事件
      */
     bindEvents() {
+        if (this.elements.cdtTarget) {
+            this.elements.cdtTarget.addEventListener('change', () => {
+                this.commitToken = null;
+                this.commitCdtTarget = null;
+                this.commitAttempted = false;
+            });
+        }
         // 拖拽区域点击
         if (this.elements.dropZone) {
             this.elements.dropZone.addEventListener('click', () => this.openFileSelector());
@@ -1756,9 +1860,10 @@ class FileUploadComponent {
      * 处理文件选择
      */
     handleFileSelect(file) {
+        this.commitToken = null;
+        this.commitAttempted = false;
+        this.selectedFile = file || null;
         if (!file) return;
-
-        this.selectedFile = file;
 
         // 更新拖拽区域样式
         if (this.elements.dropZone) {
@@ -1923,12 +2028,23 @@ class FileUploadComponent {
             return;
         }
 
+        this.commitToken = null;
+        this.commitAttempted = false;
         this.isUploading = true;
         this.showProgress();
         this.updateProgress(0);
 
+        const uploadFile = this.selectedFile;
+        const cdtTarget = this.options.pageName === 'cdt' && this.elements.cdtTarget ? this.elements.cdtTarget.value : null;
+        if (this.options.pageName === 'cdt' && !['0:CDT', '0:CDT_1'].includes(cdtTarget)) {
+            this.isUploading = false;
+            this.showError('upload', { type: 'invalid_target', message: APP_STATE.lang === 'zh-cn' ? '请先选择 CDT 或 CDT_1。' : 'Select CDT or CDT_1 first.' });
+            return;
+        }
+        this.commitCdtTarget = null;
         const formData = new FormData();
-        formData.append(this.options.formDataKey, this.selectedFile);
+        formData.append(this.options.formDataKey, uploadFile);
+        if (cdtTarget) formData.append('cdt_target', cdtTarget);
 
         const xhr = new XMLHttpRequest();
 
@@ -1942,6 +2058,11 @@ class FileUploadComponent {
         xhr.onreadystatechange = () => {
             if (xhr.readyState === 4) {
                 if (xhr.status === 200) {
+                    if (this.selectedFile !== uploadFile || (cdtTarget && this.elements.cdtTarget.value !== cdtTarget)) {
+                        this.commitToken = null;
+                        this.showError('upload', { type: 'invalid_response', message: 'Selected file changed during upload.' });
+                        return;
+                    }
                     let response;
                     try {
                         response = JSON.parse(xhr.responseText);
@@ -1952,15 +2073,26 @@ class FileUploadComponent {
 
                     switch (response.status) {
                         case 'success':
+                            this.commitToken = null;
+                            const expectedTargets = { uboot: ["0:APPSBL", "0:APPSBL + 0:APPSBL_1"], art: "0:ART", cdt: cdtTarget };
+                            if (expectedTargets[this.options.pageName] && response.info &&
+                                    [].concat(expectedTargets[this.options.pageName]).includes(response.info.target) &&
+                                    typeof response.info.commit_token === "string" &&
+                                    /^[0-9a-f]{64}$/.test(response.info.commit_token))
+                                this.commitToken = response.info.commit_token;
+                            if (this.commitToken) { this.commitAttempted = false; this.commitCdtTarget = cdtTarget; }
                             this.showSuccess('upload', response.info);
                             break;
                         case 'fail':
+                            this.commitToken = null;
                             this.showError('upload', response.info);
                             break;
                         default:
+                            this.commitToken = null;
                             this.showError('upload', { type: 'unknown_status', message: xhr.responseText });
                     }
                 } else {
+                    this.commitToken = null;
                     this.showError('upload', { type: 'http_error', message: `HTTP ${xhr.status}` });
                 }
             }
@@ -1976,9 +2108,13 @@ class FileUploadComponent {
      * @param {boolean} autoRebootAfterSuccess - 操作成功后是否自动重启（仅对刷写更新类操作有效）
      */
     continue(autoRebootAfterSuccess) {
+        if (this.commitAttempted && !this.commitToken) return;
         const pageName = this.options.pageName;
         const isMibibPage = pageName === 'mibib';
         const isInitramfsPage = pageName === 'initramfs';
+        const family = typeof APP_STATE !== 'undefined' && APP_STATE.sysinfo && APP_STATE.sysinfo.board && APP_STATE.sysinfo.board.family;
+        if (['HW-A', 'HW-B', 'HW-C', 'HW-D'].includes(family) && ['uboot', 'art', 'cdt'].includes(pageName) && !this.commitToken) return;
+        if (pageName === 'cdt' && (!this.elements.cdtTarget || this.elements.cdtTarget.value !== this.commitCdtTarget)) return;
 
         if (isMibibPage) {
             window.location.href = '/';
@@ -1997,6 +2133,14 @@ class FileUploadComponent {
 
         const formData = new FormData();
         formData.append('auto_reboot', autoRebootAfterSuccess ? 'true' : 'false');
+        const commitToken = this.commitToken;
+        const commitMetadata = !!commitToken && ["uboot", "art", "cdt"].includes(pageName);
+        if (commitMetadata) {
+            formData.append('commit_token', commitToken);
+            if (pageName === 'cdt') formData.append('cdt_target', this.commitCdtTarget);
+            this.commitToken = null;
+            this.commitAttempted = true;
+        }
 
         const xhr = new XMLHttpRequest();
 
@@ -2030,7 +2174,7 @@ class FileUploadComponent {
             }
         };
 
-        xhr.open('POST', '/result');
+        xhr.open('POST', commitMetadata ? '/write' : '/result');
         xhr.send(formData);
     }
 
@@ -2052,6 +2196,8 @@ class FileUploadComponent {
         }
         this.elements = {};
         this.selectedFile = null;
+        this.commitToken = null;
+        this.commitAttempted = false;
         this.isUploading = false;
     }
 }
@@ -3338,7 +3484,7 @@ const backupManager = (() => {
     /**
      * 初始化备份管理器
      */
-    function init() {
+    async function init() {
         const els = getElements();
 
         if (els.mode) {
@@ -3391,6 +3537,8 @@ const backupManager = (() => {
  */
 const envManager = (() => {
     let elements = null;
+    let readOnly;
+    let bPersistentMode = false;
     let envData = []; // 存储解析后的环境变量数据
     let refreshTimer = null; // 延迟刷新定时器
     let isAddingNew = false; // 是否正在添加新变量
@@ -3409,6 +3557,9 @@ const envManager = (() => {
             status: document.getElementById("env_status"),
             count: document.getElementById("env_count"),
             restoreFile: document.getElementById("env_restore_file"),
+            hint: document.getElementById("env_hint"),
+            readonlyHint: document.getElementById("env_readonly_hint"),
+            protectedHint: document.getElementById("env_protected_hint"),
         };
 
         return elements;
@@ -3518,8 +3669,10 @@ const envManager = (() => {
         }
 
         // 编辑按钮
+        const protectedRow = !isNewRow && isRt3000BProtectedEnvName(row.dataset.key, bPersistentMode);
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
+        editBtn.disabled = protectedRow;
         editBtn.className = 'button env-action-btn';
         editBtn.textContent = t('env.action.edit') || 'Edit';
         editBtn.dataset.action = 'edit';
@@ -3530,6 +3683,7 @@ const envManager = (() => {
         // 删除按钮
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
+        deleteBtn.disabled = protectedRow;
         deleteBtn.className = 'button button-danger env-action-btn';
         deleteBtn.textContent = t('env.action.delete') || 'Delete';
         deleteBtn.dataset.action = 'delete';
@@ -3572,6 +3726,7 @@ const envManager = (() => {
         // 重置为默认值按钮（仅对已存在的变量显示）
         const resetBtn = document.createElement('button');
         resetBtn.type = 'button';
+        resetBtn.disabled = protectedRow;
         resetBtn.className = 'button button-warn env-action-btn';
         resetBtn.textContent = t('env.action.reset_single') || 'Reset';
         resetBtn.dataset.action = 'reset';
@@ -3692,11 +3847,12 @@ const envManager = (() => {
         tdValue.appendChild(valueInput);
 
         // 操作列
-        const tdActions = createActionGroups(row, valueInput, isNewRow);
-
         row.appendChild(tdName);
         row.appendChild(tdValue);
-        row.appendChild(tdActions);
+        if (!readOnly) {
+            const tdActions = createActionGroups(row, valueInput, isNewRow);
+            row.appendChild(tdActions);
+        }
 
         // 如果是新行，自动进入编辑状态
         if (isNewRow) {
@@ -3715,6 +3871,7 @@ const envManager = (() => {
      * 进入行内编辑模式
      */
     function enterEditMode(row, inputEl, readOnlyGroup, editGroup) {
+        if (isRt3000BProtectedEnvName(row.dataset.key, bPersistentMode)) return;
         // 先取消其他行的编辑状态（包括新增行）
         document.querySelectorAll('.env-row.editing').forEach((r) => {
             if (r !== row) {
@@ -3839,6 +3996,7 @@ const envManager = (() => {
      */
     async function saveInlineEdit(row, inputEl, readOnlyGroup, editGroup) {
         const key = row.dataset.key;
+        if (isRt3000BProtectedEnvName(key, bPersistentMode)) return;
         const newValue = inputEl.value;
 
         // 如果值没有变化，直接取消编辑
@@ -3887,6 +4045,7 @@ const envManager = (() => {
      */
     async function resetSingleInline(row, inputEl, readOnlyGroup, editGroup) {
         const key = row.dataset.key;
+        if (isRt3000BProtectedEnvName(key, bPersistentMode)) return;
 
         if (!confirm(`${key}: ${t("env.confirm.reset_single")}`)) return;
 
@@ -4012,6 +4171,7 @@ const envManager = (() => {
      * 添加新变量（在表格中创建新行）
      */
     function addVariable() {
+        if (readOnly) return;
         // 如果有正在编辑的行，先取消
         cancelAllEditing();
 
@@ -4033,6 +4193,7 @@ const envManager = (() => {
      * 删除单个环境变量
      */
     async function deleteSingle(name) {
+        if (readOnly || isRt3000BProtectedEnvName(name, bPersistentMode)) return;
         const excludeList = ['baudrate', 'stderr', 'stdin', 'stdout'];
         if (excludeList.includes(name)) {
             alert(name + ": " + t("env.delete.forbid"));
@@ -4073,6 +4234,7 @@ const envManager = (() => {
      * 重置所有环境变量为默认值
      */
     async function resetAll() {
+        if (readOnly) return;
         if (!confirm(t("env.confirm.reset"))) return;
 
         try {
@@ -4100,6 +4262,7 @@ const envManager = (() => {
      * 点击恢复按钮后弹出文件选择框
      */
     function restore() {
+        if (readOnly) return;
         const els = getElements();
 
         if (!els.restoreFile) return;
@@ -4116,6 +4279,7 @@ const envManager = (() => {
      * @param {File} file - 用户选择的文件
      */
     async function handleRestoreFile(file) {
+        if (readOnly) return;
         if (!file) return;
 
         if (!confirm(t("env.confirm.restore"))) return;
@@ -4151,7 +4315,7 @@ const envManager = (() => {
     /**
      * 初始化环境变量管理器
      */
-    function init() {
+    async function init() {
         const els = getElements();
 
         // 绑定恢复文件选择事件
@@ -4177,7 +4341,45 @@ const envManager = (() => {
             }
         });
 
-        refresh();
+        const mutationButtons = document.querySelectorAll(".env-main-actions button");
+        mutationButtons.forEach((button) => {
+            if (button.dataset.i18n !== "env.action.refresh") button.disabled = true;
+        });
+        try {
+            const response = await fetch("/env/info", { cache: "no-store" });
+            if (response.ok) {
+                const info = await response.json();
+                if (Object.prototype.hasOwnProperty.call(info, "persistent_write_supported")) {
+                    bPersistentMode = info.read_only === false &&
+                        info.persistent_write_supported === true &&
+                        info.persistent_target === "0:APPSBLENV";
+                    readOnly = !bPersistentMode;
+                } else {
+                    bPersistentMode = false;
+                    readOnly = info.read_only === true;
+                }
+            }
+        } catch (error) {
+            // Older board builds do not expose environment capability metadata.
+        }
+
+        if (els.protectedHint) els.protectedHint.hidden = !bPersistentMode;
+        if (readOnly) {
+            if (els.hint) els.hint.hidden = true;
+            if (els.readonlyHint) els.readonlyHint.hidden = false;
+            const mutationWarnings = document.getElementById("env_mutation_warnings");
+            if (mutationWarnings) mutationWarnings.hidden = true;
+            document.querySelectorAll(".env-main-actions button").forEach((button) => {
+                if (button.dataset.i18n !== "env.action.refresh") button.disabled = true;
+            });
+            if (els.restoreFile) els.restoreFile.disabled = true;
+            const actionHeader = document.querySelector("#env_table thead .env-col-actions");
+            if (actionHeader) actionHeader.style.display = "none";
+        } else {
+            mutationButtons.forEach((button) => { button.disabled = false; });
+        }
+
+        await refresh();
     }
 
     return {
@@ -4569,12 +4771,35 @@ const networkManager = (() => {
     /**
      * 初始化网络管理器
      */
-    function init() {
+    async function init() {
         getElements();
 
         bindValidationEvents();
 
-        refresh();
+        try {
+            const response = await fetch("/env/info", { cache: "no-store" });
+            if (response.ok) {
+                const info = await response.json();
+                readOnly = info.read_only === true;
+            }
+        } catch (error) {
+            // Older board builds do not expose environment capability metadata.
+        }
+
+        if (readOnly) {
+            if (els.hint) els.hint.hidden = true;
+            if (els.readonlyHint) els.readonlyHint.hidden = false;
+            const mutationWarnings = document.getElementById("env_mutation_warnings");
+            if (mutationWarnings) mutationWarnings.hidden = true;
+            document.querySelectorAll(".env-main-actions button").forEach((button) => {
+                if (button.dataset.i18n !== "env.action.refresh") button.disabled = true;
+            });
+            if (els.restoreFile) els.restoreFile.disabled = true;
+            const actionHeader = document.querySelector("#env_table thead .env-col-actions");
+            if (actionHeader) actionHeader.style.display = "none";
+        }
+
+        await refresh();
     }
 
     return {
@@ -5547,7 +5772,7 @@ const webTerminalManager = (() => {
     /**
      * 初始化控制台管理器
      */
-    function init() {
+    async function init() {
         getElements();
 
         bindKeyboardEvents();
@@ -5590,6 +5815,58 @@ const webTerminalManager = (() => {
  * 系统信息管理器
  * 负责加载和渲染设备的系统信息、存储信息和分区表
  */
+function renderRt3000StorageDevices(devices, table, renderDeviceInfo,
+                                     createHeaderRow, createInfoRow,
+                                     formatHexBytes, chinese) {
+    if (!devices) return;
+    const nor = devices.spi_nor;
+    if (nor && nor.present === true) {
+        const identity = nor.name || nor.model;
+        const title = chinese ? 'SPI NOR \u95ea\u5b58' : 'SPI NOR Flash';
+        createHeaderRow(table, 2, identity ? title + ' (' + identity + ')' : title);
+        if (nor.name) createInfoRow(table, 'sysinfo.name', nor.name);
+        if (nor.model && nor.model !== nor.name)
+            createInfoRow(table, 'sysinfo.model', nor.model);
+        if (nor.size !== undefined && nor.size !== null)
+            createInfoRow(table, 'sysinfo.size', formatHexBytes(nor.size));
+        for (const [field, label] of [
+            ['page_size', 'sysinfo.page_size'],
+            ['sector_size', 'sysinfo.sector_size'],
+            ['erase_size', 'sysinfo.erase_size'],
+            ['block_size', 'sysinfo.block_size']
+        ]) {
+            if (nor[field] !== undefined && nor[field] !== null)
+                createInfoRow(table, label, formatHexBytes(nor[field]));
+        }
+        if (nor.bus !== undefined && nor.bus !== null)
+            createInfoRow(table, 'sysinfo.bus', nor.bus);
+        if (nor.chip_select !== undefined && nor.chip_select !== null)
+            createInfoRow(table, 'sysinfo.chip_select', nor.chip_select);
+    } else if (!nor && devices.spi && devices.spi.present) {
+        renderDeviceInfo(devices.spi, 'spi', table);
+    }
+    if (devices.mmc && devices.mmc.present)
+        renderDeviceInfo(devices.mmc, 'mmc', table);
+    if (devices.nand && devices.nand.present)
+        renderDeviceInfo(devices.nand, 'nand', table);
+}
+
+function appendSysinfoBoardRows(table, board, createInfoRow, formatHexBytes) {
+    if (board.hostname) {
+        const fromBuild = board.identity_source === "build_configuration";
+        const nameLabel = fromBuild ? "sysinfo.build_name" : "sysinfo.hostname";
+        const displayName = fromBuild && board.model ? board.model : board.hostname;
+        table.appendChild(createInfoRow(nameLabel, displayName));
+    }
+    if (board.family) table.appendChild(createInfoRow("sysinfo.family", board.family));
+    if (board.model && board.family !== "HW-B") table.appendChild(createInfoRow("sysinfo.model", board.model));
+    if (board.compatible && board.family !== "HW-B") table.appendChild(createInfoRow("sysinfo.compatible", board.compatible));
+    if (board.machid) table.appendChild(createInfoRow("sysinfo.machid", board.machid));
+    if (board.ram_size !== undefined) {
+        table.appendChild(createInfoRow("sysinfo.ram_size", formatHexBytes(board.ram_size)));
+    }
+}
+
 const sysinfoManager = (() => {
     let elements = null;
     const sectionIds = ["board_info", "flash_info", "partitions_info"];
@@ -5877,6 +6154,7 @@ const sysinfoManager = (() => {
                 "version": "sysinfo.version",
             },
             nand: {
+                "model": "sysinfo.model",
                 "page_size": "sysinfo.page_size",
                 "block_size": "sysinfo.block_size",
                 "oob_size": "sysinfo.oob_size",
@@ -5889,7 +6167,7 @@ const sysinfoManager = (() => {
         const propsToShow = propsMap[type] || {};
 
         for (const [prop, labelKey] of Object.entries(propsToShow)) {
-            if (device[prop] !== undefined) {
+            if (device[prop] !== undefined && !(prop === "model" && device[prop] === null)) {
                 let value = device[prop];
                 // 大小相关的用十六进制显示
                 if (prop.includes("size")) {
@@ -6013,14 +6291,7 @@ const sysinfoManager = (() => {
         const boardTable = createSectionTable("board_info", "sysinfo.title.board_info");
         if (boardTable) {
             if (data.board) {
-                const b = data.board;
-                if (b.hostname) boardTable.appendChild(createInfoRow("sysinfo.hostname", b.hostname));
-                if (b.model) boardTable.appendChild(createInfoRow("sysinfo.model", b.model));
-                if (b.compatible) boardTable.appendChild(createInfoRow("sysinfo.compatible", b.compatible));
-                if (b.machid) boardTable.appendChild(createInfoRow("sysinfo.machid", b.machid));
-                if (b.ram_size !== undefined) {
-                    boardTable.appendChild(createInfoRow("sysinfo.ram_size", formatHexBytes(b.ram_size)));
-                }
+                appendSysinfoBoardRows(boardTable, data.board, createInfoRow, formatHexBytes);
             }
 
             // 启动模式
@@ -6050,19 +6321,11 @@ const sysinfoManager = (() => {
 
             // 设备信息
             if (data.devices) {
-                const devices = data.devices;
-
-                if (devices.spi && devices.spi.present) {
-                    renderDeviceInfo(devices.spi, "spi", flashTable);
-                }
-
-                if (devices.mmc && devices.mmc.present) {
-                    renderDeviceInfo(devices.mmc, "mmc", flashTable);
-                }
-
-                if (devices.nand && devices.nand.present) {
-                    renderDeviceInfo(devices.nand, "nand", flashTable);
-                }
+                renderRt3000StorageDevices(
+                    data.devices, flashTable, renderDeviceInfo,
+                    (table, span, value) => table.appendChild(createHeaderRow(span, value)),
+                    (table, label, value) => table.appendChild(createInfoRow(label, value)),
+                    formatHexBytes, APP_STATE.lang === "zh-cn");
             }
 
             // 如果没有任何设备，显示提示
@@ -6170,7 +6433,7 @@ const sysinfoManager = (() => {
     /**
      * 初始化系统信息管理器
      */
-    function init() {
+    async function init() {
         load();
     }
 
@@ -6520,7 +6783,7 @@ const syslogManager = (() => {
     /**
      * 初始化系统日志管理器
      */
-    function init() {
+    async function init() {
         getElements();
 
         loadPersistedOutput();
@@ -6618,7 +6881,7 @@ const settingsPageManager = (() => {
     /**
      * 初始化设置页面
      */
-    function init() {
+    async function init() {
         getElements();
         loadSettingsToForm();
         bindEvents();
@@ -6640,7 +6903,9 @@ const settingsPageManager = (() => {
 const macManager = (() => {
     let elements = null;
     let macList = [];           // 存储 MAC 地址数组
-    let partName = "";          // 存储分区名称
+    let partName = "";
+    let macWritable = false;
+    let macEnvBase = false;          // 存储分区名称
     let refreshTimer = null;    // 延迟刷新定时器
 
     /**
@@ -6698,6 +6963,26 @@ const macManager = (() => {
     /**
      * 格式化错误信息
      */
+    function setMacStoragePresentation(data) {
+        const bEnvironment = !!data && (data.part_name === "0:APPSBLENV" ||
+            data.source === "uboot_environment" || data.variable === "ethaddr");
+        macEnvBase = bEnvironment && data.source === "uboot_environment" &&
+            data.variable === "ethaddr" && data.part_name === "0:APPSBLENV";
+        macWritable = bEnvironment
+            ? macEnvBase && data.writable === true && data.persistent === true
+            : !!data && data.writable !== false;
+        const warningKeys = macEnvBase
+            ? ["mac.warn.uboot.1", "mac.warn.uboot.2", "mac.warn.uboot.3", "mac.warn.uboot.4"]
+            : ["mac.warn.1", "mac.warn.2", "mac.warn.3", "mac.warn.4"];
+        document.querySelectorAll('[data-i18n^="mac.warn."]').forEach((item, index) => {
+            if (index >= warningKeys.length) return;
+            item.setAttribute("data-i18n", warningKeys[index]);
+            item.textContent = t(warningKeys[index]);
+        });
+        const button = getElements().modifyBtn;
+        if (button) button.disabled = !macWritable;
+    }
+
     function formatError(error) {
         if (!error) return t("error.unknown");
         if (error.message) return error.message;
@@ -6744,6 +7029,12 @@ const macManager = (() => {
      * @param {Array<string>} bytes - 6个字节的数组
      * @returns {string}
      */
+    function isValidUnicastMac(bytes) {
+        if (!isValidMac(bytes)) return false;
+        const octets = bytes.map(byte => parseInt(byte, 16));
+        return (octets[0] & 1) === 0 && octets.some(byte => byte !== 0);
+    }
+
     function bytesToMac(bytes) {
         if (!bytes || bytes.length !== 6) return "";
         return bytes.map(b => b.toUpperCase().padStart(2, '0')).join(':');
@@ -6874,7 +7165,7 @@ const macManager = (() => {
             input.className = "mac-byte-input";
             input.value = bytes[i];
             input.dataset.byteIndex = i;
-            input.disabled = true;  // 初始状态为禁用（只读模式）
+            input.disabled = !macWritable;
             input.readOnly = true;
 
             // 输入验证和格式化
@@ -7016,7 +7307,7 @@ const macManager = (() => {
         if (!group || !group.inputs) return false;
 
         const bytes = group.inputs.map(input => input.value.padStart(2, ''));
-        const isValid = isValidMac(bytes);
+        const isValid = macEnvBase ? isValidUnicastMac(bytes) : isValidMac(bytes);
 
         // 更新样式
         group.inputs.forEach(input => {
@@ -7133,6 +7424,10 @@ const macManager = (() => {
      * 启用编辑模式
      */
     function enableEditMode() {
+        if (!macWritable) {
+            setStatus(t("mac.status.read_only"), true);
+            return;
+        }
         const els = getElements();
         const inputs = document.querySelectorAll(".mac-byte-input");
 
@@ -7176,6 +7471,11 @@ const macManager = (() => {
         }
 
         const macs = getAllMacs();
+        if (macEnvBase && (!macWritable || macs.length !== 1 ||
+                !isValidUnicastMac(macToBytes(macs[0])))) {
+            setStatus(t("mac.error.invalid_mac"), true);
+            return;
+        }
 
         if (!macs || macs.length === 0) {
             setStatus(t("mac.error.no_mac"), true);
@@ -7203,9 +7503,20 @@ const macManager = (() => {
             }
 
             if (result === "ok") {
+                if (macEnvBase) {
+                    const refreshed = await loadMacInfo();
+                    if (!refreshed || !Array.isArray(refreshed.macs) || refreshed.macs.length !== 1 ||
+                            refreshed.macs[0].toUpperCase() !== macs[0].toUpperCase())
+                        throw new Error(t("mac.status.verify_failed"));
+                }
+                const els = getElements();
+                document.querySelectorAll(".mac-byte-input").forEach(input => {
+                    input.disabled = true;
+                    input.readOnly = true;
+                });
+                if (els.modifyBtn) els.modifyBtn.style.display = "inline-block";
+                if (els.saveCancelGroup) els.saveCancelGroup.style.display = "none";
                 setStatus(t("mac.status.saved"));
-                disableEditMode();
-                // delayedRefresh();
             } else {
                 throw new Error(result || t("mac.status.error"));
             }
@@ -7260,6 +7571,7 @@ const macManager = (() => {
             }
 
             const data = await response.json();
+            setMacStoragePresentation(data);
 
             // 解析分区名称
             if (data && data.part_name) {
@@ -7275,6 +7587,7 @@ const macManager = (() => {
                 macList = data.macs;
                 renderTable(macList);
                 setStatus(t("mac.status.ready"));
+                return data;
             } else {
                 throw new Error(t("mac.error.invalid_response"));
             }
@@ -7283,6 +7596,8 @@ const macManager = (() => {
             setStatus(formatError(error), true);
             setPartName("");
             renderTable([]);
+            setMacStoragePresentation(null);
+            return null;
         }
     }
 
@@ -7308,8 +7623,9 @@ const macManager = (() => {
     /**
      * 初始化 MAC 管理器
      */
-    function init() {
+    async function init() {
         getElements();
+        if (elements && elements.modifyBtn) elements.modifyBtn.disabled = true;
         bindEvents();
         loadMacInfo();
     }
@@ -7396,6 +7712,8 @@ const I18N = (() => {
             "label.type": "Type",
             "label.size": "Size",
             "label.md5": "MD5",
+            "label.target": "Target",
+            "label.second_target": "Second target",
             "firmware.title": "FIRMWARE UPDATE",
             "firmware.hint": t.en.updateHint("firmware"),
             "firmware.warn.1": t.en.warnChoose("firmware image"),
@@ -7484,6 +7802,8 @@ const I18N = (() => {
             "webterm.upload.success": "Upload successful",
             "env.title": "U-BOOT ENV",
             "env.hint": "Manage <strong>U-Boot environment variables</strong>. Changes will be saved to storage.",
+            "env.mode.readonly": "Read-only view of the current RAM environment for this boot session. Changes are not saved to persistent storage.",
+            "env.mode.protected": "Persistent ENV editing is enabled for this board. bootcmd, bootargs, bootdelay, ethact, mtdparts and mtdids remain protected to preserve the current boot strategy and partition mapping.",
             "env.count": "Variables:",
             "env.status.loading": "Loading...",
             "env.status.ready": "Ready",
@@ -7545,6 +7865,12 @@ const I18N = (() => {
             "mac.warn.2": "These are just the raw MAC data in the partition; whether and how they are used is determined by the firmware.",
             "mac.warn.3": "After modification, the firmware needs to be reset or reflashed for the modified MAC address to be recognized.",
             "mac.warn.4": "Invalid MAC addresses may cause network issues.",
+            "mac.warn.uboot.1": "This changes only U-Boot ethaddr in APPSBLENV; raw ART data is unchanged.",
+            "mac.warn.uboot.2": "Other MAC fields stay unchanged. This does not establish which addresses OEM firmware uses.",
+            "mac.warn.uboot.3": "APPSBLENV is read back before success; running interfaces may need a restart.",
+            "mac.warn.uboot.4": "Use one valid unicast base address. Invalid MAC addresses may cause network issues.",
+            "mac.status.read_only": "Persistent MAC editing is unavailable.",
+            "mac.status.verify_failed": "The saved U-Boot base MAC could not be confirmed by readback.",
             "mibib.title": "MIBIB RELOAD",
             "mibib.hint": "In <strong>9008</strong> mode, reloading <strong>MIBIB</strong> to initialize <strong>SMEM (Shared Memory) Partition Info</strong>. <br>Please choose a file from your local hard drive and click <strong>Reload</strong> button.",
             "mibib.reload": "Reload",
@@ -7596,6 +7922,8 @@ const I18N = (() => {
             "sysinfo.error.parse": "Failed to parse system information",
             "sysinfo.uboot_version": "U-Boot Version",
             "sysinfo.hostname": "Hostname",
+            "sysinfo.build_name": "Build Configuration Name",
+            "sysinfo.family": "Hardware Family",
             "sysinfo.model": "Model",
             "sysinfo.compatible": "Compatible",
             "sysinfo.machid": "Machine ID",
@@ -7604,6 +7932,8 @@ const I18N = (() => {
             "sysinfo.flash_type": "Flash Type",
             "sysinfo.flash_block_size": "Block Size",
             "sysinfo.flash_density": "Density",
+            "sysinfo.bus": "Bus",
+            "sysinfo.chip_select": "Chip Select",
             "sysinfo.present": "Present",
             "sysinfo.name": "Name",
             "sysinfo.size": "Size",
@@ -7671,6 +8001,19 @@ const I18N = (() => {
             "fail.hint.validate": "The file failed validation.",
             "fail.hint.update": "Something went wrong during update.",
             "error.title": "Error",
+            "metadata.error.stale_commit": "The one-use token is stale or does not match this metadata upload. Upload and validate the file again.",
+            "metadata.error.staged_invalid": "The staged image no longer passes validation. Upload and validate the file again.",
+            "metadata.error.bytes_changed": "Staged bytes differ from the validated upload. Do not retry without validating again.",
+            "metadata.error.layout_changed": "The validated partition layout changed. Read the layout and validate again.",
+            "metadata.error.write_failed": "Metadata write or readback verification failed. Inspect the device before another attempt.",
+            "metadata.error.staging_failed": "The owned staging area could not be validated. Inspect the device before another attempt.",
+            "metadata.error.uboot_partial": "A U-Boot copy could not be written or verified. Download both original backups before power-off. Further U-Boot updates are locked until restart.",
+            "metadata.error.uboot_locked": "A previous U-Boot update is partial. Download the original backups and inspect both copies before restart.",
+            "metadata.error.uboot_preflight": "U-Boot preflight failed. Neither copy was erased. Check the partition layout, NAND and available memory.",
+            "metadata.error.uboot_failed": "U-Boot update stopped before erase. Inspect the device and validate the image again.",
+            "metadata.backup.primary": "Download original APPSBL",
+            "metadata.backup.secondary": "Download original APPSBL_1",
+            "metadata.error.staging_unavailable": "The metadata staging area is unavailable. Check available memory and validate the file again.",
             "error.label.file_type": "File Type",
             "error.label.file_size": "File Size",
             "error.label.part_name": "Partition Name",
@@ -7736,6 +8079,8 @@ const I18N = (() => {
             "label.type": "类型",
             "label.size": "大小",
             "label.md5": "MD5",
+            "label.target": "\u76ee\u6807\u5206\u533a",
+            "label.second_target": "\u7b2c\u4e8c\u76ee\u6807\u5206\u533a",
             "firmware.title": "固件更新",
             "firmware.hint": t["zh-cn"].updateHint("固件"),
             "firmware.warn.1": t["zh-cn"].warnChoose("固件"),
@@ -7824,6 +8169,8 @@ const I18N = (() => {
             "webterm.upload.success": "上传成功",
             "env.title": "U-BOOT 环境变量",
             "env.hint": "管理 <strong>U-Boot 环境变量</strong>。更改将保存到存储设备。",
+            "env.mode.readonly": "此页面只读显示本次启动的当前 RAM 环境；更改不会保存到持久存储。",
+            "env.mode.protected": "支持持久化 ENV 修改；为保护当前启动策略和分区映射，bootcmd、bootargs、bootdelay、ethact、mtdparts、mtdids 仍不可修改。",
             "env.count": "变量数:",
             "env.status.loading": "加载中...",
             "env.status.ready": "就绪",
@@ -7885,6 +8232,12 @@ const I18N = (() => {
             "mac.warn.2": "这些只是分区中的原始 MAC 数据，是否使用及如何使用均由固件决定。",
             "mac.warn.3": "修改后需重置或重刷固件才能识别修改后的 MAC 地址。",
             "mac.warn.4": "无效的 MAC 地址可能导致网络问题。",
+            "mac.warn.uboot.1": "\u6b64\u64cd\u4f5c\u53ea\u4fee\u6539 APPSBLENV \u4e2d U-Boot \u7684 ethaddr\uff0c\u4e0d\u4fee\u6539 ART \u539f\u59cb\u6570\u636e\u3002",
+            "mac.warn.uboot.2": "\u5176\u4ed6 MAC \u5b57\u6bb5\u4fdd\u6301\u4e0d\u53d8\uff1b\u8fd9\u4e0d\u4ee3\u8868\u5df2\u786e\u8ba4 OEM \u56fa\u4ef6\u4f7f\u7528\u54ea\u4e9b\u5730\u5740\u3002",
+            "mac.warn.uboot.3": "APPSBLENV \u5199\u5165\u5e76\u8bfb\u56de\u6821\u9a8c\u540e\u624d\u62a5\u544a\u6210\u529f\uff1b\u8fd0\u884c\u4e2d\u7684\u7f51\u7edc\u63a5\u53e3\u53ef\u80fd\u9700\u8981\u91cd\u542f\u3002",
+            "mac.warn.uboot.4": "\u4ec5\u586b\u5199\u4e00\u4e2a\u6709\u6548\u7684\u5355\u64ad\u57fa\u7840\u5730\u5740\uff1b\u65e0\u6548 MAC \u5730\u5740\u53ef\u80fd\u5f71\u54cd\u7f51\u7edc\u3002",
+            "mac.status.read_only": "\u5f53\u524d\u4e0d\u652f\u6301\u6301\u4e45\u4fee\u6539 MAC\u3002",
+            "mac.status.verify_failed": "\u65e0\u6cd5\u901a\u8fc7\u8bfb\u56de\u786e\u8ba4\u5df2\u4fdd\u5b58\u7684 U-Boot \u57fa\u7840 MAC\u3002",
             "mibib.title": "MIBIB 重载",
             "mibib.hint": "在 <strong>9008</strong> 模式下，通过重载 <strong>MIBIB</strong> 来初始化 <strong>SMEM (Shared Memory) 分区信息</strong>。<br>请选择本地文件并点击 <strong>重载</strong> 按钮。",
             "mibib.reload": "重载",
@@ -7936,6 +8289,8 @@ const I18N = (() => {
             "sysinfo.error.parse": "解析系统信息失败",
             "sysinfo.uboot_version": "U-Boot 版本",
             "sysinfo.hostname": "主机名",
+            "sysinfo.build_name": "编译配置名称",
+            "sysinfo.family": "硬件系列",
             "sysinfo.model": "型号",
             "sysinfo.compatible": "兼容平台",
             "sysinfo.machid": "机器 ID",
@@ -7944,6 +8299,8 @@ const I18N = (() => {
             "sysinfo.flash_type": "闪存类型",
             "sysinfo.flash_block_size": "块大小",
             "sysinfo.flash_density": "容量密度",
+            "sysinfo.bus": "\u603b\u7ebf",
+            "sysinfo.chip_select": "\u7247\u9009",
             "sysinfo.present": "存在",
             "sysinfo.name": "名称",
             "sysinfo.size": "大小",
@@ -8013,6 +8370,19 @@ const I18N = (() => {
             "fail.hint.validate": "文件未通过验证。",
             "fail.hint.update": "更新过程中出现错误。",
             "error.title": "错误",
+            "metadata.error.stale_commit": "\u4e00\u6b21\u6027\u4ee4\u724c\u5df2\u8fc7\u671f\u6216\u4e0e\u6b64\u5143\u6570\u636e\u4e0a\u4f20\u4e0d\u5339\u914d\uff0c\u8bf7\u91cd\u65b0\u4e0a\u4f20\u5e76\u9a8c\u8bc1\u3002",
+            "metadata.error.staged_invalid": "\u7f13\u5b58\u7684\u955c\u50cf\u672a\u901a\u8fc7\u9a8c\u8bc1\uff0c\u8bf7\u91cd\u65b0\u4e0a\u4f20\u5e76\u9a8c\u8bc1\u3002",
+            "metadata.error.bytes_changed": "\u7f13\u5b58\u6570\u636e\u4e0e\u9a8c\u8bc1\u65f6\u4e0d\u540c\uff0c\u8bf7\u91cd\u65b0\u9a8c\u8bc1\uff0c\u4e0d\u8981\u76f4\u63a5\u91cd\u8bd5\u3002",
+            "metadata.error.layout_changed": "\u5df2\u9a8c\u8bc1\u7684\u5206\u533a\u5e03\u5c40\u5df2\u53d8\u66f4\uff0c\u8bf7\u91cd\u65b0\u8bfb\u53d6\u5e03\u5c40\u5e76\u9a8c\u8bc1\u3002",
+            "metadata.error.write_failed": "\u5143\u6570\u636e\u5199\u5165\u6216\u8bfb\u56de\u6821\u9a8c\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u8bbe\u5907\u540e\u518d\u51b3\u5b9a\u662f\u5426\u518d\u6b21\u64cd\u4f5c\u3002",
+            "metadata.error.staging_failed": "\u7cfb\u7edf\u65e0\u6cd5\u9a8c\u8bc1\u4e13\u7528\u7f13\u5b58\u533a\uff0c\u8bf7\u68c0\u67e5\u8bbe\u5907\u540e\u518d\u51b3\u5b9a\u662f\u5426\u518d\u6b21\u64cd\u4f5c\u3002",
+            "metadata.error.uboot_partial": "U-Boot \u526f\u672c\u5199\u5165\u6216\u6821\u9a8c\u5931\u8d25\u3002\u8bf7\u5728\u65ad\u7535\u524d\u4e0b\u8f7d\u4e24\u4efd\u539f\u59cb\u5907\u4efd\uff0c\u672c\u6b21\u542f\u52a8\u5df2\u9501\u5b9a\u540e\u7eed U-Boot \u66f4\u65b0\u3002",
+            "metadata.error.uboot_locked": "\u4e0a\u6b21 U-Boot \u66f4\u65b0\u672a\u5b8c\u6574\u5b8c\u6210\u3002\u8bf7\u4e0b\u8f7d\u539f\u59cb\u5907\u4efd\u5e76\u68c0\u67e5\u4e24\u4efd\u526f\u672c\uff0c\u518d\u51b3\u5b9a\u662f\u5426\u91cd\u542f\u3002",
+            "metadata.error.uboot_preflight": "U-Boot 写入前检查失败，两份副本均未擦除。请检查分区布局、NAND 和可用内存。",
+            "metadata.error.uboot_failed": "U-Boot 更新在擦除前停止。请检查设备并重新验证文件。",
+            "metadata.backup.primary": "\u4e0b\u8f7d\u539f APPSBL \u5907\u4efd",
+            "metadata.backup.secondary": "\u4e0b\u8f7d\u539f APPSBL_1 \u5907\u4efd",
+            "metadata.error.staging_unavailable": "\u5143\u6570\u636e\u6682\u5b58\u533a\u4e0d\u53ef\u7528\uff0c\u8bf7\u68c0\u67e5\u53ef\u7528\u5185\u5b58\u540e\u91cd\u65b0\u9a8c\u8bc1\u6587\u4ef6\u3002",
             "error.label.file_type": "文件类型",
             "error.label.file_size": "文件大小",
             "error.label.part_name": "分区名称",
@@ -8038,4 +8408,883 @@ const I18N = (() => {
             "unknown": "未知"
         }
     };
+})();
+
+// RT3000-B firmware modes; all write targets come from the active layout API.
+const firmwareModeManager = (() => {
+    const isZh = () => APP_STATE.lang === 'zh-cn';
+    const legacyFirmwareConfig = {
+        formDataKey: 'firmware',
+        warningItems: { common: true, custom: 1 }
+    };
+
+    async function fetchLayout() {
+        const response = await fetch('/firmware/layout', { cache: 'no-store' });
+        if (response.status === 404) return { legacy: true };
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        if (!data || typeof data !== 'object') throw new Error('Invalid layout response');
+        if (!['dual', 'single', 'unsupported'].includes(data.mode)) data.mode = 'unsupported';
+        if (!Array.isArray(data.partitions)) data.partitions = [];
+        return data;
+    }
+
+    function frame(title, hint) {
+        document.body.innerHTML = `
+            <div class="app">
+                <aside id="sidebar" class="sidebar"></aside>
+                <div class="sidebar-overlay" id="sidebarOverlay"></div>
+                <button class="sidebar-toggle" id="sidebarToggle"></button>
+                <div class="main"><div id="m">
+                    <div class="card-title-section"><h1 id="bFirmwareTitle"></h1></div>
+                    <div class="card-hint-section"><p id="bFirmwareHint"></p></div>
+                    <div class="card-main-section"><div class="card-main-inner" id="bFirmwareContent"></div></div>
+                    <div class="card-foot-section"><div class="card-foot-inner" id="bFirmwareFoot"></div></div>
+                </div><div id="version"></div></div>
+            </div>`;
+        document.title = title;
+        document.getElementById('bFirmwareTitle').textContent = title;
+        document.getElementById('bFirmwareHint').textContent = hint;
+        ensureSidebar();
+        const content = document.getElementById('bFirmwareContent');
+        const foot = document.getElementById('bFirmwareFoot');
+        return { content, foot };
+    }
+
+    function textNode(tag, text, className) {
+        const node = document.createElement(tag);
+        node.textContent = text;
+        if (className) node.className = className;
+        return node;
+    }
+
+    function layoutError(layout) {
+        return layout && layout.error && typeof layout.error === 'string'
+            ? layout.error : (isZh() ? '当前分区布局暂不支持此操作。' : 'The active partition layout is unsupported.');
+    }
+
+    function showLegacyFirmware() {
+        const manager = getUnifiedUploadManager();
+        manager.initForPage('firmware', legacyFirmwareConfig);
+        ensureSidebar();
+        applyI18n(document);
+    }
+
+    function navigationButton(label, href) {
+        const button = textNode('button', label, 'button');
+        button.type = 'button';
+        button.onclick = () => { window.location.href = href; };
+        return button;
+    }
+
+    function addWriteWarnings(foot) {
+        const box = document.createElement('div');
+        box.className = 'i w';
+        box.appendChild(textNode('strong', isZh() ? '注意事项' : 'WARNINGS'));
+        const list = document.createElement('ul');
+        const warnings = isZh() ? [
+            '刷写过程中请勿断电。',
+            '请选择与设备型号和当前分区布局匹配的固件，并在写入前确认目标分区。'
+        ] : [
+            'Do not power off the device during update.',
+            'Choose firmware matching the device model and active partition layout, then confirm the target partition before writing.'
+        ];
+        for (const warning of warnings) {
+            list.appendChild(textNode('li', warning));
+        }
+        box.appendChild(list);
+        foot.appendChild(box);
+    }
+
+    function addModeCard(parent, title, detail, enabled, href) {
+        const card = document.createElement('div');
+        card.className = 'upload-card upload-area';
+        card.style.marginBottom = '1rem';
+        card.appendChild(textNode('h2', title));
+        card.appendChild(textNode('p', detail));
+        if (enabled) {
+            card.appendChild(navigationButton(isZh() ? '进入' : 'Open', href));
+        } else {
+            const button = textNode('button', isZh() ? '当前不可用' : 'Unavailable', 'button');
+            button.type = 'button';
+            button.disabled = true;
+            card.appendChild(button);
+        }
+        parent.appendChild(card);
+    }
+
+    async function initLanding() {
+        let layout;
+        try {
+            layout = await fetchLayout();
+        } catch (error) {
+            frame(isZh() ? '固件更新' : 'Firmware update', isZh() ? '无法读取当前分区布局。' : 'Could not read the active partition layout.');
+            document.getElementById('bFirmwareContent').appendChild(textNode('p', error.message));
+            return;
+        }
+        if (layout.legacy) {
+            showLegacyFirmware();
+            return;
+        }
+        const title = isZh() ? '固件更新模式' : 'Firmware update modes';
+        const hint = isZh()
+            ? '模式取决于当前已启用的分区表。此页面不会更改分区表。'
+            : 'Modes follow the active partition table. This page does not change the table.';
+        const { content, foot } = frame(title, hint);
+        if (layout.status !== 'ok' || layout.mode === 'unsupported') {
+            content.appendChild(textNode('p', layoutError(layout)));
+            return;
+        }
+        const canWrite = layout.write_supported === true;
+        const dualActive = layout.mode === 'dual';
+        const singleActive = layout.mode === 'single';
+        addModeCard(content,
+            isZh() ? '双系统分区' : 'Dual rootfs slots',
+            isZh() ? '选择 rootfs 或 rootfs_1 作为明确写入目标。' : 'Choose rootfs or rootfs_1 as the explicit write target.',
+            canWrite && dualActive, '/firmware-dual.html');
+        addModeCard(content,
+            isZh() ? '单大分区' : 'Single large rootfs',
+            singleActive
+                ? (isZh() ? '当前活动分区表为单大分区布局。' : 'The active table uses the single large-rootfs layout.')
+                : (isZh() ? '需先写入并启用匹配的大分区表（首版规划 80 MiB），然后重启。' : 'First install and activate a compatible large-rootfs table (initial plan: 80 MiB), then reboot.'),
+            canWrite && singleActive, '/firmware-single.html');
+        if (!canWrite) {
+            content.appendChild(textNode('p', isZh() ? '当前引导环境尚未开放固件写入。' : 'Firmware writing is not enabled in this bootloader.'));
+        }
+        if (!singleActive && layout.ptable_write_supported === false) {
+            const ptableNote = isZh()
+                ? '当前版本暂未开放分区表写入。PTABLE 页面可查看，但不能在此转换布局。'
+                : 'Partition-table writing is not enabled in this version. The PTABLE page is view-only for this workflow; it cannot convert the layout.';
+            content.appendChild(textNode('p', ptableNote));
+            content.appendChild(navigationButton(isZh() ? '查看 PTABLE 页面' : 'View PTABLE page', '/ptable.html'));
+        }
+        addWriteWarnings(foot);
+    }
+
+    function validPartition(part) {
+        if (!part || typeof part.name !== 'string' || !part.name.length) return false;
+        const offset = Number(part.offset), size = Number(part.size);
+        return Number.isSafeInteger(offset) && offset >= 0 &&
+            Number.isSafeInteger(size) && size > 0 && Number.isSafeInteger(offset + size - 1);
+    }
+
+    function targetPartitions(layout, mode) {
+        const expected = mode === 'dual' ? ['rootfs', 'rootfs_1'] : ['rootfs'];
+        if (layout.partitions.length !== expected.length) return [];
+        const candidates = layout.partitions.filter(p => p && expected.includes(p.name));
+        if (candidates.length !== expected.length || candidates.some(p => !validPartition(p)) ||
+            new Set(candidates.map(p => p.name)).size !== expected.length) return [];
+        return expected.map(name => candidates.find(p => p.name === name));
+    }
+
+    function formatBytes(value) {
+        const n = Number(value);
+        return n.toLocaleString() + (isZh() ? ' 字节' : ' bytes') + ' (' + bytesToHuman(n) + ')';
+    }
+
+    function targetTitle(part) {
+        return part.name;
+    }
+
+    function targetLocation(part, targets) {
+        // Logical names can swap; number physical slots by their current address.
+        const physical = [...targets].sort((a, b) => Number(a.offset) - Number(b.offset));
+        return bootSlotLocationText({ ...part, physical_index: physical.indexOf(part) + 1 }, isZh());
+    }
+
+    function renderGate(title, reason, layout) {
+        const { content, foot } = frame(title, isZh() ? '写入目标仅来自当前活动分区表。' : 'Targets are derived from the active partition table.');
+        content.appendChild(textNode('p', reason));
+        if (layout && layout.ptable_write_supported === false) {
+            content.appendChild(textNode('p', isZh()
+                ? '当前版本暂未开放分区表写入；此页面不会创建或启用新布局。'
+                : 'Partition-table writing is not enabled in this version. This page cannot create or activate a new layout.'));
+            content.appendChild(navigationButton(isZh() ? '查看 PTABLE 页面' : 'View PTABLE page', '/ptable.html'));
+        }
+        foot.appendChild(textNode('p', isZh()
+            ? '此模式不会修改分区表，也不会自动重启。'
+            : 'This mode does not modify the partition table and does not reboot automatically.'));
+    }
+
+    function formatDescription(result) {
+        const format = result && typeof result.format === 'string' ? result.format : '';
+        if (format === 'h3c_rt3000_oem_ubi') {
+            return isZh() ? '已识别的 H3C H3C OEM 固件包' : 'Recognized H3C H3C OEM firmware package';
+        }
+        if (format === 'ubi_unidentified') {
+            return isZh()
+                ? '完整 UBI 系统镜像（含内核和系统卷）；板型身份未验证，不属于已识别 OEM 包'
+                : 'Complete UBI system image (kernel and system volumes); board identity is unverified, not a recognized OEM package';
+        }
+        return isZh() ? '未知格式：' + format.slice(0, 96) : 'Unknown format: ' + format.slice(0, 96);
+    }
+
+    function failureText(result, isWrite) {
+        const code = result && result.info && typeof result.info.type === 'string' ? result.info.type : '';
+        const raw = result && typeof result.error === 'string' ? result.error.slice(0, 180) : '';
+        const alias = {'layout, mode, or target mismatch':'wrong_firmware_target','layout changed since validation':'layout_changed','unsupported package or invalid UBI image':'invalid_ubi_image','UBI capacity leaves insufficient layout and wear-level reserve':'insufficient_ubi_capacity','image exceeds selected extent':'image_too_large','write or full readback failed':'readback_failed','staged image no longer validates':'invalid_ubi_image','invalid token':'invalid_token','unknown or consumed token':'invalid_token','token, staged bytes, target, or layout changed':'upload_id_mismatch','staged upload range invalid':'upload_id_mismatch','staged upload changed':'upload_id_mismatch','target and mode required':'wrong_firmware_target','token, target, and mode required':'upload_id_mismatch','exactly one firmware field required':'firmware_field_invalid','invalid or oversized firmware field':'firmware_field_invalid'};
+        const key = code || alias[raw] || raw;
+        const en = {wrong_firmware_target:'Layout, mode, or target mismatch. Read the layout again.',layout_changed:'Layout changed; read it again and revalidate.',unsupported_firmware_format:'Unsupported format; choose a recognized H3C OEM package or complete UBI system image.',invalid_ubi_image:'Package is unsupported or the complete UBI system image is invalid.',insufficient_ubi_capacity:'UBI image leaves insufficient system-layout and wear-level reserve.',image_too_large:'File exceeds selected partition capacity.',upload_id_mismatch:'Validation token does not match uploaded file.',invalid_token:'Validation token is invalid or expired. Upload and validate again.',firmware_field_invalid:'Firmware file is empty, invalid, oversized, or duplicated.',write_not_verified:'Write or full readback failed. Inspect the device; do not retry automatically.',readback_failed:'Full readback failed. Inspect the device; do not retry automatically.'};
+        const zh = {wrong_firmware_target:'当前分区布局、模式或目标不匹配，请重新读取布局。',layout_changed:'验证后活动分区布局已变化，请重新读取并重新验证。',unsupported_firmware_format:'文件格式不支持；请选择已识别的 H3C OEM 包或完整 UBI 系统镜像。',invalid_ubi_image:'固件包不支持，或完整 UBI 系统镜像结构无效、不完整。',insufficient_ubi_capacity:'UBI 镜像无法为系统布局和磨损均衡保留足够空间。',image_too_large:'文件超过所选分区容量。',upload_id_mismatch:'验证令牌与上传文件不匹配。',invalid_token:'验证令牌无效或已过期，请重新上传并验证。',firmware_field_invalid:'固件文件为空、无效、过大或重复上传。',write_not_verified:'写入或完整读回校验未通过。请检查设备，不要自动重试。',readback_failed:'完整读回校验未通过。请检查设备，不要自动重试。'};
+        const message = isZh() ? zh[key] : en[key];
+        if (message) return message;
+        if (raw) return isZh() ? '操作失败：' + raw : 'Operation failed: ' + raw;
+        return isWrite ? (isZh() ? '写入失败或结果未验证。请检查设备，不要自动重试。' : 'Write failed or remains unverified. Inspect the device; do not retry automatically.')
+            : (isZh() ? '固件验证失败，请检查文件。' : 'Firmware validation failed. Check the file.');
+    }
+
+    function postForm(url, form, onProgress) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', url);
+            if (onProgress && xhr.upload) xhr.upload.addEventListener('progress', onProgress);
+            xhr.onload = () => {
+                let data;
+                try { data = JSON.parse(xhr.responseText); }
+                catch (error) { reject(new Error('Invalid server response')); return; }
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    if (!data || typeof data !== 'object') data = {};
+                    data.status = 'fail';
+                    data.httpStatus = xhr.status;
+                }
+                resolve(data);
+            };
+            xhr.onerror = () => reject(new Error('Connection failed'));
+            xhr.send(form);
+        });
+    }
+
+    async function initMode(mode) {
+        let layout;
+        try { layout = await fetchLayout(); }
+        catch (error) {
+            renderGate(isZh() ? '固件更新' : 'Firmware update', error.message, null);
+            return;
+        }
+        if (layout.legacy) {
+            renderGate(isZh() ? '固件更新' : 'Firmware update',
+                isZh() ? '此型号未提供 公共分区布局接口。' : 'The common layout API is unavailable on this model.', layout);
+            return;
+        }
+        if (layout.status !== 'ok' || layout.mode !== mode) {
+            const reason = mode === 'single'
+                ? (isZh() ? '需先写入并启用匹配的大分区表（首版规划 80 MiB），然后重启；此页面不会创建或切换分区表。' : 'First install and activate a compatible large-rootfs table (initial plan: 80 MiB), then reboot. This page does not create or switch tables.')
+                : (isZh() ? '当前活动布局不是双系统分区。' : 'The active layout is not dual-slot.');
+            renderGate(isZh() ? '固件更新' : 'Firmware update', reason, layout);
+            return;
+        }
+        if (layout.write_supported !== true) {
+            renderGate(isZh() ? '固件更新' : 'Firmware update',
+                isZh() ? '当前引导环境尚未开放固件写入。' : 'Firmware writing is not enabled in this bootloader.', layout);
+            return;
+        }
+        const targets = targetPartitions(layout, mode);
+        if (!targets.length) {
+            renderGate(isZh() ? '固件更新' : 'Firmware update', layoutError({ error: '当前分区列表与所选模式不一致。' }), layout);
+            return;
+        }
+        renderUpload(mode, layout, targets);
+    }
+
+    function renderUpload(mode, layout, targets) {
+        const dual = mode === 'dual';
+        const title = dual
+            ? (isZh() ? '双系统固件写入' : 'Dual-slot firmware write')
+            : (isZh() ? '单大分区固件写入' : 'Single large-rootfs firmware write');
+        const hint = isZh()
+            ? '先明确选择目标、上传并核验文件；确认后单独提交写入。不会自动重启。'
+            : 'Select the target, upload and validate the image, then explicitly submit the write. No automatic reboot.';
+        const { content, foot } = frame(title, hint);
+        const targetTitleNode = textNode('h2', isZh() ? '写入目标' : 'Write target');
+        content.appendChild(targetTitleNode);
+        let selectedTarget = null;
+        let selectedFile = null;
+        let token = null;
+        let validated = null;
+        let validationBusy = false;
+        let validationEpoch = 0;
+        let writeStarted = false;
+
+        const targetGroup = document.createElement('div');
+        const targetInputs = [];
+        targetGroup.className = 'upload-card upload-area';
+        targets.forEach(part => {
+            const card = document.createElement('label');
+            card.style.display = 'block';
+            card.style.padding = '0.75rem 0';
+            card.style.borderBottom = '1px solid var(--border)';
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'firmware-target';
+            radio.value = part.name;
+            radio.checked = false;
+            targetInputs.push(radio);
+            radio.addEventListener('change', () => {
+                if (!radio.checked) return;
+                selectedTarget = part.name;
+                invalidateValidation(isZh() ? '目标已更改，请重新验证文件。' : 'Target changed; validate the file again.');
+                updateValidateButton();
+            });
+            card.appendChild(radio);
+            card.appendChild(textNode('strong', targetTitle(part)));
+            card.appendChild(textNode('div', targetLocation(part, targets)));
+            const size = Number(part.size);
+            card.appendChild(textNode('div', (isZh() ? '容量：' : 'Capacity: ') + formatBytes(size)));
+            targetGroup.appendChild(card);
+        });
+        content.appendChild(targetGroup);
+
+        const fileLabel = textNode('label', isZh() ? '固件文件' : 'Firmware file');
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.name = 'firmware';
+        fileInput.addEventListener('change', () => {
+            selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+            invalidateValidation(isZh() ? '文件已更改，请重新验证。' : 'File changed; validate it again.');
+            updateValidateButton();
+        });
+        content.appendChild(fileLabel);
+        content.appendChild(fileInput);
+        const validateButton = textNode('button', isZh() ? '上传并验证' : 'Upload and validate', 'button');
+        validateButton.type = 'button';
+        validateButton.disabled = true;
+        content.appendChild(validateButton);
+        const review = document.createElement('div');
+        review.className = 'upload-success';
+        review.hidden = true;
+        const reviewTitle = textNode('h3', isZh() ? '验证结果' : 'Validation result');
+        const reviewDetails = document.createElement('div');
+        const writeButton = textNode('button', isZh() ? '确认写入所选分区' : 'Confirm write to selected partition', 'button');
+        writeButton.type = 'button';
+        writeButton.disabled = true;
+        review.appendChild(reviewTitle);
+        review.appendChild(reviewDetails);
+        review.appendChild(writeButton);
+        content.appendChild(review);
+        const status = textNode('p', '');
+        content.appendChild(status);
+        content.appendChild(navigationButton(isZh() ? '返回固件模式' : 'Back to firmware modes', '/firmware.html'));
+        addWriteWarnings(foot);
+
+        function invalidateValidation(message) {
+            validationEpoch++;
+            token = null;
+            validated = null;
+            review.hidden = true;
+            reviewDetails.textContent = '';
+            writeButton.disabled = true;
+            writeStarted = false;
+            status.textContent = message || '';
+        }
+        function updateValidateButton() {
+            validateButton.disabled = !selectedFile || !selectedTarget || writeStarted || validationBusy;
+        }
+        function failCode(result, isWrite) {
+            status.textContent = failureText(result, isWrite);
+        }
+        validateButton.addEventListener('click', async () => {
+            if (!selectedFile || !selectedTarget || validateButton.disabled || validationBusy) return;
+            const requestedFile = selectedFile;
+            const requestedTarget = selectedTarget;
+            invalidateValidation(isZh() ? '正在上传并验证…' : 'Uploading and validating…');
+            const requestEpoch = validationEpoch;
+            validationBusy = true;
+            targetInputs.forEach(input => { input.disabled = true; });
+            fileInput.disabled = true;
+            validateButton.disabled = true;
+            const form = new FormData();
+            form.append('firmware', requestedFile);
+            form.append('target', requestedTarget);
+            form.append('mode', mode);
+            const requestStillCurrent = () => requestEpoch === validationEpoch &&
+                selectedFile === requestedFile && selectedTarget === requestedTarget;
+            try {
+                const result = await postForm('/firmware/validate', form, event => {
+                    if (requestStillCurrent() && event.lengthComputable && event.total > 0) {
+                        const percent = Math.floor(event.loaded * 100 / event.total);
+                        status.textContent = (isZh() ? '上传并验证：' : 'Upload and validation: ') + percent + '%';
+                    }
+                });
+                if (!requestStillCurrent()) return;
+                const validatedTarget = typeof result.target === 'string' ? result.target : result.target && result.target.name;
+                if (result.status !== 'ok') { failCode(result, false); return; }
+                if (typeof result.token !== 'string' || !result.token || validatedTarget !== requestedTarget ||
+                    result.mode !== mode) {
+                    status.textContent = isZh() ? '验证响应与所选目标不匹配。' : 'Validation response does not match the selected target.';
+                    return;
+                }
+                token = result.token;
+                validated = { target: requestedTarget, mode, file: requestedFile, response: result };
+                reviewDetails.textContent = '';
+                reviewDetails.appendChild(textNode('p', (isZh() ? '目标：' : 'Target: ') + targetTitle(targets.find(p => p.name === requestedTarget))));
+                reviewDetails.appendChild(textNode('p', targetLocation(targets.find(p => p.name === requestedTarget), targets)));
+                if (typeof result.bytes === 'number') reviewDetails.appendChild(textNode('p', (isZh() ? '文件大小：' : 'File size: ') + formatBytes(result.bytes)));
+                if (typeof result.sha256 === 'string') reviewDetails.appendChild(textNode('p', 'SHA-256: ' + result.sha256));
+                if (typeof result.format === 'string') reviewDetails.appendChild(textNode('p', (isZh() ? '格式：' : 'Format: ') + formatDescription(result)));
+                review.hidden = false;
+                writeButton.disabled = false;
+                status.textContent = isZh() ? '文件已验证。检查目标与摘要后，明确提交写入。' : 'Image validated. Review the target and digest, then explicitly submit the write.';
+            } catch (error) {
+                if (requestStillCurrent()) invalidateValidation((isZh() ? '上传或验证失败：' : 'Upload or validation failed: ') + error.message);
+            } finally {
+                validationBusy = false;
+                if (!writeStarted) {
+                    targetInputs.forEach(input => { input.disabled = false; });
+                    fileInput.disabled = false;
+                }
+                updateValidateButton();
+            }
+        });
+        writeButton.addEventListener('click', async () => {
+            if (!token || !validated || writeStarted || validated.target !== selectedTarget || validated.mode !== mode || validated.file !== selectedFile) return;
+            writeStarted = true;
+            const writeToken = token;
+            token = null;
+            validateButton.disabled = true;
+            writeButton.disabled = true;
+            targetInputs.forEach(input => { input.disabled = true; });
+            fileInput.disabled = true;
+            status.textContent = isZh() ? '正在写入并等待后端校验结果…' : 'Writing; waiting for the backend verification result…';
+            const form = new FormData();
+            form.append('token', writeToken);
+            form.append('target', selectedTarget);
+            form.append('mode', mode);
+            try {
+                const result = await postForm('/firmware/write', form);
+                const writtenTarget = typeof result.target === 'string' ? result.target : result.target && result.target.name;
+                if (result.status !== 'ok' || result.verified !== true || writtenTarget !== selectedTarget || result.mode !== mode) {
+                    failCode(result, true);
+                    status.textContent += isZh() ? ' 请检查设备；页面不会自动重试或重启。' : ' Inspect the device; this page will not retry or reboot.';
+                    return;
+                }
+                status.textContent = isZh()
+                    ? '写入及后端校验已完成。没有自动重启。'
+                    : 'Write and backend verification completed. No automatic reboot was requested.';
+                reviewDetails.appendChild(textNode('p', (isZh() ? '已验证写入目标：' : 'Verified write target: ') + targetTitle(targets.find(p => p.name === writtenTarget))));
+            } catch (error) {
+                status.textContent = (isZh()
+                    ? '无法确认写入结果：' : 'Write result could not be confirmed: ') + error.message +
+                    (isZh() ? ' 请检查设备；不要自动重试或重启。' : ' Inspect the device; do not retry or reboot automatically.');
+            }
+        });
+    }
+
+    return { initLanding, initMode };
+})();
+
+// Boot card version rows appear only when the backend classification supports them.
+function bootSlotFirmwareText(slot, chinese, hwC = false) {
+    if (!slot) return null;
+    if (hwC && slot.known !== true) return chinese ? '系统身份：未识别' : 'System identity: unrecognized';
+    if (slot.known !== true) return null;
+    if (slot.type === 'OEM' && typeof slot.firmware_version === 'string' &&
+        slot.firmware_version.trim())
+        return (chinese ? '\u56fa\u4ef6\uff1a' : 'Firmware: ') + slot.firmware_version;
+    if (slot.detection === 'rootfs_release_file' && typeof slot.version === 'string' && slot.version.trim())
+        return (chinese ? '系统：第三方系统（' + slot.version + '）' : 'System: Third-party system (' + slot.version + ')');
+    if (slot.type === 'OpenWrt' && typeof slot.version === 'string')
+        return (chinese ? '系统：第三方系统（' + slot.version + '）' : 'System: Third-party system (' + slot.version + ')');
+    if (slot.type && slot.type !== 'unknown' && slot.type !== 'OEM')
+        return (chinese ? '\u56fa\u4ef6\uff1a\u7b2c\u4e09\u65b9\u56fa\u4ef6' : 'Firmware: Third-party firmware');
+    return null;
+}
+function bootSlotLocationText(slot, chinese) {
+    const raw = slot && slot.offset;
+    const offset = typeof raw === 'number' ? raw :
+        (typeof raw === 'string' && /^0x[0-9a-f]+$/i.test(raw) ? Number(raw) : NaN);
+    if (!Number.isSafeInteger(offset) || offset < 0) return null;
+    const index = slot.physical_index;
+    const region = Number.isInteger(index) && index >= 1 && index <= 2
+        ? (chinese ? '物理第 ' + index + ' 区 · ' : 'Physical slot ' + index + ' · ') : '';
+    const size = Number(slot.size);
+    if (Number.isSafeInteger(size) && size > 0 && Number.isSafeInteger(offset + size - 1)) {
+        // Display an inclusive end address, shared by overview and write targets.
+        return region + (chinese ? '地址范围：' : 'Address range: ') +
+            '0x' + offset.toString(16) + ' – 0x' + (offset + size - 1).toString(16);
+    }
+    return region + (chinese ? '起始地址：' : 'Start: ') + '0x' + offset.toString(16);
+}
+function bootSlotCapacityText(slot, chinese) {
+    const raw = slot && slot.size; let bytes = null;
+    if (typeof raw === 'number') bytes = Number.isSafeInteger(raw) && raw > 0 ? raw : null;
+    else if (typeof raw === 'string') {
+        if (/^0x[0-9a-f]+$/i.test(raw)) bytes = Number.parseInt(raw.slice(2), 16);
+        else if (/^[0-9]+$/.test(raw)) bytes = Number(raw);
+        if (!Number.isSafeInteger(bytes) || bytes <= 0) bytes = null;
+    }
+    if (bytes === null) return null;
+    return (chinese ? '\u5bb9\u91cf\uff1a' : 'Capacity: ') + bytes.toLocaleString() +
+        (chinese ? ' \u5b57\u8282' : ' bytes');
+}
+
+// RT3000-B partition boot controls; reuse the upstream overview/card styles.
+const bootSlotsManager = (() => {
+    const zh = () => APP_STATE.lang === 'zh-cn';
+    const isHwC = () => APP_STATE.sysinfo && APP_STATE.sysinfo.board && APP_STATE.sysinfo.board.family === 'HW-C';
+    let refreshBusy = false, operationBusy = false, refreshTimer = null;
+    let active = true, listenersReady = false, lastSignature = null;
+    const signature = (data, saved) => JSON.stringify([data.mode, data.fingerprint,
+        data.environment_restored, data.slots, saved]);
+    function scheduleRefresh() {
+        if (!active || refreshTimer !== null || typeof setTimeout !== 'function') return;
+        refreshTimer = setTimeout(async () => {
+            refreshTimer = null;
+            if (active && !document.hidden) await init(false);
+            scheduleRefresh();
+        }, 5000);
+    }
+    function renderDReadonlySlots(section, data) {
+        const inner = section.querySelector('.card-main-inner');
+        inner.textContent = '';
+        const title = document.createElement('h2');
+        title.textContent = zh() ? '只读槽位识别' : 'Read-only slot identification';
+        inner.appendChild(title);
+        const notice = document.createElement('p');
+        notice.textContent = zh()
+            ? (document.body.classList.contains('nx30-d-nand-readonly') ? 'NX30 HW-D 只读维护：查看槽位与固件内容。' : 'NX30 HW-D RAM 预览：仅识别槽位与内容；启动、设默认和写入功能均关闭。')
+            : (document.body.classList.contains('nx30-d-nand-readonly') ? 'NX30 HW-D read-only maintenance: inspect slots and firmware contents.' : 'NX30 HW-D RAM preview: slot/content identification only; boot, default selection, and writes are disabled.');
+        inner.appendChild(notice);
+        const layout = document.createElement('p');
+        layout.textContent = (zh() ? '检测到的布局：' : 'Detected layout: ') +
+            (data.mode || 'unknown') + (data.fingerprint ? ' · ' + data.fingerprint : '');
+        inner.appendChild(layout);
+        if (data.error) {
+            const error = document.createElement('p');
+            error.textContent = (zh() ? '布局未识别：' : 'Layout not identified: ') + data.error;
+            inner.appendChild(error);
+        }
+        const table = document.createElement('table');
+        table.className = 'table';
+        const header = document.createElement('tr');
+        for (const label of (zh() ? ['分区', '物理位置', '识别结果'] : ['Partition', 'Physical extent', 'Identification'])) {
+            const th = document.createElement('th'); th.textContent = label; header.appendChild(th);
+        }
+        table.appendChild(header);
+        for (const slot of data.slots) {
+            if (slot.name !== 'rootfs' && slot.name !== 'rootfs_1') continue;
+            const row = document.createElement('tr');
+            const name = document.createElement('td'); name.textContent = slot.name; row.appendChild(name);
+            const extent = document.createElement('td');
+            extent.textContent = (zh() ? '物理第 ' : 'Physical ') + (slot.physical_index || '?') +
+                ' · ' + (slot.offset || '?') + ' · ' + (slot.size || '?');
+            row.appendChild(extent);
+            const result = document.createElement('td');
+            result.textContent = [slot.label, slot.version, slot.status, slot.error].filter(Boolean).join(' · ') || 'unknown';
+            row.appendChild(result);
+            table.appendChild(row);
+        }
+        inner.appendChild(table);
+        section.hidden = false;
+    }
+
+    function addBackupLinks(parent) {
+        const box = document.createElement('div');
+        const names = [
+            ['/boot/default/backup/bootconfig.bin', zh() ? '下载原 BOOTCONFIG 备份' : 'Download original BOOTCONFIG backup'],
+            ['/boot/default/backup/bootconfig1.bin', zh() ? '下载原 BOOTCONFIG1 备份' : 'Download original BOOTCONFIG1 backup']
+        ];
+        for (const [href, text] of names) {
+            const link = document.createElement('a');
+            link.href = href;
+            link.download = href.endsWith('bootconfig.bin') ? 'bootconfig-before.bin' : 'bootconfig1-before.bin';
+            link.textContent = text;
+            box.appendChild(link);
+        }
+        parent.appendChild(box);
+    }
+    async function init(force = true) {
+        const section = document.getElementById('boot_slots');
+        if (!section || refreshBusy || operationBusy) return;
+        if (!listenersReady && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+            listenersReady = true;
+            window.addEventListener('pagehide', () => {
+                active = false;
+                if (refreshTimer !== null && typeof clearTimeout === 'function') clearTimeout(refreshTimer);
+                refreshTimer = null;
+            });
+            if (typeof document.addEventListener === 'function')
+                document.addEventListener('visibilitychange', () => { if (!document.hidden) init(); });
+        }
+        refreshBusy = true;
+        try {
+            const dReadonly = document.body.classList.contains("nx30-d-ram-readonly");
+            const [slotsResponse, defaultResponse] = await Promise.all([
+                fetch('/boot/slots', { cache: 'no-store' }),
+                dReadonly ? Promise.resolve(null) : fetch('/boot/default', { cache: 'no-store' }).catch(() => null)
+            ]);
+            if (slotsResponse.status === 404) return;
+            if (!slotsResponse.ok) throw new Error('HTTP ' + slotsResponse.status);
+            const data = await slotsResponse.json();
+            if (!Array.isArray(data.slots)) throw new Error('Invalid slot response');
+            let saved = null;
+            if (defaultResponse && defaultResponse.ok) saved = await defaultResponse.json();
+            const freshSignature = signature(data, saved);
+            if (!force && freshSignature === lastSignature) return;
+            lastSignature = freshSignature;
+            if (dReadonly) {
+                renderDReadonlySlots(section, data);
+                return;
+            }
+            const inner = section.querySelector('.card-main-inner');
+            inner.textContent = '';
+            const title = document.createElement('h2');
+            title.textContent = zh() ? '按分区启动' : 'Boot partition';
+            inner.appendChild(title);
+            const refresh = document.createElement('button');
+            refresh.type = 'button'; refresh.className = 'button';
+            refresh.textContent = zh() ? '刷新槽位信息' : 'Refresh slot information';
+            refresh.onclick = () => init();
+            inner.appendChild(refresh);
+            const hint = document.createElement('p');
+            hint.textContent = saved && saved.default_applies_to === 'bootipq' && saved.auto_web === false
+                ? (zh()
+                    ? '上电将启动已保存的默认分区；上电时按住 RESET 约 3 秒进入维护网页。'
+                    : 'Power-on boots the saved default partition. At power-on, hold RESET for about 3 seconds to enter the maintenance page.')
+                : saved && saved.auto_web === true && saved.default_applies_to === 'bootipq'
+                    ? (zh()
+                        ? '上电仍进入维护网页；保存默认系统只更改分区启动默认选择，不会改变开机入口或立即重启。'
+                        : 'Power-on still opens the maintenance page. Saving a default changes only the partition default; it does not change the power-on entry or reboot now.')
+                    : (zh()
+                        ? '启动仅本次有效；设为默认会在下次开机使用，不会立即启动。'
+                        : 'Boot applies once. Set as default takes effect at the next startup and does not reboot now.');
+            if (data.read_only === true) {
+                const preview = document.createElement('p');
+                preview.textContent = zh() ? 'RAM 只读预览：启动和写入操作已禁用。' : 'RAM read-only preview: boot and write actions are disabled.';
+                inner.appendChild(preview);
+            }
+            inner.appendChild(hint);
+            const table = document.createElement('table');
+            table.className = 'table';
+            const status = document.createElement('p');
+            const defaultStatus = document.createElement('p');
+            const bootButtons = [];
+            const defaultChecks = {};
+            let currentDefault = saved && (saved.default === 'rootfs' || saved.default === 'rootfs_1')
+                ? saved.default : null;
+            let defaultsLocked = !saved || saved.can_change !== true || saved.locked === true || data.read_only === true || data.boot_supported === false;
+            for (const slot of data.slots) {
+                if (slot.name !== 'rootfs' && slot.name !== 'rootfs_1') continue;
+                const row = document.createElement('tr');
+                row.className = 'tr';
+                const name = document.createElement('td');
+                name.className = 'td left';
+                name.textContent = slot.name;
+                const location = bootSlotLocationText(slot, zh());
+                const locationLine = document.createElement('div');
+                locationLine.textContent = location || (zh() ? '当前地址不可用' : 'Current address unavailable');
+                name.appendChild(locationLine);
+                const capacity = bootSlotCapacityText(slot, zh());
+                if (capacity) {
+                    const capacityLine = document.createElement('div');
+                    capacityLine.textContent = capacity;
+                    name.appendChild(capacityLine);
+                }
+                const firmwareText = bootSlotFirmwareText(slot, zh(), isHwC());
+                if (firmwareText) {
+                    const firmwareLine = document.createElement('div');
+                    firmwareLine.textContent = firmwareText;
+                    name.appendChild(firmwareLine);
+                }
+                const action = document.createElement('td');
+                action.className = 'td right';
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'button';
+                button.textContent = (zh() ? '启动 ' : 'Boot ') + slot.name;
+                button.disabled = data.read_only === true || data.boot_supported === false;
+                bootButtons.push(button);
+                button.onclick = async () => {
+                    if (operationBusy) return;
+                    operationBusy = true;
+                    bootButtons.forEach(b => { b.disabled = true; });
+                    status.textContent = (zh() ? '正在请求启动 ' : 'Requesting boot of ') + slot.name;
+                    const form = new FormData();
+                    form.append('cmd', 'bootipq ' + slot.name);
+                    try {
+                        const response = await fetch('/webterm/exec', { method: 'POST', body: form });
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        status.textContent = zh() ? '启动命令已提交，请观察设备。' : 'Boot command submitted. Observe the device.';
+                        try {
+                            const output = await response.text();
+                            if (output.trim()) status.textContent = output.trim();
+                            bootButtons.forEach(b => { b.disabled = false; });
+                        } catch (e) { /* Kernel entry closes the U-Boot connection. */ }
+                    } catch (e) {
+                        status.textContent = zh() ? '连接已中断或请求失败，请观察设备状态。' : 'Connection closed or request failed. Check the device.';
+                        bootButtons.forEach(b => { b.disabled = false; });
+                    } finally { operationBusy = false; }
+                };
+                action.appendChild(button);
+
+                const label = document.createElement('label');
+                label.className = 'default-boot-label';
+                label.style.display = 'inline-flex';
+                label.style.alignItems = 'center';
+                label.style.marginLeft = '10px';
+                const check = document.createElement('input');
+                check.type = 'checkbox';
+                check.checked = slot.name === currentDefault;
+                check.disabled = defaultsLocked;
+                check.style.appearance = 'checkbox';
+                check.setAttribute('aria-label', (zh() ? '设为默认 ' : 'Set as default ') + slot.name);
+                defaultChecks[slot.name] = check;
+                const labelText = document.createElement('span');
+                labelText.textContent = zh() ? '设为默认' : 'Set as default';
+                label.appendChild(labelText);
+                label.appendChild(check);
+                action.appendChild(label);
+                check.addEventListener('change', async () => {
+                    if (!check.checked) {
+                        check.checked = slot.name === currentDefault;
+                        return;
+                    }
+                    if (defaultsLocked) { check.checked = slot.name === currentDefault; return; }
+                    const previous = currentDefault;
+                    if (slot.name === currentDefault) { check.checked = true; return; }
+                    if (operationBusy) { check.checked = false; return; }
+                    operationBusy = true;
+                    /* Keep the existing choice checked until the write succeeds. */
+                    check.checked = false;
+                    Object.values(defaultChecks).forEach(input => { input.disabled = true; });
+                    defaultStatus.textContent = zh() ? '正在保存默认系统…' : 'Saving default system…';
+                    const form = new FormData();
+                    form.append('target', slot.name);
+                    let partial = false;
+                    try {
+                        const response = await fetch('/boot/default', { method: 'POST', body: form });
+                        const result = await response.json();
+                        if (!response.ok || result.status !== 'ok') {
+                            if (result.status === 'partial') { defaultsLocked = true; partial = true; }
+                            throw new Error(result.error || 'HTTP ' + response.status);
+                        }
+                        currentDefault = result.default;
+                        saved = Object.assign({}, saved, { default: currentDefault });
+                        lastSignature = signature(data, saved);
+                        Object.entries(defaultChecks).forEach(([name, input]) => {
+                            input.checked = name === currentDefault;
+                        });
+                        defaultStatus.textContent = zh() ? '已保存，下次开机生效。' : 'Saved. This takes effect at the next startup.';
+                        addBackupLinks(defaultStatus);
+                    } catch (e) {
+                        currentDefault = previous;
+                        Object.entries(defaultChecks).forEach(([name, input]) => {
+                            input.checked = name === currentDefault;
+                        });
+                        if (defaultsLocked) Object.values(defaultChecks).forEach(input => { input.disabled = true; });
+                        defaultStatus.textContent = partial
+                            ? (zh() ? 'BOOTCONFIG 可能部分更新，默认系统操作已锁定，请先检查设备。' : 'A BOOTCONFIG update may be partial; default selection is locked for inspection.')
+                            : (zh() ? '保存失败：' : 'Save failed: ') + e.message;
+                        if (partial) addBackupLinks(defaultStatus);
+                        /* A timed-out response may follow a completed transaction. */
+                        let stateRefreshed = false;
+                        try {
+                            const latestResponse = await fetch('/boot/default', { cache: 'no-store' });
+                            if (latestResponse.ok) {
+                                const latest = await latestResponse.json();
+                                if (latest.default === 'rootfs' || latest.default === 'rootfs_1') {
+                                    stateRefreshed = true;
+                                    currentDefault = latest.default;
+                                    Object.entries(defaultChecks).forEach(([name, input]) => { input.checked = name === currentDefault; });
+                                    defaultsLocked = partial || latest.can_change !== true || latest.locked === true;
+                                    if (defaultsLocked) Object.values(defaultChecks).forEach(input => { input.disabled = true; });
+                                    if (currentDefault !== previous) addBackupLinks(defaultStatus);
+                                }
+                            }
+                        } catch (refreshError) { /* Keep the pre-request check state. */ }
+                        if (!stateRefreshed) {
+                            currentDefault = null;
+                            defaultsLocked = true;
+                            Object.values(defaultChecks).forEach(input => { input.checked = false; input.disabled = true; });
+                        }
+                    } finally {
+                        operationBusy = false;
+                        if (!defaultsLocked) Object.values(defaultChecks).forEach(input => { input.disabled = false; });
+                    }
+                });
+                row.appendChild(name);
+                row.appendChild(action);
+                table.appendChild(row);
+            }
+            inner.appendChild(table);
+            inner.appendChild(status);
+            inner.appendChild(defaultStatus);
+            if (defaultsLocked) {
+                defaultStatus.textContent = saved && saved.reason === 'readonly_profile'
+                    ? (zh() ? '当前只读预览不允许保存默认系统。' : 'The read-only preview cannot save a default system.')
+                    : (zh()
+                        ? (saved && saved.reason === 'partial_update' ? 'BOOTCONFIG 部分更新，默认系统操作已锁定，请先检查设备。' : '当前启动命令或存储状态不支持更改默认系统。')
+                        : (saved && saved.reason === 'partial_update' ? 'A BOOTCONFIG update is partial; default selection is locked for inspection.' : 'The current boot state does not allow a safe default change.'));
+                if (saved && saved.reason === 'partial_update') addBackupLinks(defaultStatus);
+            }
+            section.hidden = false;
+        } catch (e) {
+            section.hidden = false;
+            section.querySelector('.card-main-inner').textContent = (zh() ? '分区信息读取失败：' : 'Partition detection failed: ') + e.message;
+            lastSignature = null;
+        } finally {
+            refreshBusy = false;
+            scheduleRefresh();
+        }
+    }
+    return { init };
+})();
+
+// Physical button status on RT3000-B, using the original overview card style.
+const boardButtonsManager = (() => {
+    const zh = () => APP_STATE.lang === 'zh-cn';
+    let active = true;
+    async function init() {
+        const section = document.getElementById('board_buttons');
+        if (!section) return;
+        const inner = section.querySelector('.card-main-inner');
+        const title = document.createElement('h2');
+        title.textContent = zh() ? '按键检测' : 'Button status';
+        const hint = document.createElement('p');
+        hint.textContent = zh()
+            ? '长按 RESET 约 3 秒进入救援页面；WPS/MESH 仅显示状态。'
+            : 'Hold RESET for about 3 seconds to enter recovery; WPS and MESH only show status.';
+        const table = document.createElement('table');
+        table.className = 'table';
+        const message = document.createElement('p');
+        inner.appendChild(title);
+        inner.appendChild(hint);
+        inner.appendChild(table);
+        inner.appendChild(message);
+        window.addEventListener('pagehide', () => { active = false; });
+        async function refresh() {
+            if (!active) return;
+            try {
+                const response = await fetch('/board/buttons', { cache: 'no-store' });
+                if (response.status === 404) return;
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const data = await response.json();
+                if (!Array.isArray(data.buttons)) throw new Error('Invalid button response');
+                table.textContent = '';
+                for (const button of data.buttons) {
+                    if (button.name !== 'RESET' && button.name !== 'WPS/MESH') continue;
+                    const row = document.createElement('tr');
+                    row.className = 'tr';
+                    const name = document.createElement('td');
+                    name.className = 'td left';
+                    name.textContent = button.name;
+                    const state = document.createElement('td');
+                    state.className = 'td right';
+                    state.textContent = button.pressed
+                        ? (zh() ? '按下' : 'Pressed')
+                        : (zh() ? '松开' : 'Released');
+                    row.appendChild(name);
+                    row.appendChild(state);
+                    table.appendChild(row);
+                }
+                message.textContent = '';
+                section.hidden = false;
+            } catch (error) {
+                section.hidden = false;
+                message.textContent = (zh() ? '按键状态读取失败：' : 'Button status unavailable: ') + error.message;
+            }
+            if (active) setTimeout(refresh, 500);
+        }
+        await refresh();
+    }
+    return { init };
 })();

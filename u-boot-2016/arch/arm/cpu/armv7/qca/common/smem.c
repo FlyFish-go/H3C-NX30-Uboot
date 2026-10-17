@@ -39,6 +39,9 @@
 #include <ubi_uboot.h>
 #include <command.h>
 #include <ipq_api.h>
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_RAM_WEB)
+#include <rt3000_b_layout.h>
+#endif
 
 #ifdef IPQ_UBI_VOL_WRITE_SUPPORT
 static struct ubi_device *ubi;
@@ -959,68 +962,57 @@ int smem_ram_ptable_init_v2(struct usable_ram_partition_table *usable_ram_partit
 }
 #endif
 
-void qca_smem_part_to_mtdparts(char *mtdid, int len)
+int qca_smem_part_to_mtdparts(char *mtdid,int len)
 {
-	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-	int i, ret;
-	int device_id = 0;
-	char *part = mtdid, *unit;
-	int init = 0;
-	uint32_t bsize;
-
-	ret = snprintf(part, len, "%s:", mtdid);
-	part += ret;
-	len -= ret;
-
-	for (i = 0; i < smem_ptable.len && len > 0; i++) {
-		struct smem_ptn *p = &smem_ptable.parts[i];
-		loff_t psize;
-		bsize = get_part_block_size(p, sfi);
-
-		if (part_which_flash(p) && init == 0) {
-			device_id = is_spi_nand_available();
-			ret = snprintf(part, len, ";nand%d:", device_id);
-			part += ret;
-			len -= ret;
-			init = 1;
-		}
-		if (p->size == (~0u)) {
-			/*
-			 * Partition size is 'till end of device', calculate
-			 * appropriately
-			 */
-#ifdef CONFIG_CMD_NAND
-			psize = (nand_info[get_device_id_by_part(p)].size
-					- (((loff_t)p->start) * bsize));
-#else
-			psize = 0;
+ qca_smem_flash_info_t *sfi=&qca_smem_flash_info;
+ char *buf; int i,n,used,ret,init=0;
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_RAM_WEB)
+ char alias[SMEM_PTN_NAME_MAX];
 #endif
-		} else {
-			psize =  ((loff_t)p->size) * bsize;
-		}
-
-		if ((psize > SZ_1M) && (((psize & (SZ_1M - 1)) == 0))) {
-			psize /= SZ_1M;
-			unit = "M@";
-		} else if ((psize > SZ_1K) && (((psize & (SZ_1K - 1)) == 0))) {
-			psize /= SZ_1K;
-			unit = "K@";
-		} else {
-			unit = "@";
-		}
-
-		ret = snprintf(part, len, "%lld%s0x%llx(%s),", psize, unit,
-				((loff_t)p->start) * bsize, p->name);
-		part += ret;
-		len -= ret;
-	}
-
-	if (i == 0)
-		*mtdid = '\0';
-
-	*(part-1) = 0;	/* Remove the trailing ',' character */
+ uint32_t bsize;
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_RAM_WEB)
+ struct rt3_layout view;
+ if(rt3_layout_read(&view)) return -EINVAL;
+#endif
+ if(!mtdid||len<=0) return -EINVAL;
+ buf=malloc(len); if(!buf) return -ENOMEM;
+ n=snprintf(buf,len,"%s:",mtdid);
+ if(n<0||n>=len){ret=-ENOSPC;goto fail;} used=n;
+ for(i=0;i<smem_ptable.len;i++){
+  struct smem_ptn *p=&smem_ptable.parts[i];
+  loff_t offset,psize; const char *name=p->name,*unit;
+  char *dst=buf+used; int left=len-used;
+  bsize=get_part_block_size(p,sfi); offset=(loff_t)p->start*bsize;
+  if(part_which_flash(p)&&!init){
+   n=snprintf(dst,left,";nand%d:",is_spi_nand_available());
+   if(n<0||n>=left){ret=-ENOSPC;goto fail;}
+   used+=n;dst=buf+used;left=len-used;init=1;
+  }
+  if(p->size==~0u){
+#ifdef CONFIG_CMD_NAND
+   psize=nand_info[get_device_id_by_part(p)].size-offset;
+#else
+   psize=0;
+#endif
+  }else psize=(loff_t)p->size*bsize;
+  if(psize>SZ_1M&&!(psize&(SZ_1M-1))){psize/=SZ_1M;unit="M@";}
+  else if(psize>SZ_1K&&!(psize&(SZ_1K-1))){psize/=SZ_1K;unit="K@";}
+  else unit="@";
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_RAM_WEB)
+  if(!strcmp(p->name,"rootfs")||!strcmp(p->name,"rootfs_1")){
+   ret=rt3_layout_linux_mtd_alias(&view,sfi->rootfs.offset,p->name,offset,alias,sizeof(alias));
+   if(ret) goto fail; name=alias;
+  }
+#endif
+  n=snprintf(dst,left,"%lld%s0x%llx(%s)",(long long)psize,unit,(unsigned long long)offset,name);
+  if(n<0||n+1>=left){ret=-ENOSPC;goto fail;} used+=n;
+  if(i+1<smem_ptable.len){buf[used++]=',';buf[used]=0;}
+ }
+ if(!smem_ptable.len) buf[0]=0;
+ strlcpy(mtdid,buf,len);free(buf);return 0;
+fail:
+ free(buf);return ret;
 }
-
 /*
  * retrieve the which_flash flag based on partition name.
  * flash_var is 1 if partition is in NAND.

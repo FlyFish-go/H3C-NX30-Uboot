@@ -90,4 +90,7 @@ static void syslog_poll_handler(enum httpd_uri_handler_status status,
 void syslog_register_uri_handlers(struct httpd_instance *inst)
 {
 	httpd_register_uri_handler(inst, "/syslog/poll", &syslog_poll_handler, NULL);
+#ifdef CONFIG_H3C_HW_D_NAND_SERVICE
+	httpd_register_uri_handler(inst, "/service/logs", &syslog_poll_handler, NULL);
+#endif
 }

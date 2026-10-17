@@ -1,3 +1,6 @@
+#ifdef CONFIG_H3C_HW_D_RAM_AUTOECC
+#include <nx30_nor_autoecc.h>
+#endif
 /*
  * (C) Copyright 2000
  * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
@@ -6,8 +9,17 @@
  */
 
 #include <common.h>
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+#include <h3c_nand_ecc.h>
+#endif
 #include <autoboot.h>
+#ifdef CONFIG_H3C_RELEASE_SYSTEM_DEFAULT
+#include <h3c_boot_policy.h>
+#endif
 #include <bootretry.h>
+#ifdef CONFIG_H3C_HW_A_PRODUCTION_PORT
+extern int h3c_hw_a_reset_held_3s(void);
+#endif
 #include <cli.h>
 #include <console.h>
 #include <fdtdec.h>
@@ -395,9 +407,80 @@ __weak void indicate_sdx_device(void) {}
 
 void autoboot_command(const char *s)
 {
+#ifdef CONFIG_H3C_RELEASE_SYSTEM_DEFAULT
+	/* Dedicated release path ignores all imported command strings. */
+	/* Keep the standard UART stop window without consulting ENV bootcmd. */
+	if (abortboot(3))
+		return;
+	h3c_release_autoboot();
+	return;
+#endif
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+	/* Ignore any stored bootcmd and keep the recovery service reachable. */
+	if (setenv("ethprime", "eth1") ||
+	    setenv("ethact", "eth1") ||
+	    setenv("ipaddr", "192.168.1.1"))
+		puts("NOR rescue: failed to set LAN recovery defaults\n");
+	s = "httpd";
+	stored_bootdelay = 0;
+#elif defined(CONFIG_H3C_DEFAULT_WEB)
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_D
+    /* Bridge installer profile: fixed RAM-only LAN defaults. */
+    if (setenv("ethprime", "eth1") || setenv("ethact", "eth1") ||
+        setenv("ethrotate", "no") || setenv("ipaddr", "192.168.10.1") ||
+        setenv("netmask", "255.255.255.0") || setenv("serverip", "192.168.10.2")) {
+        puts("Bridge LAN setup failed; staying at CLI\n");
+        return;
+    }
+#endif
+#ifdef CONFIG_H3C_HW_D_RAM_AUTOECC
+    nx30_nor_nand_autoecc_cli();
+#endif
+    s = "httpd";
+    stored_bootdelay = 0;
+#elif defined(CONFIG_H3C_HW_D_RAM_WEB)
+	/* Enter the read-only maintenance preview on the verified D LAN port. */
+	if (setenv("ethprime", "eth1") || setenv("ethact", "eth1") || setenv("ethrotate", "no"))
+		puts("NX30 D RAM web preview: cannot select eth1\n");
+#ifdef CONFIG_H3C_HW_D_RAM_AUTOECC
+	/* A failed or ambiguous probe keeps the read-only web/serial rescue. */
+	nx30_nor_nand_autoecc_cli();
+#endif
+	s = "httpd";
+	stored_bootdelay = 0;
+#elif defined(CONFIG_H3C_HW_D_RAM_READONLY)
+	/* Ignore imported bootcmd and leave this bounded diagnostic at CLI. */
+	s = "echo NX30 D RAM diagnostic ready";
+	stored_bootdelay = 0;
+#endif
+#if defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	/* Ignore OEM persistent bootcmd in RAM validation. */
+	s = "httpd";
+	stored_bootdelay = CONFIG_BOOTDELAY;
+#elif defined(CONFIG_H3C_HW_A_PRODUCTION_PORT)
+	/* HW-A production always enters HTTP recovery. */
+	s = "httpd";
+	stored_bootdelay = 0;
+#endif
+#if defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT)
+	/* C's three LAN ports share the RTL8367S CPU link on GMAC1. */
+	if (setenv("ethact", "eth1")) {
+		puts("HW-C: unable to select LAN for web recovery\n");
+		return;
+	}
+#endif
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+    if (!h3c_nand_ecc_ready()) {
+        puts("H3C NAND: format unconfirmed; entering recovery web\n");
+        if (setenv("ethact", "eth1"))
+            return;
+        s = "httpd";
+        stored_bootdelay = 0;
+    }
+#endif
 	debug("### main_loop: bootcmd=\"%s\"\n", s ? s : "<UNDEFINED>");
 
-#ifdef CONFIG_QCA_APPSBL_DLOAD
+#if defined(CONFIG_QCA_APPSBL_DLOAD) && !defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) && !defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
 	/*
 	 * If kernel has crashed in previous boot,
 	 * jump to crash dump collection.
@@ -425,10 +508,12 @@ void autoboot_command(const char *s)
 	}
 #endif
 
+#if !defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) && !defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
 	if (apps_iscrashed_crashdump_disabled()) {
 		printf("Crashdump disabled, resetting the board..\n");
 		reset_board();
 	}
+#endif
 
 	if (stored_bootdelay != -1 && s && !abortboot(stored_bootdelay)) {
 #if defined(CONFIG_AUTOBOOT_KEYED) && !defined(CONFIG_AUTOBOOT_KEYED_CTRLC)
@@ -440,11 +525,20 @@ void autoboot_command(const char *s)
 #if defined(CONFIG_AUTOBOOT_KEYED) && !defined(CONFIG_AUTOBOOT_KEYED_CTRLC)
 		disable_ctrlc(prev);	/* restore Control C checking */
 #endif
+#if !defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) && \
+	!defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) && \
+	!defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) && \
+	!defined(CONFIG_H3C_HW_D_RAM_READONLY)
 		const char *cmd = "bootipq";
 		if (!s || strncmp(s, cmd, strlen(cmd))) {
 			printf("Failed to run `%s`, try `%s`\n", s, cmd);
 			run_command(cmd, 0);
 		}
+#else
+		/* HW-B bootipq handles its own web recovery on failure.
+		 * Do not retry a returned explicit boot command with another slot.
+		 */
+#endif
 	}
 
 #ifdef CONFIG_MENUKEY

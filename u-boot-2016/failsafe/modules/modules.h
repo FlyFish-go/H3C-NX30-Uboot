@@ -40,7 +40,24 @@ void misc_register_uri_handlers(struct httpd_instance *inst);
 void network_register_uri_handlers(struct httpd_instance *inst);
 void sysinfo_register_uri_handlers(struct httpd_instance *inst);
 void syslog_register_uri_handlers(struct httpd_instance *inst);
+#ifdef CONFIG_H3C_HW_D_NAND_SERVICE
+void service_hwd_register_uri_handlers(struct httpd_instance *inst);
+#endif
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+int failsafe_env_set_persistent(const char *name, const char *value);
+void slots_rt3000_b_register_uri_handlers(struct httpd_instance *inst);
+void boot_default_rt3000_b_register_uri_handlers(struct httpd_instance *inst);
+void rt3_metadata_register_uri_handlers(struct httpd_instance *inst);
+void slots_rt3000_b_invalidate_cache(void);
+void buttons_rt3000_b_register_uri_handlers(struct httpd_instance *inst);
+void firmware_rt3000_b_register_uri_handlers(struct httpd_instance *inst);
+#endif
+void buttons_h3c_hw_a_register_uri_handlers(struct httpd_instance *inst);
+void buttons_h3c_hw_c_register_uri_handlers(struct httpd_instance *inst);
 void upgrade_register_uri_handlers(struct httpd_instance *inst);
+#ifdef CONFIG_H3C_HW_D_RAM_AUTOECC
+void nor_nand_autoecc_register_uri_handlers(struct httpd_instance *inst);
+#endif
 void webterm_register_uri_handlers(struct httpd_instance *inst);
 
 #endif /* _FAILSAFE_MODULES_H_ */

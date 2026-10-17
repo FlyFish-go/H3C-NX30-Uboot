@@ -23,11 +23,25 @@
 #include <nand.h>
 #include <search.h>
 #include <errno.h>
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+#include <asm/arch-qca-common/smem.h>
+#include <rt3000_b_fw_write.h>
+#include <rt3000_b_env.h>
+#endif
+
+#include <h3c_board_profile.h>
+#define RT3_ENV_BOARD_LABEL H3C_BOARD_LABEL
 
 #if defined(CONFIG_CMD_SAVEENV) && defined(CONFIG_CMD_NAND)
 #define CMD_SAVEENV
 #elif defined(CONFIG_ENV_OFFSET_REDUND)
 #error CONFIG_ENV_OFFSET_REDUND must have CONFIG_CMD_SAVEENV & CONFIG_CMD_NAND
+#endif
+#if defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+/* Compile the checked read/tail helper; saveenv remains unregistered and QPIC rejects writes. */
+#ifndef CMD_SAVEENV
+#define CMD_SAVEENV
+#endif
 #endif
 
 #if defined(CONFIG_ENV_SIZE_REDUND) &&	\
@@ -126,6 +140,7 @@ int nand_env_init(void)
  * The legacy NAND code saved the environment in the first NAND device i.e.,
  * nand_dev_desc + 0. This is also the behaviour using the new NAND code.
  */
+#if !(defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
 static int writeenv(size_t offset, u_char *buf)
 {
 	size_t end = offset + board_env_size;
@@ -154,12 +169,14 @@ static int writeenv(size_t offset, u_char *buf)
 
 	return 0;
 }
+#endif
 
 struct env_location {
 	const char *name;
 	nand_erase_options_t erase_opts;
 };
 
+#if !(defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
 static int erase_and_write_env(const struct env_location *location,
 		u_char *env_new)
 {
@@ -175,13 +192,205 @@ static int erase_and_write_env(const struct env_location *location,
 
 	return ret;
 }
+#endif
 
 #ifdef CONFIG_ENV_OFFSET_REDUND
 static unsigned char env_flags;
 #endif
 
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+/* Resolve and preflight the exact single APPSBLENV partition before any write. */
+static int rt3_env_target(nand_info_t **nand_out, loff_t *offset_out,
+			  size_t *size_out)
+{
+	nand_info_t *nand;
+	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	u32 start_blocks = 0, size_blocks = 0;
+	u64 offset, size, end;
+	unsigned int i;
+	int ret;
+
+	if (nand_env_device != CONFIG_NAND_FLASH_INFO_IDX ||
+	    nand_info[CONFIG_NAND_FLASH_INFO_IDX].size != (128ULL << 20) ||
+	    nand_info[CONFIG_NAND_FLASH_INFO_IDX].erasesize != (128U << 10) ||
+	    nand_info[CONFIG_NAND_FLASH_INFO_IDX].writesize != 2048 ||
+	    CONFIG_ENV_SIZE != CONFIG_ENV_SIZE_MAX ||
+	    CONFIG_ENV_RANGE != CONFIG_ENV_SIZE_MAX ||
+	    CONFIG_ENV_SIZE_MAX != (256U << 10) ||
+	    board_env_range != CONFIG_ENV_SIZE_MAX ||
+	    board_env_size != (512U << 10) || board_env_offset < 0)
+		return -EROFS;
+	nand = &nand_info[nand_env_device];
+	if (!nand->name || !nand->size || !nand->erasesize || !nand->writesize ||
+	    nand->erasesize != sfi->flash_block_size ||
+	    CONFIG_ENV_SIZE_MAX % nand->erasesize ||
+	    CONFIG_ENV_SIZE_MAX % nand->writesize)
+		return -EROFS;
+	ret = smem_getpart("0:APPSBLENV", &start_blocks, &size_blocks);
+	if (ret || !size_blocks)
+		return -EROFS;
+	offset = (u64)start_blocks * nand->erasesize;
+	size = (u64)size_blocks * nand->erasesize;
+	end = offset + size;
+	if (end < offset || offset != 0x480000 || size != 0x80000 ||
+	    offset != (u64)board_env_offset ||
+	    offset != (u64)CONFIG_ENV_OFFSET || size != (u64)board_env_size ||
+	    size != (512U << 10) || end > nand->size ||
+	    offset % nand->erasesize || size % nand->erasesize)
+		return -EROFS;
+	/* A bad block would require spilling into a protected adjacent partition. */
+	for (i = 0; i < size / nand->erasesize; i++) {
+		ret = nand_block_isbad(nand, offset + (u64)i * nand->erasesize);
+		if (ret)
+			return ret < 0 ? ret : -ENOSPC;
+	}
+	*nand_out = nand;
+	*offset_out = offset;
+	*size_out = size;
+	return 0;
+}
+
+static int rt3_env_nand_read(nand_info_t *nand, loff_t offset, u_char *buf,
+			     size_t size)
+{
+	size_t read_len = size;
+	int ret = nand_read(nand, offset, &read_len, buf);
+
+	if (ret == -EUCLEAN && read_len == size)
+		return 0;
+	return ret || read_len != size ? -EIO : 0;
+}
+
+static int rt3_env_nand_write(nand_info_t *nand, loff_t offset,
+			      u_char *buf, size_t size)
+{
+	size_t write_len = size;
+	int ret = nand_write(nand, offset, &write_len, buf);
+
+	return ret || write_len != size ? -EIO : 0;
+}
+
+static int rt3_env_erase(nand_info_t *nand, loff_t offset, size_t size)
+{
+	nand_erase_options_t opts;
+
+	memset(&opts, 0, sizeof(opts));
+	opts.offset = offset;
+	opts.length = size;
+	return nand_erase_opts(nand, &opts) ? -EIO : 0;
+}
+
+int rt3_nand_env_tail_matches(const void *tail, size_t tail_size)
+{
+	nand_info_t *nand;
+	loff_t offset;
+	size_t size;
+	u_char *current;
+	int ret;
+
+	if (!tail || CONFIG_ENV_SIZE_MAX != (256U << 10) ||
+	    tail_size != (256U << 10))
+		return -EINVAL;
+	ret = rt3_env_target(&nand, &offset, &size);
+	if (ret)
+		return ret;
+	if (size != (512U << 10))
+		return -EROFS;
+	current = (u_char *)memalign(ARCH_DMA_MINALIGN, size);
+	if (!current)
+		return -ENOMEM;
+	ret = rt3_env_nand_read(nand, offset, current, size);
+	if (!ret && memcmp((const u_char *)tail, current + CONFIG_ENV_SIZE,
+			  tail_size))
+		ret = -EINVAL;
+	free(current);
+	return ret;
+}
+
+static int rt3_nand_saveenv(void)
+{
+	nand_info_t *nand;
+	loff_t offset;
+	size_t size;
+	env_t *env_new = NULL;
+	u_char *old_bytes = NULL, *new_partition = NULL, *verify = NULL;
+	int ret, rollback_ret;
+	int window_open = 0;
+
+	ret = rt3_env_target(&nand, &offset, &size);
+	if (ret)
+		return ret;
+	env_new = (env_t *)memalign(ARCH_DMA_MINALIGN, CONFIG_ENV_SIZE);
+	old_bytes = (u_char *)memalign(ARCH_DMA_MINALIGN, size);
+	new_partition = (u_char *)memalign(ARCH_DMA_MINALIGN, size);
+	verify = (u_char *)memalign(ARCH_DMA_MINALIGN, size);
+	if (!env_new || !old_bytes || !new_partition || !verify) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	memset(env_new, 0, CONFIG_ENV_SIZE);
+	ret = env_export(env_new);
+	if (ret) {
+		ret = -EIO;
+		goto out;
+	}
+	if (crc32(0, env_new->data, ENV_SIZE) != env_new->crc) {
+		ret = -EIO;
+		goto out;
+	}
+	/* Preserve a byte-exact rollback image before opening the write aperture. */
+	ret = rt3_env_nand_read(nand, offset, old_bytes, size);
+	if (ret)
+		goto out;
+	/* Keep the OEM's CRC-protected 256 KiB environment and preserve its tail. */
+	memcpy(new_partition, env_new, CONFIG_ENV_SIZE);
+	memcpy(new_partition + CONFIG_ENV_SIZE, old_bytes + CONFIG_ENV_SIZE,
+	       size - CONFIG_ENV_SIZE);
+	ret = rt3_metadata_write_window_open(nand, "0:APPSBLENV", offset, size);
+	if (ret)
+		goto out;
+	window_open = 1;
+	ret = rt3_env_erase(nand, offset, size);
+	if (!ret)
+		ret = rt3_env_nand_write(nand, offset, new_partition, size);
+	if (!ret)
+		ret = rt3_env_nand_read(nand, offset, verify, size);
+	if (!ret && memcmp(verify, new_partition, size))
+		ret = -EIO;
+	if (!ret)
+		goto out;
+
+	/* Best-effort exact restoration on synchronous erase/program/readback errors. */
+	rollback_ret = rt3_env_erase(nand, offset, size);
+	if (!rollback_ret)
+		rollback_ret = rt3_env_nand_write(nand, offset, old_bytes, size);
+	if (!rollback_ret)
+		rollback_ret = rt3_env_nand_read(nand, offset, verify, size);
+	if (!rollback_ret && memcmp(verify, old_bytes, size))
+		rollback_ret = -EIO;
+	if (rollback_ret)
+		printf("%s APPSBLENV rollback failed (%d); persistent ENV needs recovery\n",
+		       RT3_ENV_BOARD_LABEL, rollback_ret);
+out:
+	if (window_open) {
+		rt3_fw_write_window_close();
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+		if (rt3_fw_write_window_close_status()) ret = -EIO;
+#endif
+	}
+	free(verify);
+	free(new_partition);
+	free(old_bytes);
+	free(env_new);
+	return ret;
+}
+#endif
+
 int nand_saveenv(void)
 {
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	return rt3_nand_saveenv();
+#else
 	int	ret = 0;
 	int	env_idx = 0;
 	struct env_location location[] = {
@@ -241,6 +450,7 @@ int nand_saveenv(void)
 #endif
 	free(env_new);
 	return ret;
+#endif
 }
 #endif /* CMD_SAVEENV */
 

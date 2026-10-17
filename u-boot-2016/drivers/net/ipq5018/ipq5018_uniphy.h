@@ -46,6 +46,7 @@
 #define UNIPHY_CH0_ATHR_CSCO_MODE_25M		(1 << 0)
 
 #define UNIPHY_DEC_CHANNEL_0_INPUT_OUTPUT_4	0x480
+#define UNIPHY_CH0_ADP_SW_RSTN			(1U << 11)
 #define UNIPHY_FORCE_SPEED_25M			(1 << 3)
 
 #define UNIPHY_DEC_CHANNEL_0_INPUT_OUTPUT_6	0x488
@@ -62,6 +63,7 @@
 #define UNIPHY_MISC2_REG_SGMII_PLUS_MODE 	0x50
 
 #define UNIPHY_MISC2_REG_VALUE			0x70
+#define UNIPHY_MISC2_PHY_MODE_MASK		0x70
 
 #define UNIPHY_PLL_RESET_REG_OFFSET 		0x780
 #define UNIPHY_PLL_RESET_REG_VALUE 		0x02bf
@@ -72,6 +74,10 @@
 #define UNIPHY_SPEED_1000M			2
 
 void ppe_uniphy_mode_set(uint32_t mode, uint32_t phy_mode);
+int ppe_uniphy_mode_set_checked(uint32_t mode, uint32_t phy_mode);
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+void ppe_uniphy_channel0_adapter_reset(void);
+#endif
 void ppe_uniphy_set_forceMode(void);
 void ppe_uniphy_refclk_set(void);
 void uniphy_channel0_input_output_6_get(int mode, u32 gpio, u8 *status,

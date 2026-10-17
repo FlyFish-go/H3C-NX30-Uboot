@@ -365,7 +365,7 @@ void board_show_dram(phys_size_t size);
  */
 int arch_fixup_fdt(void *blob);
 
-void parse_fdt_fixup(char* buf, void *blob);
+int parse_fdt_fixup(const char *edit, void *blob);
 
 /* common/flash.c */
 void flash_perror (int);

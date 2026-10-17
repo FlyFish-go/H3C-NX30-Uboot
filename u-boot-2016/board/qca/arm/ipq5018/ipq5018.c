@@ -710,7 +710,11 @@ void board_nand_init(void)
 	if (!fdtdec_get_is_enabled(gd->fdt_blob, node)) {
 		printf("QPIC: disabled, skipping initialization\n");
 	} else {
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+		puts("QPIC: deferred; run nor_nand_probe 4 for read-only ECC4 probe\n");
+#else
 		qpic_nand_init(NULL);
+#endif
 	}
 #endif
 
@@ -810,6 +814,18 @@ static void reset_8033_phy_gpio(int gpio)
 	writel(0x0, GPIO_IN_OUT_ADDR(gpio));
 	mdelay(500);
 	writel(0x2, GPIO_IN_OUT_ADDR(gpio));
+}
+
+static void reset_rtl8367s_gpio(int gpio)
+{
+	unsigned int *base = (unsigned int *)GPIO_CONFIG_ADDR(gpio);
+
+	writel(0x203, base);
+	writel(GPIO_OUT_LOW, GPIO_IN_OUT_ADDR(gpio));
+	mdelay(25);
+	/* TLMM IN_OUT output is bit1; GPIO_OUT_HIGH is a logical value. */
+	writel(GPIO_OUT, GPIO_IN_OUT_ADDR(gpio));
+	mdelay(100);
 }
 
 static void reset_s17c_switch_gpio(int gpio)
@@ -1213,6 +1229,17 @@ int board_eth_init(bd_t *bis)
 			if (gmac_cfg[loop].phy_8033_gpio){
 				reset_8033_phy_gpio(gmac_cfg[loop].phy_8033_gpio);
 			}
+			gmac_cfg[loop].rtl8367s_switch_enable = fdtdec_get_uint(
+					gd->fdt_blob, offset, "rtl8367s_switch_enable", 0);
+			gmac_cfg[loop].rtl8367s_reset_gpio = fdtdec_get_uint(
+					gd->fdt_blob, offset, "rtl8367s_reset_gpio", 0);
+			if (gmac_cfg[loop].rtl8367s_switch_enable) {
+				if (gmac_cfg[loop].rtl8367s_reset_gpio != 39) {
+					printf("RTL8367S requires verified reset GPIO39\n");
+					return -EINVAL;
+				}
+				reset_rtl8367s_gpio(gmac_cfg[loop].rtl8367s_reset_gpio);
+			}
 			switch_gpio =  fdtdec_get_uint(gd->fdt_blob, offset, "switch_gpio", 0);
 			if (switch_gpio) {
 				reset_s17c_switch_gpio(switch_gpio);
@@ -1246,7 +1273,11 @@ int board_eth_init(bd_t *bis)
 		 gmac_cfg[loop].unit = -1;
 
 	status = ipq_gmac_init(gmac_cfg);
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+	puts("NOR rescue: automatic ART calibration read deferred\n");
+#else
 	board_update_caldata();
+#endif
 
 	return status;
 }

@@ -11,6 +11,9 @@
  */
 
 #include <common.h>
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+#include <h3c_nand_ecc.h>
+#endif
 /* TODO: can we just include all these headers whether needed or not? */
 #if defined(CONFIG_CMD_BEDBUG)
 #include <bedbug/type.h>
@@ -66,6 +69,9 @@
 #endif
 #ifdef CONFIG_HTTPD
 #include <ipq_api.h>
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+#include <ipq_led.h>
+#endif
 #endif
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -429,6 +435,9 @@ static int initr_nand(void)
 {
 	puts("NAND:  ");
 	nand_init();
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+	h3c_nand_ecc_init();
+#endif
 	return 0;
 }
 #endif
@@ -583,6 +592,11 @@ static int initr_ethaddr(void)
 static int initr_ipq_gpio(void)
 {
 	ipq_gpio_init();
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	/* TLMM init ORs the output bit: clear inherited colors before green. */
+	led_all_off();
+	led_on("system_led");
+#endif
 	return 0;
 }
 #endif

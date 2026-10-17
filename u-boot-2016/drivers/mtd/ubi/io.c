@@ -77,6 +77,7 @@
 #include <linux/crc32.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <memalign.h>
 #else
 #include <ubi_uboot.h>
 #endif
@@ -115,6 +116,43 @@ static int self_check_write(struct ubi_device *ubi, const void *buf, int pnum,
  * o %-EIO if some I/O error occurred;
  * o other negative error codes in case of other errors.
  */
+/* QPIC requires full-page, aligned DMA reads for unaligned UBI ranges. */
+static int ubi_mtd_read_aligned(struct mtd_info *mtd, void *buf, loff_t from,
+                                size_t len, size_t *retlen)
+{
+	size_t io_len, io_read = 0, col;
+	loff_t io_from;
+	void *io_buf;
+	int err;
+	*retlen = 0;
+	if (mtd->writesize <= 1)
+		return mtd_read(mtd, from, len, retlen, buf);
+	{
+		uint64_t page = from;
+		col = do_div(page, mtd->writesize);
+	}
+	if (!col && !(len % mtd->writesize) &&
+	    !((uintptr_t)buf % ARCH_DMA_MINALIGN))
+		return mtd_read(mtd, from, len, retlen, buf);
+	io_from = from - col;
+	io_len = (len + col + mtd->writesize - 1) /
+		 mtd->writesize * mtd->writesize;
+	io_buf = memalign(ARCH_DMA_MINALIGN, io_len);
+	if (!io_buf)
+		return -ENOMEM;
+	memset(io_buf, 0, io_len);
+	*((uint8_t *)io_buf) = 0xFF;
+	err = mtd_read(mtd, io_from, io_len, &io_read, io_buf);
+	if (io_read != io_len) {
+		free(io_buf);
+		return -EIO;
+	}
+	memcpy(buf, (uint8_t *)io_buf + col, len);
+	*retlen = len;
+	free(io_buf);
+	return err;
+}
+
 int ubi_io_read(const struct ubi_device *ubi, void *buf, int pnum, int offset,
 		int len)
 {
@@ -152,11 +190,10 @@ int ubi_io_read(const struct ubi_device *ubi, void *buf, int pnum, int offset,
 	 * Try to prevent this situation by changing the first byte of the
 	 * buffer.
 	 */
-	*((uint8_t *)buf) ^= 0xFF;
-
 	addr = (loff_t)pnum * ubi->peb_size + offset;
+	*((uint8_t *)buf) ^= 0xFF;
 retry:
-	err = mtd_read(ubi->mtd, addr, len, &read, buf);
+	err = ubi_mtd_read_aligned(ubi->mtd, buf, addr, len, &read);
 	if (err) {
 		const char *errstr = mtd_is_eccerr(err) ? " (ECC error)" : "";
 

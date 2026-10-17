@@ -27,18 +27,56 @@
  */
 
 #include <common.h>
+#if defined(CONFIG_H3C_HW_D_NOR_RESCUE) || \
+	defined(CONFIG_H3C_HW_D_RAM_AUTOECC) || \
+	defined(CONFIG_H3C_NAND_ECC_COMPAT)
+#define CONFIG_H3C_QPIC_DUAL_ECC
+#endif
+/* These helpers are unreachable in the read-only B target. */
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_QPIC_DUAL_ECC)
+#define QPIC_STAGE0_UNUSED __maybe_unused
+#else
+#define QPIC_STAGE0_UNUSED
+#endif
 #include <malloc.h>
 
 #include <asm/io.h>
 #include <asm/errno.h>
+#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+#include <h3c_hw_d_readonly.h>
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY)
+#include <h3c_hw_a_readonly.h>
+#elif defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#include <h3c_hw_c_readonly.h>
+#endif
 #include <nand.h>
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+#include <rt3000_b_fw_write.h>
+#include <rt3000_b_fw_core.h>
+#include <rt3000_b_layout.h>
+#endif
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_D)
+#include <qpic_nand_model.h>
+#endif
 #include <linux/mtd/nand.h>
 #include <asm/arch-qca-common/bam.h>
 #include <asm/arch-qca-common/qpic_nand.h>
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+#include <asm/arch-qca-common/smem.h>
+#endif
 #include <asm/arch-qca-common/gpio.h>
 #include <fdtdec.h>
 #include <dm.h>
 #include <poller.h>
+#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE) || defined(CONFIG_H3C_HW_D_RAM_AUTOECC) || defined(CONFIG_H3C_HW_D_STORAGE_PORT)
+#include <nx30_nor_nand.h>
+#include <nx30_d_qpic_window_core.h>
+#elif defined(CONFIG_H3C_NAND_ECC_COMPAT)
+#include <nx30_nor_nand.h>
+#endif
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+#include <h3c_nand_ecc.h>
+#endif
 
 DECLARE_GLOBAL_DATA_PTR;
 #ifdef READ_ONFI_PAGE_PARA
@@ -62,6 +100,77 @@ enum qpic_nand_layout qpic_layout = QPIC_NAND_LAYOUT_LINUX;
 
 #ifdef CONFIG_QPIC_SERIAL
 static struct qpic_serial_nand_params qpic_serial_nand_tbl[] = {
+#if defined(CONFIG_H3C_IPQ5018_COMMON) || defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	/* OEM APPSBL compatibility profiles: 128 MiB window, not full die size.
+	 * Keep the factory QPIC BCH/OOB format (including BCH4 for 98:DB).
+	 * See test/qpic_h3c_oem_nand_profiles.json for verified descriptors.
+	 */
+	{
+		.id = { 0xe5, 0xa4 },
+		.page_size = 2048,
+		.erase_blk_size = 0x20000,
+		.pgs_per_blk = 64,
+		.no_of_blocks = 1024,
+		.spare_size = 128,
+		.density = 0x8000000,
+		.otp_region = 0x5000,
+		.no_of_addr_cycle = 3,
+		.num_bits_ecc_correctability = 8,
+		.timing_mode_support = 0,
+		.quad_mode = true,
+		.check_quad_config = true,
+		.name = "DS35M4GM",
+	},
+	{
+		.id = { 0xe5, 0x72 },
+		.page_size = 2048,
+		.erase_blk_size = 0x20000,
+		.pgs_per_blk = 64,
+		.no_of_blocks = 1024,
+		.spare_size = 64,
+		.density = 0x8000000,
+		.otp_region = 0x5000,
+		.no_of_addr_cycle = 3,
+		.num_bits_ecc_correctability = 4,
+		.timing_mode_support = 0,
+		.quad_mode = true,
+		.check_quad_config = true,
+		.name = "DS35Q2GA",
+	},
+	{
+		.id = { 0x98, 0xdb },
+		.page_size = 2048,
+		.erase_blk_size = 0x20000,
+		.pgs_per_blk = 64,
+		.no_of_blocks = 1024,
+		.spare_size = 64,
+		.density = 0x8000000,
+		.otp_region = 0x5000,
+		.no_of_addr_cycle = 3,
+		.num_bits_ecc_correctability = 4,
+		.timing_mode_support = 0,
+		.quad_mode = true,
+		.check_quad_config = true,
+		.name = "TC58CYG1S3HRAIJ",
+	},
+	/* OEM labels 98:D2 as ...HRAIG; JEDEC/mainline names it ...HRAIJ. */
+	{
+		.id = { 0x98, 0xd2 },
+		.page_size = 2048,
+		.erase_blk_size = 0x20000,
+		.pgs_per_blk = 64,
+		.no_of_blocks = 1024,
+		.spare_size = 128,
+		.density = 0x8000000,
+		.otp_region = 0x2000,
+		.no_of_addr_cycle = 3,
+		.num_bits_ecc_correctability = 8,
+		.timing_mode_support = 0,
+		.quad_mode = true,
+		.check_quad_config = true,
+		.name = "TC58CYG0S3HRAIJ",
+	},
+#endif
 	{
 		.id = { 0xc8, 0xc1 },
 		.page_size = 2048,
@@ -226,7 +335,11 @@ static struct qpic_serial_nand_params qpic_serial_nand_tbl[] = {
 		.density = 0x08000000,
 		.otp_region = 0x2000,
 		.no_of_addr_cycle = 0x3,
+		#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+		.num_bits_ecc_correctability = 4,
+#else
 		.num_bits_ecc_correctability = 8,
+#endif
 		.timing_mode_support = 0,
 		.quad_mode = true,
 		.check_quad_config = true,
@@ -522,6 +635,24 @@ static struct qpic_serial_nand_params qpic_serial_nand_tbl[] = {
 	},
 };
 struct qpic_serial_nand_params *serial_params;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+static bool qpic_serial_model_identified;
+int qpic_nand_get_model_info(struct qpic_nand_model_info *info)
+{
+	if (!info || !qpic_serial_model_identified || !serial_params || !serial_params->name)
+		return -1;
+	info->name = serial_params->name;
+	info->id[0] = serial_params->id[0];
+	info->id[1] = serial_params->id[1];
+	info->id[2] = serial_params->id[2];
+	return 0;
+}
+unsigned int h3c_qpic_nand_physical_spare(void)
+{
+	return qpic_serial_model_identified && serial_params ?
+		serial_params->spare_size : 0;
+}
+#endif
 #define MICRON_DEVICE_ID	0x152c152c
 #define WINBOND_MFR_ID		0xef
 #define CMD3_MASK		0xfff0ffff
@@ -545,6 +676,421 @@ struct cmd_element ce_array[100]
 struct cmd_element ce_read_array[20]
 			__attribute__ ((aligned(CONFIG_SYS_CACHELINE_SIZE)));
 static struct qpic_nand_dev qpic_nand_dev;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+static int nx30_nor_nand_init_attempted;
+static int nx30_nor_nand_init_result = -EINPROGRESS;
+static int nx30_nor_nand_qpic_complete;
+static int nx30_nor_nand_bam_error;
+static int nx30_nor_nand_bam_wait_status(unsigned long started)
+{
+	/* drivers/dma/bam.c uses a 2000 ms interrupt wait bound. */
+	return get_timer(started) >= 2000 ? -ETIMEDOUT : -EIO;
+}
+#endif
+
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+/* Closed by default; only a guarded production transaction opens this aperture. */
+static struct {
+	struct mtd_info *mtd;
+	u64 start;
+	u64 end;
+	u32 old_flags;
+	int open;
+} rt3_fw_window;
+
+int rt3_fw_write_window_open(struct mtd_info *mtd, u64 offset, u64 size)
+{
+	struct rt3_layout layout;
+	unsigned int i, exact_targets = 0;
+	int exact_target = 0;
+	if (rt3_fw_window.open || !mtd ||
+	    mtd != &nand_info[CONFIG_NAND_FLASH_INFO_IDX] ||
+	    !mtd->erasesize || !mtd->writesize || !size ||
+	    offset > mtd->size || size > mtd->size - offset ||
+	    (offset % mtd->erasesize) || (size % mtd->erasesize))
+		return -EINVAL;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	if (!h3c_nand_ecc_write_allowed(mtd, offset, size))
+		return -EROFS;
+#endif
+	rt3_layout_invalidate_cache();
+	if (rt3_layout_read(&layout) ||
+	    (layout.mode != RT3_LAYOUT_DUAL && layout.mode != RT3_LAYOUT_SINGLE) ||
+	    !layout.count || layout.count > RT3_LAYOUT_MAX_PARTITIONS)
+		return -EROFS;
+	for (i = 0; i < layout.count; i++) {
+		const struct rt3_partition *part = &layout.parts[i];
+		int root_name = !strcmp(part->name, "rootfs");
+		int rootfs1_name = !strcmp(part->name, "rootfs_1");
+		if (layout.mode == RT3_LAYOUT_SINGLE && rootfs1_name)
+			return -EROFS;
+		if ((root_name || (layout.mode == RT3_LAYOUT_DUAL && rootfs1_name)) &&
+		    part->offset == offset && part->size == size) {
+			exact_target = 1;
+			exact_targets++;
+		}
+	}
+	if (!exact_target || exact_targets != 1)
+		return -EROFS;
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+#endif
+	rt3_fw_window.mtd = mtd;
+	rt3_fw_window.start = offset;
+	rt3_fw_window.end = offset + size;
+	rt3_fw_window.old_flags = mtd->flags;
+	rt3_fw_window.open = 1;
+	mtd->flags |= MTD_WRITEABLE;
+	return 0;
+}
+
+void rt3_fw_write_window_close(void)
+{
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+	nx30_d_qpic_write_window_close();
+#else
+	if (rt3_fw_window.open && rt3_fw_window.mtd)
+		rt3_fw_window.mtd->flags = rt3_fw_window.old_flags;
+#endif
+	memset(&rt3_fw_window, 0, sizeof(rt3_fw_window));
+}
+
+int rt3_fw_write_window_allows(struct mtd_info *mtd, u64 offset, u64 size)
+{
+	return rt3_fw_core_range_allows(rt3_fw_window.open, rt3_fw_window.mtd,
+					mtd, rt3_fw_window.start,
+					rt3_fw_window.end, offset,
+					size, 0, 0);
+}
+
+/* HW-C may update only the two exact BOOTCONFIG rows. */
+int rt3_bootconfig_write_window_open(struct mtd_info *mtd, const char *name,
+                                     u64 offset, u64 size)
+{
+#if !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+	(void)mtd; (void)name; (void)offset; (void)size;
+	return -EROFS;
+#else
+	u32 start = 0, count = 0;
+	u64 expected;
+	if (!name || rt3_fw_window.open || !mtd ||
+	    mtd != &nand_info[CONFIG_NAND_FLASH_INFO_IDX] ||
+	    mtd->type != MTD_NANDFLASH || mtd->size != (128ULL << 20) ||
+	    mtd->erasesize != (128U << 10) || mtd->writesize != 2048 ||
+	    size != 0x40000 || offset % mtd->erasesize ||
+	    offset > mtd->size || size > mtd->size - offset)
+		return -EROFS;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	if (!h3c_nand_ecc_write_allowed(mtd, offset, size))
+		return -EROFS;
+#endif
+	if (smem_getpart((char *)name, &start, &count) || count != 2)
+		return -EROFS;
+	if (!strcmp(name, "0:BOOTCONFIG")) expected = 0x100000;
+	else if (!strcmp(name, "0:BOOTCONFIG1")) expected = 0x140000;
+	else return -EROFS;
+	if (offset != expected || (u64)start * mtd->erasesize != expected ||
+	    (u64)count * mtd->erasesize != size)
+		return -EROFS;
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+#endif
+	rt3_fw_window.mtd = mtd;
+	rt3_fw_window.start = offset;
+	rt3_fw_window.end = offset + size;
+	rt3_fw_window.old_flags = mtd->flags;
+	rt3_fw_window.open = 1;
+	mtd->flags |= MTD_WRITEABLE;
+	return 0;
+#endif
+}
+
+/* A narrow, exact-name aperture shared only by audited B metadata writers. */
+int rt3_metadata_write_window_open(struct mtd_info *mtd, const char *name,
+				   u64 offset, u64 size)
+{
+	static const char * const allowed[] = {
+		"0:APPSBLENV", "0:APPSBL",
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B)
+		"0:APPSBL_1",
+#endif
+		"0:ART", "0:CDT", "0:CDT_1",
+	};
+	struct rt3_layout layout;
+	u32 start_blocks = 0, size_blocks = 0;
+	u64 smem_offset, smem_size;
+	unsigned int i;
+	size_t name_len;
+	int name_allowed = 0;
+	extern loff_t board_env_offset;
+	extern loff_t board_env_size;
+
+	if (!name)
+		return -EINVAL;
+	name_len = strnlen(name, RT3_LAYOUT_PARTITION_NAME_LEN);
+	if (!name_len || name_len >= RT3_LAYOUT_PARTITION_NAME_LEN ||
+	    rt3_fw_window.open || !mtd || !size ||
+	    mtd != &nand_info[CONFIG_NAND_FLASH_INFO_IDX] ||
+	    !mtd->erasesize || !mtd->writesize ||
+	    mtd->erasesize != qca_smem_flash_info.flash_block_size ||
+	    offset > mtd->size || size > mtd->size - offset ||
+	    (offset % mtd->erasesize) || (size % mtd->erasesize))
+		return -EINVAL;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	if (!h3c_nand_ecc_write_allowed(mtd, offset, size))
+		return -EROFS;
+#endif
+	for (i = 0; i < ARRAY_SIZE(allowed); i++) {
+		if (!strcmp(name, allowed[i])) {
+			name_allowed = 1;
+			break;
+		}
+	}
+	if (mtd->size != (128ULL << 20) || mtd->erasesize != (128U << 10) ||
+	    mtd->writesize != 2048 || !name_allowed ||
+	    rt3_layout_read(&layout) || layout.mode == RT3_LAYOUT_UNSUPPORTED ||
+	    smem_getpart((char *)name, &start_blocks, &size_blocks) || !size_blocks)
+		return -EROFS;
+	smem_offset = (u64)start_blocks * mtd->erasesize;
+	smem_size = (u64)size_blocks * mtd->erasesize;
+	if (offset != smem_offset || size != smem_size)
+		return -EROFS;
+	/* Exact RT3000-B SMEM extents are a backstop against a malformed table. */
+	if ((!strcmp(name, "0:CDT") &&
+	     ((offset != 0x400000 && offset != 0x440000) || size != 0x40000)) ||
+	    (!strcmp(name, "0:CDT_1") &&
+	     ((offset != 0x400000 && offset != 0x440000) || size != 0x40000)) ||
+	    (!strcmp(name, "0:APPSBLENV") &&
+	     (offset != 0x480000 || size != 0x80000 ||
+	      offset != (u64)board_env_offset || size != (u64)board_env_size)) ||
+	    ((!strcmp(name, "0:APPSBL") || !strcmp(name, "0:APPSBL_1")) &&
+	     ((offset != 0x500000 && offset != 0x640000) || size != 0x140000)) ||
+	    (!strcmp(name, "0:ART") &&
+	     (offset != 0x780000 || size != 0x100000)))
+		return -EROFS;
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+#endif
+	rt3_fw_window.mtd = mtd;
+	rt3_fw_window.start = offset;
+	rt3_fw_window.end = offset + size;
+	rt3_fw_window.old_flags = mtd->flags;
+	rt3_fw_window.open = 1;
+	mtd->flags |= MTD_WRITEABLE;
+	return 0;
+}
+/* SMEM table ABI used by smem_getpart(); rt3_layout_read validates this full table. */
+#define RT3_NAMED_SMEM_PART_MAX 32U
+struct rt3_named_smem_part {
+	char name[RT3_LAYOUT_PARTITION_NAME_LEN];
+	u32 start;
+	u32 size;
+	u32 attr;
+} __attribute__((packed));
+struct rt3_named_smem_table {
+	u32 magic[2];
+	u32 version;
+	u32 len;
+	struct rt3_named_smem_part parts[RT3_NAMED_SMEM_PART_MAX];
+} __attribute__((packed));
+
+int rt3_named_nand_write_window_open(struct mtd_info *mtd, const char *name,
+				     u64 offset, u64 size)
+{
+#if defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+	/* A/C metadata has a separate reviewed whitelist; never inherit B's generic writer. */
+	(void)mtd; (void)name; (void)offset; (void)size;
+	return -EROFS;
+#else
+	struct rt3_layout layout, verified_layout;
+	const struct rt3_named_smem_table *table;
+	const struct rt3_named_smem_part *found = NULL;
+	u32 start_blocks = 0, size_blocks = 0;
+	u64 table_offset, table_size, block_count;
+	unsigned int i, matches = 0;
+	size_t name_len;
+
+	if (!name)
+		return -EINVAL;
+	name_len = strnlen(name, RT3_LAYOUT_PARTITION_NAME_LEN);
+	if (!name_len || name_len >= RT3_LAYOUT_PARTITION_NAME_LEN ||
+	    rt3_fw_window.open || !mtd ||
+	    mtd != &nand_info[CONFIG_NAND_FLASH_INFO_IDX] || !size ||
+	    !mtd->erasesize || !mtd->writesize ||
+	    mtd->size != (128ULL << 20) ||
+	    mtd->erasesize != (128U << 10) || mtd->writesize != 2048 ||
+	    mtd->erasesize != qca_smem_flash_info.flash_block_size ||
+	    offset > mtd->size || size > mtd->size - offset ||
+	    (offset % mtd->erasesize) || (size % mtd->erasesize))
+		return -EINVAL;
+
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	if (!h3c_nand_ecc_write_allowed(mtd, offset, size))
+		return -EROFS;
+#endif
+
+	rt3_layout_invalidate_cache();
+	if (rt3_layout_read(&layout) ||
+	    (layout.mode != RT3_LAYOUT_DUAL && layout.mode != RT3_LAYOUT_SINGLE))
+		return -EROFS;
+
+	/* Match against the validated raw table as well as smem_getpart below. */
+	table = get_smem_ptable_addr();
+	if (!table || !table->len || table->len > RT3_NAMED_SMEM_PART_MAX)
+		return -EROFS;
+	for (i = 0; i < table->len; i++) {
+		if (!strcmp(table->parts[i].name, name)) {
+			found = &table->parts[i];
+			matches++;
+		}
+	}
+	if (!found || matches != 1 || !found->size)
+		return -EROFS;
+
+	block_count = mtd->size / mtd->erasesize;
+	if (found->start >= block_count || found->size > block_count - found->start)
+		return -EROFS;
+	table_offset = (u64)found->start * mtd->erasesize;
+	table_size = (u64)found->size * mtd->erasesize;
+	if (smem_getpart((char *)name, &start_blocks, &size_blocks) ||
+	    !size_blocks || start_blocks != found->start ||
+	    size_blocks != found->size ||
+	    offset != table_offset || size != table_size ||
+	    rt3_layout_read(&verified_layout) ||
+	    verified_layout.fingerprint != layout.fingerprint)
+		return -EROFS;
+
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+#endif
+	rt3_fw_window.mtd = mtd;
+	rt3_fw_window.start = offset;
+	rt3_fw_window.end = offset + size;
+	rt3_fw_window.old_flags = mtd->flags;
+	rt3_fw_window.open = 1;
+	mtd->flags |= MTD_WRITEABLE;
+	return 0;
+#endif
+}
+
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+/* A/C RAM-only targets have no writable QPIC aperture; satisfy shared-handler links. */
+int rt3_fw_write_window_open(struct mtd_info *mtd, u64 offset, u64 size)
+{
+	return -EROFS;
+}
+void rt3_fw_write_window_close(void) {}
+int rt3_fw_write_window_allows(struct mtd_info *mtd, u64 offset, u64 size)
+{
+	return 0;
+}
+int rt3_metadata_write_window_open(struct mtd_info *mtd, const char *name,
+                                   u64 offset, u64 size)
+{
+	return -EROFS;
+}
+int rt3_named_nand_write_window_open(struct mtd_info *mtd, const char *name,
+                                     u64 offset, u64 size)
+{
+	return -EROFS;
+}
+int rt3_bootconfig_write_window_open(struct mtd_info *mtd, const char *name,
+                                     u64 offset, u64 size)
+{
+	return -EROFS;
+}
+
+#endif
+
+/* NX30 D NAND service: a separate ECC4-only aperture. The layout/service
+ * layer must validate SMEM and transaction intent before opening this window;
+ * this driver independently accepts only exact fixed physical extents.
+ */
+#if defined(CONFIG_H3C_HW_D_STORAGE_PORT)
+#include <nx30_d_protect_core.h>
+static int qpic_serial_get_feature(struct mtd_info *mtd, uint32_t ftr_addr);
+static int qpic_serial_set_feature(struct mtd_info *mtd, uint32_t ftr_addr, uint32_t value);
+static struct {
+ struct mtd_info *mtd;
+ u32 old_flags;
+ struct nx30_d_qpic_window_core core;
+ struct nx30_d_protect_state protection;
+} nx30_d_nand_window;
+static int nx30_d_window_close_error;
+
+static int nx30_d_protect_get(void *context, unsigned int *value)
+{
+ int ret=qpic_serial_get_feature(context,FLASH_SPI_NAND_BLK_PROCT_ADDR);
+ if (ret<0) return ret;
+ *value=((unsigned int)ret>>8)&255U;
+ return 0;
+}
+static int nx30_d_protect_set(void *context, unsigned int value)
+{
+ return qpic_serial_set_feature(context,FLASH_SPI_NAND_BLK_PROCT_ADDR,value);
+}
+
+int nx30_d_qpic_write_window_open(struct mtd_info *mtd, u64 offset, u64 size,
+                                  unsigned int ecc_bits)
+{
+ int ret;
+ struct nx30_d_qpic_window_core checked={0};
+ struct nx30_d_protect_io io={mtd,nx30_d_protect_get,nx30_d_protect_set};
+ if (nx30_d_nand_window.core.open || nx30_d_nand_window.protection.fault || !mtd ||
+     mtd != &nand_info[CONFIG_QPIC_NAND_NAND_INFO_IDX] ||
+     mtd->type != MTD_NANDFLASH || mtd->size != (128ULL<<20) ||
+     mtd->erasesize != 0x20000 || mtd->writesize != 0x800 ||
+     ecc_bits != 4 || offset>mtd->size || size>mtd->size-offset ||
+     offset%mtd->erasesize || size%mtd->erasesize)
+  return -EROFS;
+ ret=h3c_nand_ecc_select_mode(ecc_bits);
+ if (ret || mtd->ecc_strength!=ecc_bits ||
+     !h3c_nand_ecc_write_allowed(mtd,offset,size))
+  return ret?ret:-EROFS;
+ ret=nx30_d_qpic_window_core_open(&checked,mtd,1,ecc_bits,offset,size);
+ if (ret) return -EROFS;
+ /* Validate identity/range before touching A0. Keep array aperture closed. */
+ ret=nx30_d_protect_begin(&nx30_d_nand_window.protection,&io,FLASH_SPI_NAND_BLK_PROCT_ENABLE);
+ if (ret) {
+  nx30_d_window_close_error=nx30_d_nand_window.protection.fault?-EIO:0;
+  return -EIO;
+ }
+ nx30_d_nand_window.mtd=mtd;
+ nx30_d_nand_window.old_flags=mtd->flags;
+ nx30_d_nand_window.core=checked;
+ nx30_d_window_close_error=0;
+ mtd->flags|=MTD_WRITEABLE;
+ return 0;
+}
+
+void nx30_d_qpic_write_window_close(void)
+{
+ struct mtd_info *mtd=nx30_d_nand_window.mtd;
+ struct nx30_d_protect_io io={mtd,nx30_d_protect_get,nx30_d_protect_set};
+ if (!nx30_d_nand_window.core.open || !mtd) return;
+ /* Close the array aperture before restoring the original feature byte. */
+ nx30_d_qpic_window_core_close(&nx30_d_nand_window.core);
+ mtd->flags=nx30_d_nand_window.old_flags;
+ nx30_d_window_close_error=nx30_d_protect_end(&nx30_d_nand_window.protection,&io)?-EIO:0;
+ nx30_d_nand_window.mtd=NULL;
+ if (nx30_d_window_close_error)
+  puts("NX30 D: NAND protection restore failed; subsequent writes blocked until restart\n");
+}
+
+int nx30_d_qpic_write_window_close_error(void) { return nx30_d_window_close_error; }
+int nx30_d_qpic_write_window_allows(struct mtd_info *mtd,u64 offset,u64 size)
+{
+ return mtd && mtd->ecc_strength==4 &&
+        nx30_d_qpic_window_core_allows(&nx30_d_nand_window.core,mtd,offset,size,4);
+}
+#else
+int nx30_d_qpic_write_window_open(struct mtd_info *mtd,u64 offset,u64 size,
+                                  unsigned int ecc_bits) { return -EROFS; }
+void nx30_d_qpic_write_window_close(void) {}
+int nx30_d_qpic_write_window_close_error(void) { return 0; }
+int nx30_d_qpic_write_window_allows(struct mtd_info *mtd,u64 offset,u64 size) { return 0; }
+#endif
+
 struct bam_desc qpic_cmd_desc_fifo[QPIC_BAM_CMD_FIFO_SIZE]
 			__attribute__ ((aligned(CONFIG_SYS_CACHELINE_SIZE)));
 struct bam_desc qpic_data_desc_fifo[QPIC_BAM_DATA_FIFO_SIZE]
@@ -614,7 +1160,15 @@ qpic_nand_wait_for_cmd_exec(uint32_t num_desc)
 	bam_sys_gen_event(&bam, CMD_PIPE_INDEX, num_desc);
 
 	/* Wait for the descriptors to be processed */
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	{
+		unsigned long started = get_timer(0);
+		if (bam_wait_for_interrupt(&bam, CMD_PIPE_INDEX, P_PRCSD_DESC_EN_MASK))
+			nx30_nor_nand_bam_error = nx30_nor_nand_bam_wait_status(started);
+	}
+#else
 	bam_wait_for_interrupt(&bam, CMD_PIPE_INDEX, P_PRCSD_DESC_EN_MASK);
+#endif
 
 	/* Read offset update for the circular FIFO */
 	bam_read_offset_update(&bam, CMD_PIPE_INDEX);
@@ -624,7 +1178,15 @@ static void
 qpic_nand_wait_for_data(uint32_t pipe_num)
 {
 	/* Wait for the descriptors to be processed */
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	{
+		unsigned long started = get_timer(0);
+		if (bam_wait_for_interrupt(&bam, pipe_num, P_PRCSD_DESC_EN_MASK))
+			nx30_nor_nand_bam_error = nx30_nor_nand_bam_wait_status(started);
+	}
+#else
 	bam_wait_for_interrupt(&bam, pipe_num, P_PRCSD_DESC_EN_MASK);
+#endif
 
 	/* Read offset update for the circular FIFO */
 	bam_read_offset_update(&bam, pipe_num);
@@ -1248,6 +1810,15 @@ qpic_nand_save_config(struct mtd_info *mtd)
 	uint32_t recovery_cycle = 7;
 	uint32_t wr_rd_busy_gap = 2;
 
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	/* Rebuild cached QPIC registers when the exact C8:41 profile changes ECC. */
+	dev->cfg0 = 0;
+	dev->cfg1 = 0;
+	dev->cfg0_raw = 0;
+	dev->cfg1_raw = 0;
+	dev->ecc_bch_cfg = 0;
+#endif
+
 	/* Save Configurations */
 	dev->cws_per_page = dev->page_size >> NAND_CW_DIV_RIGHT_SHIFT;
 
@@ -1515,6 +2086,9 @@ static int qpic_nand_read_id_serial(struct mtd_info *mtd)
 	int i;
 	int is_idfound;
 	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	qpic_serial_model_identified = false;
+#endif
 
 	nand_ret = qpic_nand_fetch_id(mtd);
 	if (!nand_ret) {
@@ -1537,6 +2111,9 @@ static int qpic_nand_read_id_serial(struct mtd_info *mtd)
 					(serial_params->id[1] == serial_dev_id[1]));
 
 			if (is_idfound) {
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+				qpic_serial_model_identified = true;
+#endif
 				printf("Serial Nand Device Found With ID: 0x%02x 0x%02x\n",
 						serial_dev_id[0],serial_dev_id[1]);
 
@@ -1561,7 +2138,7 @@ id_err:
 
 int qpic_spi_nand_config(struct mtd_info *mtd)
 {
-	uint32_t status = 0x0;
+	int status = 0;
 	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
 	uint32_t cmd3_val = NAND_FLASH_DEV_CMD3_VAL;
 
@@ -1582,6 +2159,11 @@ int qpic_spi_nand_config(struct mtd_info *mtd)
 		return status;
 	}
 
+#if defined(CONFIG_H3C_HW_D_NOR_RESCUE) || defined(CONFIG_H3C_HW_D_RAM_AUTOECC)
+	/* Read-only rescue never needs to unlock NAND array writes. */
+	qspi_debug("%s: NOR rescue leaves block protection unchanged\n",
+		   __func__);
+#else
 	if ((status >> 8) & FLASH_SPI_NAND_BLK_PROCT_ENABLE) {
 		qspi_debug("%s: Block protection is enabled\n",__func__);
 		qspi_debug("%s: Issuing set feature command to disable it.\n",__func__);
@@ -1608,6 +2190,8 @@ int qpic_spi_nand_config(struct mtd_info *mtd)
 			qspi_debug("%s : Block protection Disabled.\n",__func__);
 	} else
 		qspi_debug("%s: Block protection Disabled on Power on.\n",__func__);
+
+#endif
 
 	/* Get Internal ECC status */
 	status = qpic_serial_get_feature(mtd, FLASH_SPI_NAND_FR_ADDR);
@@ -1694,9 +2278,9 @@ int qpic_spi_nand_config(struct mtd_info *mtd)
 			qspi_debug("%s : Quad bit not enabled.\n",__func__);
 			qspi_debug("%s : Issuning set feature command to enable it.\n",
 					__func__);
-			/* Enable quad bit */
+			/* Preserve buffer mode and other feature bits when enabling QE. */
 			status = qpic_serial_set_feature(mtd, FLASH_SPI_NAND_FR_ADDR,
-			FLASH_SPI_NAND_FR_QUAD_ENABLE);
+				(status >> 8) | FLASH_SPI_NAND_FR_QUAD_ENABLE);
 			if (status < 0) {
 				printf("%s : Error in enabling Quad bit.\n",__func__);
 				return status;
@@ -2276,7 +2860,7 @@ static int qpic_nand_block_isbad(struct mtd_info *mtd, loff_t offs)
 }
 
 /* Return num of desc added. */
-static void
+static void QPIC_STAGE0_UNUSED
 qpic_nand_add_wr_page_cws_cmd_desc(struct mtd_info *mtd, struct cfg_params *cfg,
 				   uint32_t status[],
 				   enum nand_cfg_value cfg_mode)
@@ -2468,6 +3052,25 @@ qpic_nand_write_page(struct mtd_info *mtd, uint32_t pg_addr,
 					 struct mtd_oob_ops *ops)
 {
 	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
+#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	if (cfg_mode != NAND_CFG || !dev || !ops ||
+	    ops->mode != MTD_OPS_AUTO_OOB || !ops->datbuf || !ops->oobbuf ||
+	    ops->ooblen != dev->oob_per_page ||
+	    !nx30_d_qpic_write_window_allows(mtd,
+		    (u64)pg_addr * mtd->writesize, mtd->writesize))
+		return h3c_hw_d_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY)
+	return h3c_hw_a_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	return h3c_hw_c_nand_write_rejected();
+#elif defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+	/* qpic_nand_write_oob rejects caller OOB; these are QPIC-generated ECC bytes. */
+	if (!dev || cfg_mode != NAND_CFG || !ops || ops->mode != MTD_OPS_AUTO_OOB ||
+	    !ops->datbuf || !ops->oobbuf || ops->ooblen != dev->oob_per_page ||
+	    !rt3_fw_write_window_allows(mtd,
+	    (u64)pg_addr * mtd->writesize, mtd->writesize))
+		return -EROFS;
+#endif
 	struct cfg_params cfg;
 	int nand_ret = NANDC_RESULT_SUCCESS;
 	unsigned i;
@@ -2519,6 +3122,14 @@ static int
 qpic_nand_mark_badblock(struct mtd_info *mtd, loff_t offs)
 {
 	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
+
+#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	return h3c_hw_d_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY)
+	return h3c_hw_a_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	return h3c_hw_c_nand_write_rejected();
+#endif
 	struct nand_chip *chip = MTD_NAND_CHIP(mtd);
 	uint32_t page;
 	int nand_ret = NANDC_RESULT_SUCCESS;
@@ -4143,6 +4754,20 @@ static int qpic_nand_write_oob(struct mtd_info *mtd, loff_t to,
 	u_long num_pages;
 	enum nand_cfg_value cfg_mode;
 
+#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	if (!ops || ops->mode != MTD_OPS_AUTO_OOB || ops->ooblen ||
+	    ops->oobbuf || !nx30_d_qpic_write_window_allows(mtd,to,ops->len))
+		return h3c_hw_d_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY)
+	return h3c_hw_a_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	return h3c_hw_c_nand_write_rejected();
+#elif defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+	/* Only plain ECC data writes within the writer's exact range are allowed. */
+	if (!ops || ops->mode != MTD_OPS_AUTO_OOB || ops->ooblen ||
+	    ops->oobbuf || !rt3_fw_write_window_allows(mtd, to, ops->len))
+		return -EROFS;
+#endif
 	/* We don't support MTD_OOB_PLACE as of yet. */
 	if (ops->mode == MTD_OPS_PLACE_OOB)
 		return -ENOSYS;
@@ -4249,6 +4874,24 @@ static int qpic_nand_write(struct mtd_info *mtd, loff_t to, size_t len,
  */
 nand_result_t qpic_nand_blk_erase(struct mtd_info *mtd, uint32_t page)
 {
+	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
+#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	u64 offset=(u64)page*mtd->writesize;
+	if (!dev || !dev->num_pages_per_blk ||
+	    page%dev->num_pages_per_blk ||
+	    !nx30_d_qpic_write_window_allows(mtd,offset,mtd->erasesize))
+		return h3c_hw_d_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY)
+	return h3c_hw_a_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	return h3c_hw_c_nand_write_rejected();
+#elif defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+	u64 offset = (u64)page * mtd->writesize;
+	if (!dev || !dev->num_pages_per_blk ||
+	    (page % dev->num_pages_per_blk) ||
+	    !rt3_fw_write_window_allows(mtd, offset, mtd->erasesize))
+		return -EROFS;
+#endif
 	struct cfg_params cfg;
 	struct cmd_element *cmd_list_ptr = ce_array;
 	struct cmd_element *cmd_list_read_ptr = ce_read_array;
@@ -4256,9 +4899,10 @@ nand_result_t qpic_nand_blk_erase(struct mtd_info *mtd, uint32_t page)
 	struct cmd_element *cmd_list_read_ptr_start = ce_read_array;
 	uint32_t status;
 	int num_desc = 0;
-	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
 	uint32_t blk_addr = page / (dev->num_pages_per_blk);
+#if !defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) && !defined(CONFIG_H3C_HW_D_STORAGE_PORT)
 	struct nand_chip *chip = MTD_NAND_CHIP(mtd);
+#endif
 
 	/* Fill in params for the erase flash cmd */
 	cfg.addr0 = page;
@@ -4349,7 +4993,9 @@ nand_result_t qpic_nand_blk_erase(struct mtd_info *mtd, uint32_t page)
 	if (status) {
 		printf("NAND Erase error: Block address belongs to "
 		       "bad block: %d\n", blk_addr);
+#if !defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) && !defined(CONFIG_H3C_HW_D_STORAGE_PORT)
 		qpic_nand_mark_badblock(mtd, (page << chip->page_shift));
+#endif
 		return status;
 	}
 
@@ -4357,11 +5003,11 @@ nand_result_t qpic_nand_blk_erase(struct mtd_info *mtd, uint32_t page)
 	if (!(status & PROG_ERASE_OP_RESULT))
 		return NANDC_RESULT_SUCCESS;
 
+#if !defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) && !defined(CONFIG_H3C_HW_D_STORAGE_PORT)
 	qpic_nand_mark_badblock(mtd, (page << chip->page_shift));
+#endif
 	return status;
 }
-
-
 int
 qpic_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 {
@@ -4374,6 +5020,17 @@ qpic_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	struct nand_chip *chip = MTD_NAND_CHIP(mtd);
 	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
 
+#if defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	if (!instr || !nx30_d_qpic_write_window_allows(mtd,instr->addr,instr->len))
+		return h3c_hw_d_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY)
+	return h3c_hw_a_nand_write_rejected();
+#elif defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	return h3c_hw_c_nand_write_rejected();
+#elif defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+	if (!instr || !rt3_fw_write_window_allows(mtd, instr->addr, instr->len))
+		return -EROFS;
+#endif
 	/* Check for erase past end of device. */
 	if ((instr->addr + instr->len) > mtd->size)
 		return -EINVAL;
@@ -4405,6 +5062,9 @@ qpic_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 		if (ret) {
 			instr->fail_addr = offs;
 			printf("Erase operation failed \n");
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+			return ret;
+#endif
 		}
 	}
 	return ret;
@@ -4416,6 +5076,10 @@ qpic_nand_mtd_params(struct mtd_info *mtd)
 	struct nand_chip *chip = MTD_NAND_CHIP(mtd);
 	mtd->type = MTD_NANDFLASH;
 	mtd->flags = MTD_CAP_NANDFLASH;
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	/* Make UBI attach read-only; QPIC write/erase guards remain the backstop. */
+	mtd->flags &= ~MTD_WRITEABLE;
+#endif
 
 	mtd->_erase = qpic_nand_erase;
 #ifndef __UBOOT__
@@ -4568,7 +5232,7 @@ static int qpic_find_most_appropriate_phase(u8 *phase_table, int phase_count)
 	return phase;
 }
 
-static int qpic_execute_serial_training(struct mtd_info *mtd)
+static int QPIC_STAGE0_UNUSED qpic_execute_serial_training(struct mtd_info *mtd)
 {
 	struct qpic_nand_dev *dev = MTD_QPIC_NAND_DEV(mtd);
 	struct nand_chip *chip = MTD_NAND_CHIP(mtd);
@@ -4775,9 +5439,16 @@ void qpic_nand_init(qpic_nand_cfg_t *qpic_nand_cfg)
 	size_t alloc_size;
 	unsigned char *buf;
 	struct qpic_nand_init_config config;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	size_t alloc_oob_size;
+#endif
 	fdt_addr_t nand_base;
 	int i;
 
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	/* Clear first: an early return must never inherit stale completion. */
+	nx30_nor_nand_qpic_complete = 0;
+#endif
 	while (of_match->compatible) {
 		ret = fdt_node_offset_by_compatible(gd->fdt_blob, 0,
 						of_match->compatible);
@@ -4912,10 +5583,19 @@ void qpic_nand_init(qpic_nand_cfg_t *qpic_nand_cfg)
 	 * dev->zero_oob, dev->tmp_datbuf, dev->tmp_oobbuf
 	 *
 	 */
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	alloc_oob_size = max_t(size_t, mtd->oobsize, dev->spare_size);
+#ifdef CONFIG_PAGE_SCOPE_MULTI_PAGE_READ
+	alloc_size = 3 * (mtd->writesize + (alloc_oob_size * MAX_MULTI_PAGE));
+#else
+	alloc_size = 3 * (mtd->writesize + alloc_oob_size);
+#endif
+#else
 #ifdef CONFIG_PAGE_SCOPE_MULTI_PAGE_READ
 	alloc_size = 3 * (mtd->writesize + (mtd->oobsize * MAX_MULTI_PAGE));
 #else
 	alloc_size = 3 * (mtd->writesize + mtd->oobsize);
+#endif
 #endif
 
 	dev->buffers = malloc(alloc_size);
@@ -4929,29 +5609,57 @@ void qpic_nand_init(qpic_nand_cfg_t *qpic_nand_cfg)
 	dev->pad_dat = buf;
 	buf += mtd->writesize;
 	dev->pad_oob = buf;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+#ifdef CONFIG_PAGE_SCOPE_MULTI_PAGE_READ
+	buf += alloc_oob_size * MAX_MULTI_PAGE;
+#else
+	buf += alloc_oob_size;
+#endif
+#else
 #ifdef CONFIG_PAGE_SCOPE_MULTI_PAGE_READ
 	buf += mtd->oobsize * MAX_MULTI_PAGE;
 #else
 	buf += mtd->oobsize;
+#endif
 #endif
 
 	dev->zero_page = buf;
 	buf += mtd->writesize;
 
 	dev->zero_oob = buf;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	buf += alloc_oob_size;
+#else
 	buf += mtd->oobsize;
+#endif
 
 	memset(dev->zero_page, 0x0, mtd->writesize);
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	memset(dev->zero_oob, 0x0, alloc_oob_size);
+#else
 	memset(dev->zero_oob, 0x0, mtd->oobsize);
+#endif
 
 	dev->tmp_datbuf = buf;
 	buf += mtd->writesize;
 	dev->tmp_oobbuf = buf;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	buf += alloc_oob_size;
+#else
 	buf += mtd->oobsize;
+#endif
 
 #ifdef CONFIG_QSPI_SERIAL_TRAINING
 
 	/* start serial training here */
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	/*
+	 * qpic_spi_init() already selected the conservative 50 MHz bus clock
+	 * with feedback enabled. Training erases and programs 0:TRAINING.
+	 */
+	printf("RT3000-B stage-0: skip serial training; keep 50 MHz default\n");
+	ret = 0;
+#else
 #ifdef CONFIG_QSPI_LAYOUT_SWITCH
 	if (qpic_layout != QPIC_NAND_LAYOUT_SBL)
 		ret = qpic_execute_serial_training(mtd);
@@ -4961,6 +5669,7 @@ void qpic_nand_init(qpic_nand_cfg_t *qpic_nand_cfg)
 	}
 #else
 	ret = qpic_execute_serial_training(mtd);
+#endif
 #endif
 
 	if (ret) {
@@ -4997,13 +5706,253 @@ void qpic_nand_init(qpic_nand_cfg_t *qpic_nand_cfg)
 		ret = NANDC_RESULT_FAILURE;
 		goto err_reg;
 	}
-	if (ret == 0)
+	if (ret == 0) {
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+		/* Only the completed QPIC + buffer + MTD registration path sets this. */
+		nx30_nor_nand_qpic_complete = 1;
+#endif
 		return;
+	}
 err_reg:
 	free(dev->buffers);
 err_buf:
 	return;
 }
+
+
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+#define NX30_NOR_NAND_EXPECTED_SIZE 0x08000000U
+#define NX30_NOR_NAND_EXPECTED_PAGE 2048U
+#define NX30_NOR_NAND_EXPECTED_ERASE 0x20000U
+#define NX30_NOR_NAND_EXPECTED_SPARE 128U
+
+struct nx30_nor_nand_cfg_snapshot {
+	unsigned int cws_per_page, cw_size, bad_blk_loc, ecc_bytes_hw;
+	unsigned int spare_bytes, bbm_size, oob_per_page;
+	uint32_t cfg0, cfg1, cfg0_raw, cfg1_raw, ecc_bch_cfg;
+	uint32_t mtd_oobsize, mtd_oobavail, mtd_ecc_strength;
+	uint32_t mtd_writebufsize, mtd_bitflip_threshold, mtd_ecc_step_size;
+	struct nand_ecclayout *chip_layout;
+	struct nand_ecclayout chip_layout_contents;
+};
+
+static int nx30_nor_nand_validate(struct mtd_info **mtd_out)
+{
+	struct mtd_info *mtd = &nand_info[CONFIG_QPIC_NAND_NAND_INFO_IDX];
+	struct qpic_nand_dev *dev = &qpic_nand_dev;
+
+	if (!mtd->name || !mtd->priv || !serial_params || !serial_params->name ||
+	    serial_params->id[0] != 0xc8 || serial_params->id[1] != 0x41 ||
+	    strcmp(serial_params->name, "GD5F1GQ5REYIG") ||
+	    dev->density != NX30_NOR_NAND_EXPECTED_SIZE ||
+	    dev->page_size != NX30_NOR_NAND_EXPECTED_PAGE ||
+	    dev->spare_size != NX30_NOR_NAND_EXPECTED_SPARE ||
+	    h3c_qpic_nand_physical_spare() != NX30_NOR_NAND_EXPECTED_SPARE ||
+	    mtd->size != NX30_NOR_NAND_EXPECTED_SIZE ||
+	    mtd->writesize != NX30_NOR_NAND_EXPECTED_PAGE ||
+	    mtd->erasesize != NX30_NOR_NAND_EXPECTED_ERASE ||
+	    (mtd->oobsize != 64 && mtd->oobsize != 80) ||
+	    (mtd->ecc_strength != NX30_NOR_NAND_ECC4 &&
+	     mtd->ecc_strength != NX30_NOR_NAND_ECC8) ||
+	    !dev->buffers || !dev->pad_dat || !dev->pad_oob ||
+	    !dev->zero_page || !dev->zero_oob || !dev->tmp_datbuf ||
+	    !dev->tmp_oobbuf || !mtd->_read || !mtd->_read_oob)
+		return -ENODEV;
+
+	if (mtd_out)
+		*mtd_out = mtd;
+	return 0;
+}
+
+int nx30_nor_nand_init_once(void)
+{
+	int ret;
+
+	if (nx30_nor_nand_init_attempted)
+		return nx30_nor_nand_init_result;
+
+	nx30_nor_nand_init_attempted = 1;
+	nx30_nor_nand_init_result = -EINPROGRESS;
+	/* Accept a completed earlier init, otherwise invoke the QPIC probe once. */
+	ret = nx30_nor_nand_qpic_complete ?
+		nx30_nor_nand_validate(NULL) : -ENODEV;
+	if (ret) {
+		nx30_nor_nand_bam_error = 0;
+		qpic_nand_init(NULL);
+		if (nx30_nor_nand_bam_error)
+			ret = nx30_nor_nand_bam_error;
+	}
+	if (!nx30_nor_nand_bam_error)
+		ret = nx30_nor_nand_qpic_complete ?
+			nx30_nor_nand_validate(NULL) : -ENODEV;
+	nx30_nor_nand_init_result = ret;
+	if (ret)
+		printf("H3C NAND ECC: exact C8:41 NAND init/probe failed (%d)\n", ret);
+	return ret;
+}
+
+static void nx30_nor_nand_save_cfg(struct mtd_info *mtd,
+				   struct nx30_nor_nand_cfg_snapshot *s)
+{
+	struct qpic_nand_dev *dev = &qpic_nand_dev;
+	struct nand_chip *chip = MTD_NAND_CHIP(mtd);
+
+	s->cws_per_page = dev->cws_per_page; s->cw_size = dev->cw_size;
+	s->bad_blk_loc = dev->bad_blk_loc; s->ecc_bytes_hw = dev->ecc_bytes_hw;
+	s->spare_bytes = dev->spare_bytes; s->bbm_size = dev->bbm_size;
+	s->oob_per_page = dev->oob_per_page;
+	s->cfg0 = dev->cfg0; s->cfg1 = dev->cfg1;
+	s->cfg0_raw = dev->cfg0_raw; s->cfg1_raw = dev->cfg1_raw;
+	s->ecc_bch_cfg = dev->ecc_bch_cfg;
+	s->mtd_oobsize = mtd->oobsize; s->mtd_oobavail = mtd->oobavail;
+	s->mtd_ecc_strength = mtd->ecc_strength;
+	s->mtd_writebufsize = mtd->writebufsize;
+	s->mtd_bitflip_threshold = mtd->bitflip_threshold;
+	s->mtd_ecc_step_size = mtd->ecc_step_size;
+	s->chip_layout = chip->ecc.layout;
+	if (s->chip_layout)
+		s->chip_layout_contents = *s->chip_layout;
+}
+
+static void nx30_nor_nand_restore_cfg(struct mtd_info *mtd,
+				      const struct nx30_nor_nand_cfg_snapshot *s)
+{
+	struct qpic_nand_dev *dev = &qpic_nand_dev;
+	struct nand_chip *chip = MTD_NAND_CHIP(mtd);
+
+	dev->cws_per_page = s->cws_per_page; dev->cw_size = s->cw_size;
+	dev->bad_blk_loc = s->bad_blk_loc; dev->ecc_bytes_hw = s->ecc_bytes_hw;
+	dev->spare_bytes = s->spare_bytes; dev->bbm_size = s->bbm_size;
+	dev->oob_per_page = s->oob_per_page;
+	dev->cfg0 = s->cfg0; dev->cfg1 = s->cfg1;
+	dev->cfg0_raw = s->cfg0_raw; dev->cfg1_raw = s->cfg1_raw;
+	dev->ecc_bch_cfg = s->ecc_bch_cfg;
+	mtd->oobsize = s->mtd_oobsize; mtd->oobavail = s->mtd_oobavail;
+	mtd->ecc_strength = s->mtd_ecc_strength;
+	mtd->writebufsize = s->mtd_writebufsize;
+	mtd->bitflip_threshold = s->mtd_bitflip_threshold;
+	mtd->ecc_step_size = s->mtd_ecc_step_size;
+	if (s->chip_layout)
+		*s->chip_layout = s->chip_layout_contents;
+	chip->ecc.layout = s->chip_layout;
+}
+
+int nx30_nor_nand_set_read_ecc(unsigned int bits)
+{
+	struct nx30_nor_nand_cfg_snapshot old;
+	struct mtd_info *mtd;
+	struct qpic_nand_dev *dev = &qpic_nand_dev;
+	struct nand_chip *chip;
+	int ret;
+
+	if (bits != NX30_NOR_NAND_ECC4 && bits != NX30_NOR_NAND_ECC8)
+		return -EINVAL;
+	ret = nx30_nor_nand_init_once();
+	if (ret)
+		return ret;
+	ret = nx30_nor_nand_validate(&mtd);
+	if (ret)
+		return ret;
+	chip = MTD_NAND_CHIP(mtd);
+	if (!chip)
+		return -EIO;
+#ifdef CONFIG_H3C_QPIC_DUAL_ECC
+	/* Exact C8:41 QPIC codewords each protect 512 data bytes. */
+	if (dev->cws_per_page != 4 || mtd->writesize != 2048)
+		return -EIO;
+#endif
+	if (mtd->ecc_strength == bits) {
+		if (!chip->ecc.layout ||
+		    dev->cw_size != (bits == NX30_NOR_NAND_ECC4 ?
+				     NAND_CW_SIZE_4_BIT_ECC : NAND_CW_SIZE_8_BIT_ECC) ||
+		    mtd->oobsize != dev->cw_size * dev->cws_per_page - mtd->writesize ||
+		    mtd->oobavail != 16)
+			return -EIO;
+		mtd->ecc_step_size = 512;
+		return 0;
+	}
+
+	nx30_nor_nand_save_cfg(mtd, &old);
+	mtd->ecc_strength = bits;
+	mtd->oobsize = dev->spare_size;
+	mtd->oobavail = 0;
+	dev->cfg0 = 0; dev->cfg1 = 0;
+	dev->cfg0_raw = 0; dev->cfg1_raw = 0; dev->ecc_bch_cfg = 0;
+	ret = qpic_nand_save_config(mtd);
+	if (!ret)
+		mtd->ecc_step_size = 512;
+	if (ret || !chip->ecc.layout || mtd->ecc_strength != bits ||
+	    dev->cws_per_page != 4 ||
+	    mtd->ecc_step_size != 512 ||
+	    dev->cw_size != (bits == NX30_NOR_NAND_ECC4 ?
+			     NAND_CW_SIZE_4_BIT_ECC : NAND_CW_SIZE_8_BIT_ECC) ||
+	    mtd->oobsize != dev->cw_size * dev->cws_per_page - mtd->writesize ||
+	    mtd->oobsize > dev->spare_size || !mtd->oobavail ||
+	    mtd->oobavail != 16 || mtd->oobavail > mtd->oobsize) {
+		nx30_nor_nand_restore_cfg(mtd, &old);
+		return ret ? ret : -EIO;
+	}
+	dev->oob_per_page = mtd->oobavail;
+	mtd->bitflip_threshold = DIV_ROUND_UP(mtd->ecc_strength * 3, 4);
+	return 0;
+}
+
+int nx30_nor_nand_restore4(void)
+{
+	return nx30_nor_nand_set_read_ecc(NX30_NOR_NAND_ECC4);
+}
+
+int nx30_nor_nand_read_page(u64 physical_offset, void *data,
+			    size_t data_capacity, void *oob,
+			    size_t oob_capacity,
+			    struct nx30_nor_nand_read_result *result)
+{
+	struct mtd_info *mtd;
+	struct mtd_oob_ops ops;
+	int ret;
+
+	if (!result)
+		return -EINVAL;
+	memset(result, 0, sizeof(*result));
+	ret = nx30_nor_nand_validate(&mtd);
+	if (ret || nx30_nor_nand_init_result || !nx30_nor_nand_init_attempted)
+		return ret ? ret : -ENODEV;
+	if (!data || data_capacity < mtd->writesize ||
+	    (physical_offset % mtd->writesize) ||
+	    physical_offset > mtd->size - mtd->writesize ||
+	    (oob && oob_capacity < mtd->oobavail) || (!oob && oob_capacity))
+		return -EINVAL;
+
+	memset(&ops, 0, sizeof(ops));
+	ops.mode = MTD_OPS_AUTO_OOB;
+	ops.len = mtd->writesize;
+	ops.ooblen = oob ? mtd->oobavail : 0;
+	ops.datbuf = data;
+	ops.oobbuf = oob;
+	result->failed = 0;
+	result->corrected = 0;
+	{
+		unsigned int failed_before = mtd->ecc_stats.failed;
+		unsigned int corrected_before = mtd->ecc_stats.corrected;
+		nx30_nor_nand_bam_error = 0;
+		ret = qpic_nand_read_oob(mtd, physical_offset, &ops);
+		result->failed = mtd->ecc_stats.failed - failed_before;
+		result->corrected = mtd->ecc_stats.corrected - corrected_before;
+	}
+	if (nx30_nor_nand_bam_error) {
+		result->status = nx30_nor_nand_bam_error;
+		result->data_len = 0;
+		result->oob_len = 0;
+		result->max_bitflips = 0;
+		return 0;
+	}
+	result->status = ret;
+	result->data_len = ops.retlen;
+	result->oob_len = ops.oobretlen;
+	result->max_bitflips = ret < 0 ? 0 : ret;
+	return 0;
+}
+#endif /* CONFIG_H3C_QPIC_DUAL_ECC */
 
 #ifdef READ_ONFI_PAGE_PARA
 void Read_onfi_ParameterPage_DataStructure(unsigned char *ParPage, int size)
@@ -5449,3 +6398,12 @@ U_BOOT_CMD(qpic_nand, 2, 1, do_qpic_nand_cmd,
 	   "Switch between SBL and Linux kernel page on 4K NAND Flash.",
 	   "qpic_nand (sbl | linux)");
 #endif
+
+int rt3_fw_write_window_close_status(void)
+{
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+ return nx30_d_qpic_write_window_close_error();
+#else
+ return 0;
+#endif
+}

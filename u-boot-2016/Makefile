@@ -1392,18 +1392,9 @@ define filechk_timestamp.h
 	fi)
 endef
 
-GIT_HASH := $(or $(strip $(shell \
-	for try in . .. ../..; do \
-		git -C $(srctree)$$try rev-parse --short=7 HEAD 2>/dev/null && break; \
-	done)),unknown)
-
-GIT_DIRTY := $(or $(strip $(shell \
-	for try in . .. ../..; do \
-		if git -C $(srctree)$$try rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
-			test -n "$$(git -C $(srctree)$$try status --porcelain --untracked-files=no 2>/dev/null)" && echo 1 || echo 0; \
-			break; \
-		fi; \
-	done)),0)
+# srctree can be absolute without a trailing slash; Git discovers the parent repo.
+GIT_HASH := $(or $(strip $(shell git -C "$(srctree)" rev-parse --short=12 HEAD 2>/dev/null)),unknown)
+GIT_DIRTY := $(if $(strip $(shell git -C "$(srctree)" status --porcelain --untracked-files=no 2>/dev/null)),1,0)
 
 GIT_VERSION := $(GIT_HASH)$(if $(filter 1,$(GIT_DIRTY)),-dirty,)
 

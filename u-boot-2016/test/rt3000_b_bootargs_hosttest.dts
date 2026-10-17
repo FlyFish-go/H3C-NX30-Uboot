@@ -1,0 +1,6 @@
+/dts-v1/;
+/ {
+    chosen {
+        bootargs-append = "mtdparts=qcom_nand.0:0x80000@0(0:SBL1)ro,0x80000@0x80000(0:MIBIB)ro,0x80000@0x880000(0:TRAINING)ro,0x2800000@0x900000(oem_rootfs)ro,0x2800000@0x3100000(rootfs),0x600000@0x5900000(pdt_data)ro ubi.block=0,1 root=/dev/ubiblock0_1";
+    };
+};

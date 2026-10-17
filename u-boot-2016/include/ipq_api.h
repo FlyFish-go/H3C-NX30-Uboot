@@ -69,6 +69,8 @@ bool is_load_addr_valid(uintptr_t load_addr);
 bool is_memory_region_available(uintptr_t load_addr, size_t size);
 
 void detect_flash_device(void);
+struct spi_flash;
+const struct spi_flash *get_detected_spi_flash(void);
 bool has_spi(void);
 bool has_nand(void);
 bool has_mmc(void);

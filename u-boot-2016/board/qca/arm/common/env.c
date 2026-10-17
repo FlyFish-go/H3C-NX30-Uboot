@@ -49,6 +49,13 @@ int env_init(void)
 			    &sfi.flash_block_size,
 			    &sfi.flash_density);
 
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+	if (sfi.flash_type == SMEM_BOOT_SPI_FLASH) {
+#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
+		ret = sf_env_init();
+#endif
+	}
+#else
 	if (sfi.flash_type == SMEM_BOOT_SPI_FLASH) {
 #ifdef CONFIG_ENV_IS_IN_SPI_FLASH
 		ret = sf_env_init();
@@ -63,6 +70,7 @@ int env_init(void)
 #endif
 	}
 
+#endif
 	return ret;
 }
 
@@ -76,6 +84,17 @@ void env_relocate_spec(void)
 			    &sfi.flash_block_size,
 			    &sfi.flash_density);
 
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+	if (sfi.flash_type == SMEM_BOOT_SPI_FLASH) {
+#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
+		sf_env_relocate_spec();
+#else
+		set_default_env("NOR rescue has no SPI ENV backend");
+#endif
+	} else {
+		set_default_env("NOR rescue refuses non-SPI ENV source");
+	}
+#else
 	if (sfi.flash_type == SMEM_BOOT_NO_FLASH) {
 		set_default_env("!flashless boot");
 #ifdef CONFIG_ENV_IS_IN_SPI_FLASH
@@ -92,6 +111,7 @@ void env_relocate_spec(void)
 #endif
 	}
 
+#endif
 };
 
 #ifdef CONFIG_QCA_MMC

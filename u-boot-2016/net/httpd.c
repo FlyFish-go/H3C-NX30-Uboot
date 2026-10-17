@@ -8,14 +8,28 @@
  */
 
 #include <common.h>
+#if defined(CONFIG_H3C_HW_D_NAND_SERVICE) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+#include <nx30_d_http_route_core.h>
+#endif
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_A
+#include <h3c_hw_a_readonly.h>
+#endif
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_C
+#include <h3c_hw_c_readonly.h>
+#endif
 #include <errno.h>
 #include <malloc.h>
 #include <net.h>
 #include <net/tcp.h>
 #include <net/httpd.h>
+#include <net/httpd_upload_limits.h>
 #include <linux/sizes.h>
 #include <failsafe/failsafe.h>
 #include <ipq_api.h>
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+#include <rt3000_b_initramfs.h>
+#include <rt3000_b_metadata.h>
+#endif
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -105,21 +119,57 @@ static LIST_HEAD(inst_head);
 static void httpd_tcp_callback(struct tcp_cb_data *cbd);
 static void httpd_std_err_response(struct tcp_cb_data *cbd, u32 code);
 
+ulong httpd_upload_buffer_base(void)
+{
+	if (gd->ram_size >= SZ_512M)
+		return CONFIG_SYS_SDRAM_BASE + SZ_256M;
+	return IPQ_TFTP_MIN_ADDR;
+}
+
 static void *httpd_get_upload_buffer_ptr(size_t size)
 {
-	uintptr_t load_addr;
+	uintptr_t load_addr = httpd_upload_buffer_base();
 
-	if (gd->ram_size >= SZ_512M)
-		load_addr = CONFIG_SYS_SDRAM_BASE + SZ_256M;
-	else
-		load_addr = IPQ_TFTP_MIN_ADDR;
-
-	if (!is_memory_region_available(load_addr, size)) {
+	if (size == (size_t)-1 ||
+	    !is_memory_region_available(load_addr, size + 1)) {
         puts("Error: file size too large\n");
         return NULL;
     }
 
 	return (void *)load_addr;
+}
+
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NAND_SERVICE))
+static void *httpd_get_firmware_upload_buffer_ptr(size_t size)
+{
+	/* Keep firmware staging above the fixed 0x42000000 slots hash scratch. */
+	uintptr_t load_addr = 0x44000000UL;
+	if (size == (size_t)-1 ||
+	    !is_memory_region_available(load_addr, size + 1)) {
+		puts("Error: firmware upload exceeds available safe RAM\n");
+		return NULL;
+	}
+	return (void *)load_addr;
+}
+#endif
+
+static void *httpd_get_upload_buffer_for_uri(const char *uri, size_t size)
+{
+#if defined(CONFIG_H3C_HW_D_NAND_SERVICE) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	if (uri && (!strcmp(uri, "/service/firmware/validate") ||
+		    !strcmp(uri, "/service/firmware/write") ||
+		    !strcmp(uri, "/service/uboot/validate") ||
+		    !strcmp(uri, "/service/uboot/write")))
+		return httpd_get_firmware_upload_buffer_ptr(size);
+	return NULL;
+#elif defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	if (!uri || strcmp(uri, "/nor/validate"))
+		return NULL;
+#elif (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	if (uri && !strcmp(uri, "/firmware/validate"))
+		return httpd_get_firmware_upload_buffer_ptr(size);
+#endif
+	return httpd_get_upload_buffer_ptr(size);
 }
 
 static void dummy_urih_cb(enum httpd_uri_handler_status status,
@@ -526,6 +576,15 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 	/* record URI */
 	pdata->uri = uri_ptr;
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	/* A new legacy upload invalidates any previous RAM-boot validation, even
+	 * when its Content-Length is rejected before the URI callback runs. */
+	if (method == HTTP_POST && !strcmp(pdata->uri, "/upload")) {
+		failsafe_initramfs_invalidate();
+		rt3_metadata_invalidate();
+	}
+#endif
+
 
 	/* find required fields if this is a POST request */
 	if (method == HTTP_POST) {
@@ -535,7 +594,21 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			cl_ptr += sizeof(content_length_str) - 1;
 			while (*cl_ptr == ' ')
 				cl_ptr++;
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_NOR_RESCUE) || defined(CONFIG_H3C_HW_D_NAND_SERVICE))
+			char *length_end;
+			unsigned long parsed_length = simple_strtoul(cl_ptr, &length_end, 10);
+			if (length_end == cl_ptr ||
+			    (!httpd_upload_length_allowed(pdata->uri, parsed_length) &&
+			     !(method == HTTP_POST &&
+			       !strcmp(pdata->uri, "/nand/probe") &&
+			       parsed_length == 0))) {
+				err_code = 413;
+				goto bad_request;
+			}
+			pdata->payload_size = (u32)parsed_length;
+#else
 			pdata->payload_size = simple_strtoul(cl_ptr, NULL, 10);
+#endif
 			httpd_debug("Content-Length: %d Bytes\n", pdata->payload_size);
 		}
 
@@ -568,12 +641,32 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			debug("    Content-Type: boundary=\"%s\"\n", b_ptr);
 		}
 
+		/* The AUTOECC endpoint is a bodyless POST; reject accidental bodies. */
+		if (method == HTTP_POST && !strcmp(pdata->uri, "/nand/probe") &&
+		    pdata->payload_size == 0 && pdata->bufsize != hdr_size) {
+			err_code = 400;
+			goto bad_request;
+		}
+
 		if (hdr_size + pdata->payload_size < sizeof(pdata->buf)) {
 			pdata->upload_size = pdata->bufsize - hdr_size;
 			if (!strcmp(pdata->uri, "/upload") ||
-				!strcmp(pdata->uri, "/console/upload")) {
+				!strcmp(pdata->uri, "/console/upload") ||
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+				!strcmp(pdata->uri, "/nor/validate") ||
+#endif
+#if defined(CONFIG_H3C_HW_D_NAND_SERVICE) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+				!strcmp(pdata->uri, "/service/firmware/validate") ||
+				!strcmp(pdata->uri, "/service/firmware/write") ||
+				!strcmp(pdata->uri, "/service/uboot/validate") ||
+				!strcmp(pdata->uri, "/service/uboot/write") ||
+#endif
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+				!strcmp(pdata->uri, "/firmware/validate") ||
+#endif
+				0) {
 				/* 需要保存到空闲内存区域的数据 */
-				pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
+				pdata->upload_ptr = httpd_get_upload_buffer_for_uri(pdata->uri, pdata->payload_size);
 				if (pdata->upload_ptr == NULL) {
 					tcp_close_conn(cbd->conn, 1);
 					return 1;
@@ -595,7 +688,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			upload_id = rand();
 
 			/* calculate new cache address */
-			pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
+			pdata->upload_ptr = httpd_get_upload_buffer_for_uri(pdata->uri, pdata->payload_size);
 			if (pdata->upload_ptr == NULL) {
 				tcp_close_conn(cbd->conn, 1);
 				return 1;
@@ -828,33 +921,120 @@ static int httpd_handle_request(struct httpd_instance *inst,
 	// TODO: 这个函数的作用是什么？
 	// schedule();
 
-	req->urih = httpd_find_uri_handler(inst, pdata->uri);
-	if (!req->urih) {
-		/* TODO: no handler / response 404 */
-		tcp_close_conn(cbd->conn, 1);
-		return 1;
-	}
-
-	if (!strcmp(pdata->uri, "/upload"))
-		parse_post_data_later = true;
-	else
+#if defined(CONFIG_H3C_HW_D_NAND_SERVICE) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	if (!nx30_d_http_route_allowed(req->method == HTTP_GET,
+				     req->method == HTTP_POST, pdata->uri)) {
+		static const char message[] = "NX30 HW-D NAND service: route or HTTP method disabled.\n";
 		parse_post_data_later = false;
-
-	if (!parse_post_data_later) {
-		if (httpd_parse_post_data(cbd)) {
+		req->urih = NULL;
+		pdata->response.status = HTTP_RESP_STD;
+		pdata->response.data = message;
+		pdata->response.size = sizeof(message) - 1;
+		pdata->response.info.code = 403;
+		pdata->response.info.content_type = "text/plain";
+		pdata->response.info.connection_close = 1;
+	} else
+#elif defined(CONFIG_H3C_HW_D_NOR_RESCUE)
+	if (!((req->method == HTTP_GET &&
+	       (!strcmp(pdata->uri, "/") || !strcmp(pdata->uri, "/index.html") ||
+		!strcmp(pdata->uri, "/main.js") || !strcmp(pdata->uri, "/style.css") ||
+		!strcmp(pdata->uri, "/version") || !strcmp(pdata->uri, "/sysinfo") ||
+		!strcmp(pdata->uri, "/network/info"))) ||
+	      (req->method == HTTP_POST &&
+	       (!strcmp(pdata->uri, "/nor/validate") || !strcmp(pdata->uri, "/nor/write") ||
+		!strcmp(pdata->uri, "/nand/probe"))))) {
+		static const char message[] = "NX30 HW-D SPI NOR rescue interface: route disabled.\n";
+		parse_post_data_later = false;
+		req->urih = NULL;
+		pdata->response.status = HTTP_RESP_STD;
+		pdata->response.data = message;
+		pdata->response.size = sizeof(message) - 1;
+		pdata->response.info.code = 403;
+		pdata->response.info.content_type = "text/plain";
+		pdata->response.info.connection_close = 1;
+	} else
+#elif defined(CONFIG_H3C_HW_D_RAM_WEB) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	if (req->method != HTTP_GET ||
+	    (strcmp(pdata->uri, "/") && strcmp(pdata->uri, "/index.html") &&
+	     strcmp(pdata->uri, "/main.js") && strcmp(pdata->uri, "/style.css") &&
+	     strcmp(pdata->uri, "/version") && strcmp(pdata->uri, "/sysinfo") &&
+	     strcmp(pdata->uri, "/boot/slots") && strcmp(pdata->uri, "/nand/probe"))) {
+		static const char message[] =
+			"NX30 HW-D RAM-only read-only preview: this route or HTTP method is disabled.\n";
+		parse_post_data_later = false;
+		req->urih = NULL;
+		pdata->response.status = HTTP_RESP_STD;
+		pdata->response.data = message;
+		pdata->response.size = sizeof(message) - 1;
+		pdata->response.info.code = 403;
+		pdata->response.info.content_type = "text/plain";
+		pdata->response.info.connection_close = 1;
+	} else
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+	/* A/C read-only route protection. */
+	#ifdef CONFIG_H3C_HW_C_RAM_READONLY
+	if (h3c_hw_c_request_rejected(req->method == HTTP_GET,
+				      req->method == HTTP_POST, pdata->uri)) {
+	#else
+	if (h3c_hw_a_request_rejected(req->method == HTTP_GET,
+				      req->method == HTTP_POST, pdata->uri)) {
+	#endif
+#ifdef CONFIG_H3C_HW_C_RAM_READONLY
+		static const char message[] =
+			"HW-C RAM-only preview: persistent writes and state-changing "
+			"web actions are disabled.\n";
+#else
+		static const char message[] =
+			"HW-A RAM-only preview: persistent writes and state-changing "
+			"web actions are disabled.\n";
+#endif
+		parse_post_data_later = false;
+		req->urih = NULL;
+		pdata->response.status = HTTP_RESP_STD;
+		pdata->response.data = message;
+		pdata->response.size = sizeof(message) - 1;
+		pdata->response.info.code = 403;
+		pdata->response.info.content_type = "text/plain";
+		pdata->response.info.connection_close = 1;
+	} else
+#endif
+	{
+		req->urih = httpd_find_uri_handler(inst, pdata->uri);
+		if (!req->urih) {
+			/* TODO: no handler / response 404 */
 			tcp_close_conn(cbd->conn, 1);
-			pdata->status = HTTPD_S_CLOSING;
 			return 1;
 		}
-	}
 
-	/* call uri handler */
-	assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
-	req->urih->cb(HTTP_CB_NEW, req, &pdata->response);
+		if (!strcmp(pdata->uri, "/upload")
+#if defined(CONFIG_H3C_HW_D_NAND_SERVICE) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+		    || !strcmp(pdata->uri, "/service/firmware/validate")
+		    || !strcmp(pdata->uri, "/service/uboot/validate")
+#endif
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+		    || !strcmp(pdata->uri, "/nor/validate")
+#endif
+		   )
+			parse_post_data_later = true;
+		else
+			parse_post_data_later = false;
 
-	if (pdata->response.status == HTTP_RESP_NONE) {
-		tcp_close_conn(cbd->conn, 0);
-		return 1;
+		if (!parse_post_data_later) {
+			if (httpd_parse_post_data(cbd)) {
+				tcp_close_conn(cbd->conn, 1);
+				pdata->status = HTTPD_S_CLOSING;
+				return 1;
+			}
+		}
+
+		/* call uri handler */
+		assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
+		req->urih->cb(HTTP_CB_NEW, req, &pdata->response);
+
+		if (pdata->response.status == HTTP_RESP_NONE) {
+			tcp_close_conn(cbd->conn, 0);
+			return 1;
+		}
 	}
 
 	if (pdata->response.status == HTTP_RESP_STD) {

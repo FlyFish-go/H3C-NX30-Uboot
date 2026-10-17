@@ -1,0 +1,92 @@
+{
+  "schema": "bootbridge-hwd-controlled-prerelease-summary-v1",
+  "status": "PASS_LIMITED_NX30_HW_D_SAMPLE",
+  "evidence_date": "2026-10-17",
+  "timezone": "Asia/Shanghai",
+  "completed_utc": "2026-10-16T16:54:59.967280+00:00",
+  "source_bundle": {
+    "bundle_id": "NX30-multi-provider",
+    "official_version": "NX30V100R012",
+    "official_sha256": "61fbc2a356aa9d5d73eaa9f02eb87f455adea8c32684ffb627b2a35afc2ce922",
+    "bridge_bytes": 12714836,
+    "bridge_sha256": "d908bdc6f9caadc604a86c99bc296b83067c08c2687567344baa7600a6802023",
+    "actual_windows_gui_export": true
+  },
+  "uboot_payload": {
+    "hardware_class": "HW-D",
+    "bytes": 1310720,
+    "sha256": "91e9d881ad1b5c88f942069908bfdd7484984521422ad7f1923738d2cc653362",
+    "physical_target_offset": "0x500000"
+  },
+  "scope": {
+    "product": "NX30",
+    "hardware_class": "HW-D",
+    "NAND_JEDEC": "EF:BA:21",
+    "NAND_model": "W25N01GWZEIG",
+    "capacity_bytes": 134217728,
+    "page_bytes": 2048,
+    "erase_bytes": 131072,
+    "spare_bytes": 64,
+    "ECC_bits": 4,
+    "SBL_baseline": "R012",
+    "sample": "one NX30 test sample",
+    "qualification_transfer_to_other_samples": false,
+    "starting_route": "OEM HIGH / physical OEM B; LOW already contained the same public-D payload before this run"
+  },
+  "checks": {
+    "native_OEM_single_upload": "PASS",
+    "native_dispatch": "PASS_SOURCE_BOUND_INFERENCE_NO_DIRECT_PROC_EXECUTABLE_OBSERVATION",
+    "private_recovery_archive": "PASS_COMPLETE_45_MiB_19_DATA_MEMBERS_CRC_HASH",
+    "post_upload_startup_change": "ONLY_BC_AGE_AND_ROOTFS_FIELDS",
+    "single_confirm_install_transaction": "PASS_WRITE_FULL_READBACK_AND_VERIFIED_DEFAULT_OEM_ROUTE",
+    "wizard_reboot_default_OEM_B": "PASS",
+    "independent_cold_default_OEM_B": "PASS_10_SECONDS_POWER_OFF_ZERO_BOOT_UART_TX_NO_TFTP",
+    "OEM_kernel_procd_web": "PASS",
+    "ECC_failures": 0,
+    "bad_blocks": 0,
+    "startup_15_partitions": "PASS_PAGEWISE_2048_ALL_HASHES_MATCH",
+    "retained_OEM_B": "PASS_FULL_40_MiB_SHA256_MATCHES_PRIOR_INDEPENDENT_CAPTURE",
+    "cold_UART_maintenance": "PASS_NATIVE_FLASH_BOOT_NO_RAM_TRANSFERS",
+    "maintenance_routes_HTTP_200": [
+      "/",
+      "/main.js",
+      "/boot/slots",
+      "/boot/default"
+    ],
+    "independent_startup_capture": "PASS_9437184_BYTES_EXACT_EXPECTED_POSTIMAGE",
+    "HIGH_SBL_MIBIB_ENV_ART_and_other_startup_bytes": "UNCHANGED_EXCEPT_REVIEWED_LOW_AND_BC_TRANSACTION"
+  },
+  "observed_postinstall_BC": {
+    "age": 21,
+    "appsbl": 0,
+    "rootfs": 1
+  },
+  "bootarea_bytes": 9437184,
+  "bootarea_sha256": "7d7e3cd64152eef41ef05062a910db365b800da2cd4be112b2a5fbb401faa880",
+  "retained_OEM_B_sha256": "643f89ccfcfaf4b6d2281867f055906398364f861c5efe5e91311ec657c13136",
+  "raw_private_evidence_included": false,
+  "limits": [
+    "Only this exact NX30 HW-D Winbond ECC4/spare64 R012-SBL sample, source bundle and U-Boot payload were verified.",
+    "A/B/C and every other product/HW combination, including RX3000/HW-D, remain untested on hardware.",
+    "Production self-update, ECC8, NOR, wireless and long-term stability were not tested.",
+    "Private decoded recovery data is not an OOB/ECC raw programmer image and is not published."
+  ],
+  "receipt_sha256": {
+    "accepted-release-pins": "0af369c0e9496485bb1e54ed90d51c4994a5cbc523618888effce5c84680e4e0",
+    "pre-upload-preflight": "39ebe8ca76707b236adf3779c93c0781ef0be43eeb18ad44142b3e5ca58e91fe",
+    "upload-request": "8b35fbb235a5b999aaaed532dd83d034aa551f297b2fd46608962bdecd24f0e0",
+    "upload-browser": "b85a39388b353028887fd989e3917336af98ded78735a885aef83e7a91afd49e",
+    "backup-result": "9e1e7000e60b431cb7edfb9dd506694aa66dc5836a354cd7ceaa6de3ec88deed",
+    "native-dispatch-result": "06bab3262b538d79a50def8de9acdf271bf5ed6c51af13b5f0beed9efab56c6c",
+    "wizard-install.request": "240e7b40e1b0dce061fdaa264fff81f64e604fabc4d19200988865e5cdcb63a4",
+    "install-result": "3a48cf2e2dd00667da3eec0c453c8a880fcd4baaea0743ff254541c0ec182752",
+    "wizard-reboot.request": "37bb1dc737a24831ab3cf8b4288c475e5b9fb3e4215745645c838174f048076c",
+    "warm-oem-result": "995a7938c75839f46b772e1188fdb636a6fc3526b69844d595578b9650895680",
+    "warm-no-uart-boot": "8718aab2105a7496722e7652bf285cb93d7514959cc662e500e8bf8327dd8e69",
+    "installed-oem-result": "edf97ba8d58302555b68b22f5fc53b54957f6dcacff4abf129939b686e9e44cd",
+    "cold-no-uart-boot": "1a9bd20e182786552c4bc450787dbd40d5a5304e7678405fc1fece1da8646266",
+    "protected-result": "49d26b9f18a46b38d340ee461b76b3489ef2c6d36c8af27c4eb5787b9cef7414",
+    "oem-B-full-result": "576c105f69abd23278b8998c34d4ae66b481fe866726930ca525c15b90a71247",
+    "native-maintenance-result": "61f4f5a2cbc01d41b11eff7311d8127c706f1ecbfa4530cc1329fbccd6c00262"
+  }
+}

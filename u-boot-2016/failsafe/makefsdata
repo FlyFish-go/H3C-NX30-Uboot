@@ -1,26 +1,28 @@
 #!/usr/bin/perl
 use IO::Compress::Gzip qw(gzip);
 
-open(OUTPUT, "> httpd-fsdata.c");
-
-chdir("fsdata");
+# O= builds must write generated data into their own object directory.
+$output_path = defined($ARGV[0]) ? $ARGV[0] : "httpd-fsdata.c";
+$input_path = defined($ARGV[1]) ? $ARGV[1] : "fsdata";
+open(OUTPUT, ">", $output_path) or die "Cannot open generated fsdata output\n";
+chdir($input_path) or die "Cannot enter fsdata input directory\n";
 
 # 检查工具可用性
 $html_minifier_available = 0;
 $css_cleaner_available = 0;
 $terser_available = 0;
 
-if (`which html-minifier-terser 2>/dev/null`) {
+if (!$ENV{H3C_REPRODUCIBLE_FS} && `which html-minifier-terser 2>/dev/null`) {
     $html_minifier_available = 1;
     print "html-minifier-terser found, will minify HTML files\n";
 }
 
-if (`which cleancss 2>/dev/null`) {
+if (!$ENV{H3C_REPRODUCIBLE_FS} && `which cleancss 2>/dev/null`) {
     $css_cleaner_available = 1;
     print "clean-css found, will minify CSS files\n";
 }
 
-if (`which terser 2>/dev/null`) {
+if (!$ENV{H3C_REPRODUCIBLE_FS} && `which terser 2>/dev/null`) {
     $terser_available = 1;
     print "terser found, will minify JavaScript files\n";
 }
@@ -47,14 +49,23 @@ if (`which terser 2>/dev/null`) {
 );
 
 opendir(DIR, ".");
-@files =  grep { !/^\./ && !/(CVS|~)/ } readdir(DIR);
+@files = sort grep { !/^\./ && !/(CVS|~)/ } readdir(DIR);
 closedir(DIR);
+
+# An explicit allowlist gives NOR builds only their self-contained UI.
+if ($#ARGV >= 2) {
+    @files = ();
+    foreach $selected (@ARGV[2 .. $#ARGV]) {
+        die "Invalid selected fsdata file\n" unless $selected =~ /^[a-zA-Z0-9_.]+$/ && -f $selected;
+        push @files, $selected;
+    }
+}
 
 foreach $file (@files) {
     if (-d $file && $file !~ /^\./) {
         print "Processing directory $file\n";
         opendir(DIR, $file);
-        @newfiles =  grep { !/^\./ && !/(CVS|~)/ } readdir(DIR);
+        @newfiles = sort grep { !/^\./ && !/(CVS|~)/ } readdir(DIR);
         closedir(DIR);
         printf "Adding files @newfiles\n";
         @files = (@files, map { $_ = "$file/$_" } @newfiles);
@@ -66,9 +77,10 @@ foreach $file (@files) {
     if (-f $file) {
         print "Adding file $file\n";
 
-        open(FILE, $file) || die "Could not open file $file\n";
+        my $input_file = $file;
+        open(FILE, $input_file) || die "Could not open selected fsdata input\n";
         binmode FILE;
-        read(FILE, $orig_data, -s $file);
+        read(FILE, $orig_data, -s $input_file);
         close(FILE);
 
         $path = $file;
@@ -91,19 +103,19 @@ foreach $file (@files) {
 
         # 使用专用工具压缩 HTML/CSS/JavaScript 代码
         if ($file =~ /\.html?$/ && $html_minifier_available) {
-            $minified_temp = `html-minifier-terser --collapse-whitespace --remove-comments --remove-tag-whitespace --minify-css true --minify-js true $file 2>/dev/null`;
+            $minified_temp = `html-minifier-terser --collapse-whitespace --remove-comments --remove-tag-whitespace --minify-css true --minify-js true $input_file 2>/dev/null`;
             $minified_data = $minified_temp ? $minified_temp : $orig_data;
             $minified_size = length($minified_data);
             $uncompressed_data = $minified_data;
             print "    Minified $file: $orig_size -> $minified_size bytes (html-minifier-terser)\n";
         } elsif ($file =~ /\.css$/ && $css_cleaner_available) {
-            $minified_temp = `cleancss $file 2>/dev/null`;
+            $minified_temp = `cleancss $input_file 2>/dev/null`;
             $minified_data = $minified_temp ? $minified_temp : $orig_data;
             $minified_size = length($minified_data);
             $uncompressed_data = $minified_data;
             print "    Minified $file: $orig_size -> $minified_size bytes (clean-css)\n";
         } elsif ($file =~ /\.js$/ && $terser_available) {
-            $minified_temp = `terser $file --compress --mangle 2>/dev/null`;
+            $minified_temp = `terser $input_file --compress --mangle 2>/dev/null`;
             $minified_data = $minified_temp ? $minified_temp : $orig_data;
             $minified_size = length($minified_data);
             $uncompressed_data = $minified_data;
@@ -119,7 +131,7 @@ foreach $file (@files) {
         # 对文本文件进行gzip压缩
         if ($file =~ /\.(html|css|js|txt|xml|json)$/) {
             my $gzipped_data;
-            gzip \$uncompressed_data => \$gzipped_data;
+            gzip \$uncompressed_data => \$gzipped_data, Time => 0;
             $gzip_size = length($gzipped_data);
             $final_size = $gzip_size;
             $is_gzip = 1;

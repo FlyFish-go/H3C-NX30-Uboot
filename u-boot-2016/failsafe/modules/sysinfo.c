@@ -19,6 +19,9 @@
  */
 
 #include <common.h>
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+#include <h3c_nand_ecc.h>
+#endif
 #include <command.h>
 #include <linux/ctype.h>
 #include <asm/arch-qca-common/smem.h>
@@ -29,6 +32,9 @@
 #include <sdhci.h>
 #include <spi.h>
 #include <spi_flash.h>
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+#include <qpic_nand_model.h>
+#endif
 #include <malloc.h>
 #include <errno.h>
 #include <version.h>
@@ -98,6 +104,10 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
     const char *board_compat = NULL;
     char esc_board_hostname[128], esc_board_model[128], esc_board_compat[128];
     char esc_version_string[256];
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+    const char *board_family;
+    char esc_board_family[64];
+#endif
 
 	if (status == HTTP_CB_CLOSED && response->session_data) {
 		free(response->session_data);
@@ -119,6 +129,21 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
 	APPEND_JSON_TO_BUF("{");
 
     APPEND_JSON_TO_BUF("\"is_9008_mode\":%s,", is_9008_mode() ? "true" : "false");
+#if defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+    APPEND_JSON_TO_BUF("\"ram_only\":false,\"read_only\":false,\"profile\":\"common\",");
+#elif defined(CONFIG_H3C_HW_D_NAND_SERVICE)
+#ifdef CONFIG_H3C_HW_D_SERVICE_RAM
+    APPEND_JSON_TO_BUF("\"ram_only\":true,\"read_only\":false,\"profile\":\"nand-service-ram\",");
+#else
+    APPEND_JSON_TO_BUF("\"ram_only\":false,\"read_only\":false,\"profile\":\"nand-service\",");
+#endif
+#elif defined(CONFIG_H3C_HW_D_NAND_READONLY)
+    APPEND_JSON_TO_BUF("\"ram_only\":false,\"read_only\":true,\"profile\":\"nand-readonly\",");
+#elif defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)
+    APPEND_JSON_TO_BUF("\"ram_only\":true,\"read_only\":true,");
+#elif defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT)
+    APPEND_JSON_TO_BUF("\"ram_only\":false,\"read_only\":false,");
+#endif
 
     json_escape(version_string, esc_version_string, sizeof(esc_version_string));
     APPEND_JSON_TO_BUF("\"uboot_version\":\"%s\",", esc_version_string);
@@ -133,6 +158,13 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
     json_escape(board_compat, esc_board_compat, sizeof(esc_board_compat));
 
 	APPEND_JSON_TO_BUF("\"board\":{");
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+    /* Family is the compiled hardware series; it is not a BOM probe. */
+    board_family = fdt_getprop(gd->fdt_blob, 0, "h3c,board-family", NULL);
+    json_escape(board_family, esc_board_family, sizeof(esc_board_family));
+    APPEND_JSON_TO_BUF("\"family\":\"%s\",\"identity_source\":\"build_configuration\",",
+        esc_board_family);
+#endif
 	APPEND_JSON_TO_BUF("\"hostname\":\"%s\",", esc_board_hostname);
 	APPEND_JSON_TO_BUF("\"model\":\"%s\",", esc_board_model);
 	APPEND_JSON_TO_BUF("\"compatible\":\"%s\",", esc_board_compat);
@@ -156,17 +188,46 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
 
 	/* SPI info */
 	APPEND_JSON_TO_BUF("\"spi\":{");
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	{
+		const struct spi_flash *spi = get_detected_spi_flash();
+		char esc_spi_name[128];
+		json_escape(spi ? spi->name : NULL, esc_spi_name, sizeof(esc_spi_name));
+		APPEND_JSON_TO_BUF("\"present\":%s", spi ? "true" : "false");
+		if (spi)
+			APPEND_JSON_TO_BUF(",\"name\":\"%s\",\"size\":%lu,\"page_size\":%lu,\"sector_size\":%lu,\"erase_size\":%lu",
+			    esc_spi_name, (ulong)spi->size, (ulong)spi->page_size,
+			    (ulong)spi->sector_size, (ulong)spi->erase_size);
+	}
+#else
 	APPEND_JSON_TO_BUF("\"present\":%s", has_spi() ? "true" : "false");
 	if (has_spi()) {
 		struct spi_flash *spi;
 		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
 					CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
-		APPEND_JSON_TO_BUF(",\"name\":\"%s\",\"size\":%lu,"
-            "\"page_size\":%lu,\"sector_size\":%lu,\"erase_size\":%lu",
-            spi->name, (ulong)spi->size,
-            (ulong)spi->page_size, (ulong)spi->sector_size, (ulong)spi->erase_size);
+		APPEND_JSON_TO_BUF(",\"name\":\"%s\",\"size\":%lu,\"page_size\":%lu,\"sector_size\":%lu,\"erase_size\":%lu",
+		    spi->name, (ulong)spi->size, (ulong)spi->page_size,
+		    (ulong)spi->sector_size, (ulong)spi->erase_size);
 	}
+#endif
 	APPEND_JSON_TO_BUF("},"); /* devices: spi */
+
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY))
+	/* Configured probe location only; this is not an exhaustive wiring scan. */
+	{
+		const struct spi_flash *spi = get_detected_spi_flash();
+		char esc_spi_name[128];
+		json_escape(spi ? spi->name : NULL, esc_spi_name, sizeof(esc_spi_name));
+		if (spi)
+			APPEND_JSON_TO_BUF("\"spi_nor\":{\"present\":true,\"bus\":%u,\"chip_select\":%u,\"name\":\"%s\",\"model\":\"%s\",\"size\":%lu,\"page_size\":%lu,\"sector_size\":%lu,\"erase_size\":%lu},",
+			    (unsigned int)CONFIG_SF_DEFAULT_BUS, (unsigned int)CONFIG_SF_DEFAULT_CS,
+			    esc_spi_name, esc_spi_name, (ulong)spi->size, (ulong)spi->page_size,
+			    (ulong)spi->sector_size, (ulong)spi->erase_size);
+		else
+			APPEND_JSON_TO_BUF("\"spi_nor\":{\"present\":false,\"bus\":%u,\"chip_select\":%u,\"name\":null,\"model\":null,\"size\":null,\"page_size\":null,\"sector_size\":null,\"erase_size\":null},",
+			    (unsigned int)CONFIG_SF_DEFAULT_BUS, (unsigned int)CONFIG_SF_DEFAULT_CS);
+	}
+#endif
 
 	/* MMC info */
 	APPEND_JSON_TO_BUF("\"mmc\":{");
@@ -203,6 +264,14 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
 	}
 	APPEND_JSON_TO_BUF("},"); /* devices: mmc */
 
+#ifdef CONFIG_H3C_NAND_ECC_COMPAT
+    APPEND_JSON_TO_BUF(
+        "\"nand_ecc_compat\":{\"ready\":%s,\"env_ecc\":%u,"
+        "\"system_ecc\":%u,\"spare\":%u},",
+        h3c_nand_ecc_ready() ? "true" : "false",
+        h3c_nand_ecc_env_mode(), h3c_nand_ecc_system_mode(),
+        h3c_nand_ecc_spare());
+#endif
 	/* NAND info */
 	APPEND_JSON_TO_BUF("\"nand\":{");
 	APPEND_JSON_TO_BUF("\"present\":%s", has_nand() ? "true" : "false");
@@ -214,6 +283,19 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
             nand->name, (unsigned long long)nand->size,
             (ulong)nand->writesize, (ulong)nand->erasesize, (ulong)nand->oobsize,
             (ulong)nand->oobavail, nand->ecc_step_size, nand->ecc_strength);
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+		{
+			struct qpic_nand_model_info model;
+			char esc_nand_model[128];
+			if (!qpic_nand_get_model_info(&model)) {
+				json_escape(model.name, esc_nand_model, sizeof(esc_nand_model));
+				APPEND_JSON_TO_BUF(",\"model\":\"%s\",\"model_id\":\"%02x:%02x:%02x\"",
+				    esc_nand_model, model.id[0], model.id[1], model.id[2]);
+			} else {
+				APPEND_JSON_TO_BUF(",\"model\":null,\"model_id\":null");
+			}
+		}
+#endif
 	}
 	APPEND_JSON_TO_BUF("}"); /* devices: nand */
 	APPEND_JSON_TO_BUF("},"); /* devices */

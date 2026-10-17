@@ -1,0 +1,36 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NX30 HW-D Maintenance</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/main.js"></script>
+</head>
+<body class="nx30-d-ram-readonly nx30-d-nand-readonly" onload="appInit('sysinfo')" data-page="sysinfo">
+  <div class="app">
+    <aside id="sidebar" class="sidebar"></aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <button class="sidebar-toggle" id="sidebarToggle"></button>
+    <div class="main">
+      <div class="card-main-section">
+        <div class="card-main-inner">
+          <h1>NX30 HW-D</h1>
+          <p><strong>Read-only maintenance.</strong></p>
+          <p>View device status and identify the firmware in each slot. This maintenance profile keeps firmware, environment and calibration data read-only.</p>
+          <p>Slot classification reports detected content; it does not certify an HW-D firmware adaptation.</p>
+        </div>
+      </div>
+      <div id="m">
+        <div class="card-title-section"><h1 id="title" data-i18n="sysinfo.title"></h1></div>
+        <div class="card-main-section" id="board_info"><div class="card-main-inner"></div></div>
+        <div class="card-main-section" id="flash_info"><div class="card-main-inner"></div></div>
+        <div class="card-main-section" id="boot_slots" hidden><div class="card-main-inner"></div></div>
+        <div class="card-main-section" id="board_buttons" hidden><div class="card-main-inner"></div></div>
+        <div class="card-main-section" id="partitions_info"><div class="card-main-inner"></div></div>
+      </div>
+      <div id="version"></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,178 @@
+{
+  "boards": {
+    "A": {
+      "board": "A",
+      "candidate_id": "5f486f5f9852c26d7d16eb5980a06cccea2a5217:HW-A:neutral-path-rebuild:offline",
+      "canonical_comparison": "differs from frozen canonical candidate; no qualification inheritance",
+      "embedded_git_revision": "5f486f5f9852",
+      "files": {
+        "appsbl.mbn": {
+          "bytes": 625346,
+          "path": "payloads/HW-A/appsbl.mbn",
+          "sha256": "521218120228dea2d4ed9d6a6de2f46ab41897eef3ddc3c2240447017f931072"
+        },
+        "appsbl.partition.bin": {
+          "bytes": 1310720,
+          "path": "payloads/HW-A/appsbl.partition.bin",
+          "sha256": "8ed8b32594d0ebbe3d5f23a8de1853b9ed3e7492c391361ffaf6f4cf7b1b4abb"
+        },
+        "build.config": {
+          "bytes": 12640,
+          "path": "payloads/HW-A/build.config",
+          "sha256": "ea5fbddc32114f5e5baba314de3e8f9bdff1eb0a5ae9f9b184b1ecb44a6219c4"
+        },
+        "dtb_combined.bin": {
+          "bytes": 4352,
+          "path": "payloads/HW-A/dtb_combined.bin",
+          "sha256": "8314c3753a5ce561b88eeb96d321699b433607a8832b3e6f47f105d5239688cb"
+        },
+        "ipq5018-h3c-hw-a.packed.dtb": {
+          "bytes": 4322,
+          "path": "payloads/HW-A/ipq5018-h3c-hw-a.packed.dtb",
+          "sha256": "013aa4868fc878d61453c2bc648072bd40e542ac334d42f920cf8a9c91d99d7b"
+        },
+        "provenance.json": {
+          "bytes": 393,
+          "path": "payloads/HW-A/provenance.json",
+          "sha256": "cd5fc2ffadfa88d7e8ceb72d1c9935f83349d40fd176a2c2cdc9e0eb421c4917"
+        }
+      },
+      "hardware_validation": "NOT_EXECUTED",
+      "installation_status": "offline candidate; NOT_INSTALL_READY",
+      "profile": "release",
+      "source_date_epoch": "1792126813",
+      "source_revision": "5f486f5f9852c26d7d16eb5980a06cccea2a5217"
+    },
+    "B": {
+      "board": "B",
+      "candidate_id": "5f486f5f9852c26d7d16eb5980a06cccea2a5217:HW-B:neutral-path-rebuild:offline",
+      "canonical_comparison": "differs from frozen canonical candidate; no qualification inheritance",
+      "embedded_git_revision": "5f486f5f9852",
+      "files": {
+        "appsbl.mbn": {
+          "bytes": 633042,
+          "path": "payloads/HW-B/appsbl.mbn",
+          "sha256": "3865053f17583406f5b67606333c76cd969a6eaff96f1314b7e3a470a2ad9e7b"
+        },
+        "appsbl.partition.bin": {
+          "bytes": 1310720,
+          "path": "payloads/HW-B/appsbl.partition.bin",
+          "sha256": "912159169a8b61adb40e572b5366a21da68b65d48fcd47f113e65de44c908589"
+        },
+        "build.config": {
+          "bytes": 12568,
+          "path": "payloads/HW-B/build.config",
+          "sha256": "1e8bb0db2245eabd46c2f13f66da47c280043b8f456246b238db959c9e6120b1"
+        },
+        "dtb_combined.bin": {
+          "bytes": 5120,
+          "path": "payloads/HW-B/dtb_combined.bin",
+          "sha256": "46cb0e9cc6e252cffd6206007a57ead851ab529353c5907e2ca12878acb38068"
+        },
+        "ipq5018-h3c_rt3000-b.packed.dtb": {
+          "bytes": 5093,
+          "path": "payloads/HW-B/ipq5018-h3c_rt3000-b.packed.dtb",
+          "sha256": "d9965e486785e1f56f30e4d61008000a233ebd41f716d9af6c6631f065a111a5"
+        },
+        "provenance.json": {
+          "bytes": 393,
+          "path": "payloads/HW-B/provenance.json",
+          "sha256": "6112b024bb627f723060a13d097a9d88b4772041123c89ffa15b6b2c64e0b571"
+        }
+      },
+      "hardware_validation": "NOT_EXECUTED",
+      "installation_status": "offline candidate; NOT_INSTALL_READY",
+      "profile": "release",
+      "source_date_epoch": "1792126813",
+      "source_revision": "5f486f5f9852c26d7d16eb5980a06cccea2a5217"
+    },
+    "C": {
+      "board": "C",
+      "candidate_id": "5f486f5f9852c26d7d16eb5980a06cccea2a5217:HW-C:neutral-path-rebuild:offline",
+      "canonical_comparison": "differs from frozen canonical candidate; no qualification inheritance",
+      "embedded_git_revision": "5f486f5f9852",
+      "files": {
+        "appsbl.mbn": {
+          "bytes": 635634,
+          "path": "payloads/HW-C/appsbl.mbn",
+          "sha256": "52fa1ef5ec22b4ea00de2c31a760497907f6342e3b373cb596ac8b1d3f39cfc9"
+        },
+        "appsbl.partition.bin": {
+          "bytes": 1310720,
+          "path": "payloads/HW-C/appsbl.partition.bin",
+          "sha256": "57d13d1dad2a7b7854799b7cc69bddec638dd61df70f1b75a4fd94650fc96d8e"
+        },
+        "build.config": {
+          "bytes": 12673,
+          "path": "payloads/HW-C/build.config",
+          "sha256": "fc47e6370e7cf17d65fcf1665d1d15a71c5493967f582a482a3c1a64d2c103d1"
+        },
+        "dtb_combined.bin": {
+          "bytes": 4912,
+          "path": "payloads/HW-C/dtb_combined.bin",
+          "sha256": "edfcb16567afa7b802cc9a55143e4d64270036a34a3be505c354cabbccfa6b82"
+        },
+        "ipq5018-h3c-hw-c.packed.dtb": {
+          "bytes": 4891,
+          "path": "payloads/HW-C/ipq5018-h3c-hw-c.packed.dtb",
+          "sha256": "aee00aec7cc4ba986bb3c512a8555bad36264455e84299bd7b42da3b81c9308c"
+        },
+        "provenance.json": {
+          "bytes": 393,
+          "path": "payloads/HW-C/provenance.json",
+          "sha256": "38c4fa1cdac6419fcc07c6042db6c13fbfb1168ac8f4442580ca26dcbb52770d"
+        }
+      },
+      "hardware_validation": "NOT_EXECUTED",
+      "installation_status": "offline candidate; NOT_INSTALL_READY",
+      "profile": "release",
+      "source_date_epoch": "1792126813",
+      "source_revision": "5f486f5f9852c26d7d16eb5980a06cccea2a5217"
+    },
+    "D": {
+      "board": "D",
+      "candidate_id": "5f486f5f9852c26d7d16eb5980a06cccea2a5217:HW-D:neutral-path-rebuild:offline",
+      "canonical_comparison": "differs from frozen canonical candidate; no qualification inheritance",
+      "embedded_git_revision": "5f486f5f9852",
+      "files": {
+        "appsbl.mbn": {
+          "bytes": 640538,
+          "path": "payloads/HW-D/appsbl.mbn",
+          "sha256": "ca3e059c9de2209c793948fbb5f155cc8b5cb2011b5c1ca9a903321157dce713"
+        },
+        "appsbl.partition.bin": {
+          "bytes": 1310720,
+          "path": "payloads/HW-D/appsbl.partition.bin",
+          "sha256": "91e9d881ad1b5c88f942069908bfdd7484984521422ad7f1923738d2cc653362"
+        },
+        "build.config": {
+          "bytes": 12790,
+          "path": "payloads/HW-D/build.config",
+          "sha256": "62fca0431c9d7674950710a34d3bcef1f9102ea5cece2c3141bb05754f0d6040"
+        },
+        "dtb_combined.bin": {
+          "bytes": 4800,
+          "path": "payloads/HW-D/dtb_combined.bin",
+          "sha256": "c6c42dcd5b33d52db9712915278d8900038a6340fbf8211875614c6d7db3b28b"
+        },
+        "ipq5018-h3c-hw-d.packed.dtb": {
+          "bytes": 4773,
+          "path": "payloads/HW-D/ipq5018-h3c-hw-d.packed.dtb",
+          "sha256": "af4c264976053055a451466606dbc6a186bc3aa487d20589303774267611c722"
+        },
+        "provenance.json": {
+          "bytes": 393,
+          "path": "payloads/HW-D/provenance.json",
+          "sha256": "415d28f7b56c760cd47b32e1b732d331afb09b44e058beaf6216d123812b922d"
+        }
+      },
+      "hardware_validation": "NOT_EXECUTED",
+      "installation_status": "offline candidate; NOT_INSTALL_READY",
+      "profile": "release",
+      "source_date_epoch": "1792126813",
+      "source_revision": "5f486f5f9852c26d7d16eb5980a06cccea2a5217"
+    }
+  },
+  "claim": "offline candidates only; no installation authorization or hardware qualification",
+  "schema": 1
+}

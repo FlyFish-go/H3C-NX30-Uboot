@@ -98,7 +98,18 @@ endif
 
 obj-$(CONFIG_LIB_BOOTCONFIG) += bootconfig.o
 obj-$(CONFIG_LIB_IPQ_API) += ipq_api.o ipq_led.o
+ifneq ($(CONFIG_H3C_HW_D_NOR_RESCUE),y)
+obj-$(CONFIG_H3C_IPQ5018_COMMON) += rt3000_b_layout.o
+endif
+obj-$(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) += rt3000_b_bootargs.o
 obj-$(CONFIG_LIB_FLASHRW) += flashrw.o
 obj-$(CONFIG_CALL_FUNC_CAPTURE) += capture.o
 
 subdir-ccflags-$(CONFIG_CC_OPTIMIZE_LIBS_FOR_SPEED) += -O2
+
+obj-$(CONFIG_H3C_HW_D_RAM_WEB) += nx30_d_bootargs.o
+
+obj-$(CONFIG_H3C_HW_D_STORAGE_PORT) += nx30_d_service.o nx30_d_uboot.o nx30_d_ubi_core.o nx30_d_firmware.o nx30_d_fw_txn_core.o
+
+obj-$(CONFIG_H3C_NAND_ECC_COMPAT) += h3c_nand_ecc_core.o h3c_nand_ecc.o
+obj-$(CONFIG_H3C_RELEASE_SYSTEM_DEFAULT) += h3c_boot_policy_core.o h3c_boot_policy.o

@@ -157,6 +157,14 @@ $(info CONFIG_TARGET_IPQ807x_XIAOMI_AX3600     = $(CONFIG_TARGET_IPQ807x_XIAOMI_
 $(info CONFIG_TARGET_IPQ807x_XIAOMI_AX9000     = $(CONFIG_TARGET_IPQ807x_XIAOMI_AX9000))
 
 dtb-$(CONFIG_TARGET_IPQ5018_CMCC_MR3000D_CI)   += ipq5018-cmcc_mr3000d-ci.dtb
+dtb-$(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) += ipq5018-h3c_rt3000-b.dtb
+dtb-$(CONFIG_TARGET_IPQ5018_H3C_HW_A) += ipq5018-h3c-hw-a.dtb
+dtb-$(CONFIG_TARGET_IPQ5018_H3C_HW_C) += ipq5018-h3c-hw-c.dtb
+ifeq ($(CONFIG_H3C_HW_D_NOR_RESCUE),y)
+dtb-$(CONFIG_TARGET_IPQ5018_H3C_HW_D) += ipq5018-h3c-hw-d-nor-rescue.dtb
+else
+dtb-$(CONFIG_TARGET_IPQ5018_H3C_HW_D) += ipq5018-h3c-hw-d.dtb
+endif
 dtb-$(CONFIG_TARGET_IPQ5018_CMCC_PZ_L8)        += ipq5018-cmcc_pz-l8.dtb
 dtb-$(CONFIG_TARGET_IPQ5018_CMCC_RAX3000Q)     += ipq5018-cmcc_rax3000q.dtb
 dtb-$(CONFIG_TARGET_IPQ5018_CUCC_VS010)        += ipq5018-cucc_vs010.dtb
@@ -462,7 +470,7 @@ PHONY += dtbs
 
 ifneq ($(CONFIG_OF_COMBINE),)
 
-%(obj)/%.dtb.comb.S: %(obj)/%.dtb
+$(obj)/%.dtb.comb.S: $(obj)/%.dtb
 	@:
 
 $(obj)/dtbtable.S: $(addsuffix .comb.o, $(addprefix $(obj)/, $(dtb-y)))

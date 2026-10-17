@@ -291,7 +291,7 @@ quiet_cmd_dt_comb_S_dtb= DTB_COMB     $@
 # Modified for U-Boot Combined ELF
 #get the Magic
 cmd_dt_comb_S_dtb=							\
-	dtbmachid=`cat "$(obj)/$(*F).dts" | grep machid | 		\
+	dtbmachid=`cat "$(srctree)/$(src)/$(*F).dts" | grep machid | 		\
 	cut -f 2 -d '<' | cut -f 1 -d '>'` ; 				\
 	if [ -e $$dtbmachid ];						\
 	then								\
@@ -315,7 +315,7 @@ cmd_dt_comb_S_dtb=							\
 	sed -i '5 d' $(obj)/dtbtable.S;					\
 	sed -i "5 i .word $$num" $(obj)/dtbtable.S;			\
 (									\
-	dtbmachid=`cat "$(obj)/$(*F).dts" | grep machid | 		\
+	dtbmachid=`cat "$(srctree)/$(src)/$(*F).dts" | grep machid | 		\
 	cut -f 2 -d '<' | cut -f 1 -d '>'` ; 				\
 	machiddec=`printf %d $$dtbmachid`;				\
 	echo ".section .dtb.combine_$$machiddec,\"a\"";			\

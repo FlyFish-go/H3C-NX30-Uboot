@@ -15,6 +15,7 @@
  * FlashWrite command support
  */
 #include <common.h>
+#include <malloc.h>
 #include <command.h>
 #include <asm/arch-qca-common/smem.h>
 #include <part.h>
@@ -27,6 +28,9 @@
 #include <fdtdec.h>
 #include <asm/arch-qca-common/qpic_nand.h>
 #include <ipq_api.h>
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+#include <rt3000_b_fw_write.h>
+#endif
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -59,6 +63,188 @@ struct header {
 #endif
 
 uint32_t flash_type_new = -1;
+
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+static int rt3_parse_hex_u32(const char *text, u32 *value)
+{
+	u32 parsed = 0;
+	unsigned int digit;
+	int have_digit = 0;
+
+	if (!text || !*text || !value)
+		return -EINVAL;
+	if (text[0] == '0' && (text[1] == 'x' || text[1] == 'X'))
+		text += 2;
+	while (*text) {
+		if (*text >= '0' && *text <= '9')
+			digit = *text - '0';
+		else if (*text >= 'a' && *text <= 'f')
+			digit = *text - 'a' + 10;
+		else if (*text >= 'A' && *text <= 'F')
+			digit = *text - 'A' + 10;
+		else
+			return -EINVAL;
+		if (parsed > (U32_MAX - digit) / 16)
+			return -ERANGE;
+		parsed = parsed * 16 + digit;
+		have_digit = 1;
+		text++;
+	}
+	if (!have_digit)
+		return -EINVAL;
+	*value = parsed;
+	return 0;
+}
+
+/*
+ * Write one exact SMEM-named NAND0 partition using the normal ECC MTD API.
+ * The write window is synchronous and is closed on every path after opening.
+ */
+static int rt3_named_nand_write_partition(struct mtd_info *mtd,
+		const char *name, u64 offset, u64 size,
+		uintptr_t load_addr, size_t file_size, int write_data)
+{
+	struct erase_info erase;
+	const u8 *source = (const u8 *)load_addr;
+	u8 *buffers = NULL, *expected, *actual;
+	u64 pos;
+	size_t retlen, valid, buffer_size;
+	uintptr_t ram_start = CONFIG_SYS_SDRAM_BASE, ram_end;
+	uintptr_t buffer_addr, buffer_end, source_end = 0;
+	int ret = -EINVAL, opened = 0;
+
+	if (!mtd || !name || !*name || !size || !mtd->erasesize ||
+	    !mtd->writesize || offset > mtd->size ||
+	    size > mtd->size - offset ||
+	    offset % mtd->erasesize || size % mtd->erasesize ||
+	    size % mtd->writesize)
+		return -EINVAL;
+	if (write_data) {
+		if (!file_size || file_size > size ||
+		    file_size > (~(uintptr_t)0) - load_addr ||
+		    !is_load_addr_valid(load_addr) ||
+		    !is_memory_region_available(load_addr, file_size) ||
+		    gd->ram_size > (~(uintptr_t)0) - ram_start)
+			return -EINVAL;
+		ram_end = ram_start + gd->ram_size;
+		if (load_addr < ram_start || load_addr >= ram_end ||
+		    file_size > ram_end - load_addr)
+			return -EINVAL;
+	}
+	buffer_size = (size_t)mtd->writesize * 2;
+	if (buffer_size / 2 != mtd->writesize)
+		return -EINVAL;
+
+	/* Refuse the whole partition if any erase block is bad or unreadable. */
+	for (pos = offset; pos < offset + size; pos += mtd->erasesize) {
+		ret = mtd_block_isbad(mtd, (loff_t)pos);
+		if (ret != 0) {
+			printf("NAND partition %s has a bad/unreadable block at 0x%llx\n",
+			       name, (unsigned long long)pos);
+			return ret < 0 ? ret : -EIO;
+		}
+	}
+
+	buffers = memalign(ARCH_DMA_MINALIGN, buffer_size);
+	if (!buffers)
+		return -ENOMEM;
+	buffer_addr = (uintptr_t)buffers;
+	if (buffer_size > (~(uintptr_t)0) - buffer_addr) {
+		ret = -EINVAL;
+		goto out;
+	}
+	buffer_end = buffer_addr + buffer_size;
+	if (write_data) {
+		source_end = load_addr + file_size;
+		if (load_addr < buffer_end && buffer_addr < source_end) {
+			printf("Source buffer overlaps NAND writer scratch memory\n");
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+	expected = buffers;
+	actual = buffers + mtd->writesize;
+
+	ret = rt3_named_nand_write_window_open(mtd, name, offset, size);
+	if (ret)
+		goto out;
+	opened = 1;
+
+	for (pos = offset; pos < offset + size; pos += mtd->erasesize) {
+		memset(&erase, 0, sizeof(erase));
+		erase.mtd = mtd;
+		erase.addr = (loff_t)pos;
+		erase.len = mtd->erasesize;
+		ret = mtd_erase(mtd, &erase);
+		if (ret) {
+			printf("NAND erase failed for %s at 0x%llx: %d\n",
+			       name, (unsigned long long)pos, ret);
+			goto out;
+		}
+	}
+
+	if (write_data) {
+		for (pos = 0; pos < file_size; pos += mtd->writesize) {
+			valid = file_size - (size_t)pos;
+			if (valid > mtd->writesize)
+				valid = mtd->writesize;
+			memset(expected, 0xff, mtd->writesize);
+			memcpy(expected, source + (size_t)pos, valid);
+			retlen = 0;
+			ret = mtd_write(mtd, (loff_t)(offset + pos),
+					mtd->writesize, &retlen, expected);
+			if (ret || retlen != mtd->writesize) {
+				if (!ret)
+					ret = -EIO;
+				printf("NAND write failed for %s at 0x%llx: %d (%lu bytes)\n",
+				       name, (unsigned long long)(offset + pos), ret,
+				       (unsigned long)retlen);
+				goto out;
+			}
+		}
+	}
+
+	/* Verify every data page and the complete erased 0xff tail. */
+	for (pos = 0; pos < size; pos += mtd->writesize) {
+		valid = 0;
+		if (write_data && pos < file_size) {
+			valid = file_size - (size_t)pos;
+			if (valid > mtd->writesize)
+				valid = mtd->writesize;
+		}
+		memset(expected, 0xff, mtd->writesize);
+		if (valid)
+			memcpy(expected, source + (size_t)pos, valid);
+		retlen = 0;
+		ret = mtd_read(mtd, (loff_t)(offset + pos), mtd->writesize,
+			       &retlen, actual);
+		if ((ret && ret != -EUCLEAN) || retlen != mtd->writesize) {
+			if (!ret)
+				ret = -EIO;
+			printf("NAND readback failed for %s at 0x%llx: %d (%lu bytes)\n",
+			       name, (unsigned long long)(offset + pos), ret,
+			       (unsigned long)retlen);
+			goto out;
+		}
+		if (memcmp(expected, actual, mtd->writesize)) {
+			ret = -EIO;
+			printf("NAND readback mismatch for %s at 0x%llx\n",
+			       name, (unsigned long long)(offset + pos));
+			goto out;
+		}
+	}
+	ret = 0;
+	printf("NAND partition %s %s and full readback verified (%llu bytes)\n",
+	       name, write_data ? "written" : "erased",
+	       (unsigned long long)size);
+
+out:
+	if (opened)
+		rt3_fw_write_window_close();
+	free(buffers);
+	return ret;
+}
+#endif
 
 static int write_to_flash(int flash_type, uint32_t address, uint32_t offset,
 uint32_t part_size, uint32_t file_size, char *layout)
@@ -213,6 +399,9 @@ char * const argv[])
 	uint32_t size_block, start_block, file_size_cpy = 0;
 	char *part_name = NULL, *filesize, *loadaddr;
 	int flash_type, ret;
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	int named_nand_path;
+#endif
 	unsigned int active_part = 0;
 	char *layout = NULL;
 #ifdef CONFIG_IPQ806X
@@ -236,6 +425,10 @@ char * const argv[])
 	disk_partition_t disk_info = {0};
 	const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 	flash_type = (flash_type_new != -1) ? flash_type_new : sfi->flash_type;
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+	named_nand_path = (flash_type == SMEM_BOOT_NAND_FLASH ||
+		flash_type == SMEM_BOOT_QSPI_NAND_FLASH);
+#endif
 #ifdef CONFIG_CMD_NAND
 	nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
 #endif
@@ -248,20 +441,48 @@ char * const argv[])
 
 		if (argc == 2) {
 			loadaddr = getenv("fileaddr");
-			if (loadaddr != NULL)
-				load_addr = simple_strtoul(loadaddr, NULL, 16);
-			else
+			if (loadaddr != NULL) {
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+				if (named_nand_path) {
+					u32 parsed;
+					if (rt3_parse_hex_u32(loadaddr, &parsed))
+						goto exit;
+					load_addr = parsed;
+				} else
+#endif
+					load_addr = simple_strtoul(loadaddr, NULL, 16);
+			} else
 				goto exit;
 
 			filesize = getenv("filesize");
-			if (filesize != NULL)
-				file_size = simple_strtoul(filesize, NULL, 16);
-			else
+			if (filesize != NULL) {
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+				if (named_nand_path) {
+					u32 parsed;
+					if (rt3_parse_hex_u32(filesize, &parsed))
+						goto exit;
+					file_size = parsed;
+				} else
+#endif
+					file_size = simple_strtoul(filesize, NULL, 16);
+			} else
 				goto exit;
 
 		} else if (argc == 4) {
-			load_addr = simple_strtoul(argv[2], NULL, 16);
-			file_size = simple_strtoul(argv[3], NULL, 16);
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+			if (named_nand_path) {
+				u32 parsed_addr, parsed_size;
+				if (rt3_parse_hex_u32(argv[2], &parsed_addr) ||
+				    rt3_parse_hex_u32(argv[3], &parsed_size))
+					goto exit;
+				load_addr = parsed_addr;
+				file_size = parsed_size;
+			} else
+#endif
+			{
+				load_addr = simple_strtoul(argv[2], NULL, 16);
+				file_size = simple_strtoul(argv[3], NULL, 16);
+			}
 
 		} else
 			goto exit;
@@ -288,6 +509,14 @@ char * const argv[])
 			goto exit;
 		}
 
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+		if (named_nand_path && (!sfi->flash_block_size ||
+		    start_block > 0xffffffffU / sfi->flash_block_size ||
+		    size_block > 0xffffffffU / sfi->flash_block_size)) {
+			ret = CMD_RET_FAILURE;
+			goto exit;
+		}
+#endif
 		offset = sfi->flash_block_size * start_block;
 		part_size = sfi->flash_block_size * size_block;
 #ifdef CONFIG_IPQ806X
@@ -422,6 +651,15 @@ char * const argv[])
 	}
 
 	if (flash_cmd) {
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+		if (named_nand_path) {
+			ret = rt3_named_nand_write_partition(
+				&nand_info[CONFIG_NAND_FLASH_INFO_IDX], part_name,
+				(u64)offset, (u64)part_size, (uintptr_t)load_addr,
+				(size_t)file_size, 1);
+			goto exit;
+		}
+#endif
 #ifdef CONFIG_CMD_NAND
 		if (((flash_type == SMEM_BOOT_NAND_FLASH) ||
 			(flash_type == SMEM_BOOT_QSPI_NAND_FLASH))) {
@@ -475,8 +713,16 @@ char * const argv[])
 			setenv("stdout", "serial");
 		}
 #endif
-	} else
-		ret = fl_erase(flash_type, offset, part_size, layout);
+	} else {
+#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
+		if (named_nand_path)
+			ret = rt3_named_nand_write_partition(
+				&nand_info[CONFIG_NAND_FLASH_INFO_IDX], part_name,
+				(u64)offset, (u64)part_size, 0, 0, 0);
+		else
+#endif
+			ret = fl_erase(flash_type, offset, part_size, layout);
+	}
 exit:
 	if (ret) {
 		printf("%s command failed, set flash type to default: %s (0x%x)\n",

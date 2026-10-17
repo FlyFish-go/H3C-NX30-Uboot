@@ -36,6 +36,9 @@
 static struct ubi_device *ubi;
 static char buffer[80];
 static int ubi_initialized;
+static int ubi_readonly_requested;
+static struct mtd_info *ubi_readonly_master;
+static u32 ubi_readonly_saved_flags;
 
 struct selected_dev {
 	char part_name[80];
@@ -50,6 +53,30 @@ static struct selected_dev ubi_dev;
 int ubifs_is_mounted(void);
 void cmd_ubifs_umount(void);
 #endif
+
+static void ubi_release_current(void)
+{
+#ifdef CONFIG_CMD_UBIFS
+	if (ubifs_is_mounted())
+		cmd_ubifs_umount();
+#endif
+	if (ubi_initialized) {
+		ubi_exit();
+		ubi_initialized = 0;
+	}
+	if (ubi_dev.mtd_info) {
+		del_mtd_partitions(ubi_dev.mtd_info);
+		if (ubi_readonly_master == ubi_dev.mtd_info) {
+			ubi_dev.mtd_info->flags = ubi_readonly_saved_flags;
+			ubi_readonly_master = NULL;
+			ubi_readonly_saved_flags = 0;
+		}
+		put_mtd_device(ubi_dev.mtd_info);
+		ubi_dev.mtd_info = NULL;
+	}
+	ubi_dev.selected = 0;
+	ubi = NULL;
+}
 
 static void display_volume_info(struct ubi_device *ubi)
 {
@@ -456,6 +483,13 @@ static int ubi_dev_scan(struct mtd_info *info, char *ubidev,
 
 int ubi_part(char *part_name, const char *vid_header_offset)
 {
+#ifdef CONFIG_H3C_HW_D_RAM_READONLY
+	/* Diagnostic CLI/boot attachment must not schedule UBI writes. */
+	if (!ubi_readonly_requested) {
+		ubi_release_current();
+		return ubi_part_readonly(part_name, vid_header_offset);
+	}
+#endif
 	int err = 0;
 	char mtd_dev[16];
 	struct mtd_device *dev;
@@ -480,15 +514,8 @@ int ubi_part(char *part_name, const char *vid_header_offset)
 	/* todo: get dev number for NAND... */
 	ubi_dev.nr = 0;
 
-	/*
-	 * Call ubi_exit() before re-initializing the UBI subsystem
-	 */
-	if (ubi_initialized) {
-		ubi_exit();
-		del_mtd_partitions(ubi_dev.mtd_info);
-		put_mtd_device(ubi_dev.mtd_info);
-		ubi_initialized = 0;
-	}
+	/* Release any previous attach before re-initializing UBI. */
+	ubi_release_current();
 
 	/*
 	 * Search the mtd device number where this partition
@@ -503,9 +530,20 @@ int ubi_part(char *part_name, const char *vid_header_offset)
 	if (IS_ERR(ubi_dev.mtd_info)) {
 		printf("Partition %s not found on device %s!\n", part_name,
 		       mtd_dev);
+		ubi_dev.mtd_info = NULL;
 		return 1;
 	}
 
+	if (ubi_readonly_requested) {
+		if (ubi_readonly_master) {
+			put_mtd_device(ubi_dev.mtd_info);
+			ubi_dev.mtd_info = NULL;
+			return -EBUSY;
+		}
+		ubi_readonly_master = ubi_dev.mtd_info;
+		ubi_readonly_saved_flags = ubi_dev.mtd_info->flags;
+		ubi_dev.mtd_info->flags &= ~MTD_WRITEABLE;
+	}
 	ubi_dev.selected = 1;
 
 	strcpy(ubi_dev.part_name, part_name);
@@ -514,11 +552,39 @@ int ubi_part(char *part_name, const char *vid_header_offset)
 	if (err) {
 		printf("UBI init error %d\n", err);
 		ubi_dev.selected = 0;
+		if (ubi_readonly_master == ubi_dev.mtd_info) {
+			ubi_dev.mtd_info->flags = ubi_readonly_saved_flags;
+			ubi_readonly_master = NULL;
+			ubi_readonly_saved_flags = 0;
+		}
+		put_mtd_device(ubi_dev.mtd_info);
+		ubi_dev.mtd_info = NULL;
 		return err;
 	}
 
 	ubi = ubi_devices[0];
 
+	return 0;
+}
+
+int ubi_part_readonly(char *part_name, const char *vid_header_offset)
+{
+	int ret;
+	if (ubi_readonly_requested || ubi_readonly_master)
+		return -EBUSY;
+	ubi_readonly_requested = 1;
+	ret = ubi_part(part_name, vid_header_offset);
+	ubi_readonly_requested = 0;
+	if (ret && ubi_readonly_master)
+		ubi_release_current();
+	return ret;
+}
+
+int ubi_exit_readonly(void)
+{
+	if (!ubi_readonly_master)
+		return -EINVAL;
+	ubi_release_current();
 	return 0;
 }
 
@@ -535,10 +601,7 @@ static int do_ubi(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	if (strcmp(argv[1], "exit") == 0)  {
 		if (ubi_initialized) {
 			printf("!! Detaching UBI partition\n");
-			ubi_exit();
-			del_mtd_partitions(ubi_dev.mtd_info);
-			put_mtd_device(ubi_dev.mtd_info);
-			ubi_initialized = 0;
+			ubi_release_current();
 		}
 		return 0;
 	}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPI NOR NX30 救援</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#10151c;color:#edf2f7}body{margin:0;padding:24px}.wrap{max-width:780px;margin:auto}.banner{border:3px solid #ffb547;background:#392812;padding:20px;border-radius:12px}.banner h1{font-size:clamp(1.6rem,6vw,2.5rem);margin:0;color:#ffd18a}.card{background:#1b2530;padding:20px;margin-top:18px;border-radius:12px}button,input{font:inherit;padding:10px;margin:8px 0}button{background:#1870bd;color:white;border:0;border-radius:6px;cursor:pointer}button:disabled{opacity:.5;cursor:wait}.danger{background:#a43128}#status{white-space:pre-wrap;line-height:1.5}.small{color:#b7c4d1}
+</style>
+<script src="/main.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+<section class="banner"><h1>SPI NOR NX30 救援</h1><p>只更新 SPI NOR 中的救援 U-Boot</p></section>
+<section class="card">
+<h2>系统数据 ECC 自动检测（抽样，只读）</h2>
+<p>按需读取 NAND 中的 UBI 头部样本，比较 ECC4 与 ECC8 格式。检测不会写入 NAND，也不会格式化或启动系统。</p>
+<button id="nand-probe">自动检测 NAND（只读）</button>
+<button id="nand-retry" hidden>重新抽样</button>
+<p id="nand-status" role="status">尚未检测。点击按钮后才开始抽样。</p>
+</section>
+<section class="card">
+<h2>更新 NOR U-Boot</h2>
+<p>支持 8 MiB 或 16 MiB SPI NOR 的专用校验包。设备先写入并完整验证备用副本，再更新主副本。</p>
+<p class="small">更新期间请保持供电。完成后重启生效。若任一步失败，后续写入会停止。</p>
+<label for="image">NOR U-Boot 校验包</label><br><input id="image" type="file" accept=".bin,application/octet-stream"><br>
+<button id="validate">上传并验证</button>
+<div id="review" hidden><p id="candidate"></p><button class="danger" id="write">确认更新 NOR U-Boot</button></div>
+<p id="status" role="status">请选择 NOR U-Boot 校验包。</p>
+</section>
+</div>
+</body>
+</html>

@@ -42,7 +42,21 @@
 
 #define CONFIG_SYS_BOOTM_LEN		(200 << 20)
 
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+#define CONFIG_ENV_SIZE_MAX			(64 << 10) /* NOR APPSBLENV is 64 KiB */
+#else
 #define CONFIG_ENV_SIZE_MAX			(256 << 10) /* 256 KB */
+#endif
+
+/* Software-only shared port; HW-A remains a distinct target identity. */
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || \
+    defined(CONFIG_H3C_HW_A_RAM_READONLY) || \
+    defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || \
+    defined(CONFIG_H3C_HW_C_RAM_READONLY) || \
+    defined(CONFIG_H3C_HW_C_PRODUCTION_PORT)
+#define CONFIG_H3C_IPQ5018_DUALSLOT_PORT
+#endif
+
 
 /*
 * PSCI Calls enable
@@ -52,9 +66,9 @@
 /*
  * Flash read/write commands
  */
+#if (!defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
 #define CONFIG_CMD_FLASHREAD
 #define CONFIG_CMD_FLASHWRITE
-#if defined(CONFIG_CMD_FLASHREAD) || defined(CONFIG_CMD_FLASHWRITE)
 #define CONFIG_CMD_FLASHRW
 #endif
 
@@ -143,7 +157,11 @@ extern loff_t board_env_size;
 #define CONFIG_ENV_OFFSET			board_env_offset
 #define CONFIG_ENV_SIZE				CONFIG_ENV_SIZE_MAX
 #define CONFIG_ENV_RANGE			board_env_range
+#if defined(CONFIG_H3C_HW_D_STORAGE_PORT) || defined(CONFIG_H3C_HW_D_NOR_RESCUE) || defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT)
+#define CONFIG_SYS_MALLOC_LEN			(8 << 20)
+#else
 #define CONFIG_SYS_MALLOC_LEN			(CONFIG_ENV_SIZE_MAX + (500 << 10))
+#endif
 
 /*
  * NAND Flash Configs
@@ -157,7 +175,9 @@ extern loff_t board_env_size;
 #define CONFIG_SYS_NAND_SELF_INIT
 
 #ifdef CONFIG_NAND_FLASH
+#ifndef CONFIG_CMD_NAND
 #define CONFIG_CMD_NAND
+#endif
 #define CONFIG_ENV_IS_IN_NAND			1
 #define CONFIG_QPIC_NAND
 #define CONFIG_SYS_NAND_ONFI_DETECTION
@@ -182,10 +202,16 @@ extern loff_t board_env_size;
 * SPI Flash Configs
 */
 #define CONFIG_QCA_SPI
+#ifndef CONFIG_SPI_FLASH
 #define CONFIG_SPI_FLASH
+#endif
+#ifndef CONFIG_CMD_SF
 #define CONFIG_CMD_SF
+#endif
 #define CONFIG_SPI_FLASH_STMICRO
+#ifndef CONFIG_SPI_FLASH_WINBOND
 #define CONFIG_SPI_FLASH_WINBOND
+#endif
 #define CONFIG_SPI_FLASH_MACRONIX
 #define CONFIG_SPI_FLASH_GIGADEVICE
 #define CONFIG_SPI_FLASH_SPANSION
@@ -194,7 +220,9 @@ extern loff_t board_env_size;
 #define CONFIG_SF_DEFAULT_MODE			SPI_MODE_0
 #define CONFIG_SF_DEFAULT_SPEED			(48 * 1000 * 1000)
 #define CONFIG_SPI_FLASH_BAR			1
+#ifndef CONFIG_SPI_FLASH_USE_4K_SECTORS
 #define CONFIG_SPI_FLASH_USE_4K_SECTORS
+#endif
 #define CONFIG_IPQ_4B_ADDR_SWITCH_REQD
 
 #define CONFIG_QUP_SPI_USE_DMA			1
@@ -240,11 +268,18 @@ extern loff_t board_env_size;
 
 #define CONFIG_NET_RETRY_COUNT			5
 #define CONFIG_SYS_RX_ETH_BUFFER		128
+#ifndef CONFIG_CMD_PING
 #define CONFIG_CMD_PING
+#endif
 #define CONFIG_MII
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_D)
+#define CONFIG_IPADDR				192.168.10.1
+#define CONFIG_SERVERIP				192.168.10.2
+#else
 #define CONFIG_IPADDR				192.168.1.1
-#define CONFIG_NETMASK				255.255.255.0
 #define CONFIG_SERVERIP				192.168.1.2
+#endif
+#define CONFIG_NETMASK				255.255.255.0
 #define CONFIG_CMD_TFTPPUT
 #define CONFIG_IPQ_MDIO				1
 #define CONFIG_IPQ_ETH_INIT_DEFER
@@ -321,11 +356,19 @@ extern loff_t board_env_size;
 #define CONFIG_SYS_MEMTEST_END			CONFIG_SYS_MEMTEST_START + 0x100
 
 /* NSS firmware loaded using bootm */
+#if defined(CONFIG_H3C_HW_D_NOR_RESCUE) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#define CONFIG_BOOTCOMMAND			"httpd"
+#else
 #define CONFIG_BOOTCOMMAND			"bootipq"
+#endif
 #define CONFIG_BOOTARGS				"console=ttyMSM0,115200n8"
 #define QCA_ROOT_FS_PART_NAME			"rootfs"
 
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+#define CONFIG_BOOTDELAY			0
+#else
 #define CONFIG_BOOTDELAY			3
+#endif
 
 #define NUM_ALT_PARTITION			16
 
@@ -402,9 +445,16 @@ extern loff_t board_env_size;
 #define CONFIG_SYS_CACHELINE_SIZE		64
 
 /*
- * UBI write command
+ * RT3000-B needs UBI attach/read for the OEM/QSDK kernel volumes. Keep the
+ * generic UBI command available, but leave all QCA volume-write support off;
+ * the B QPIC driver also rejects NAND program/erase operations.
  */
-#ifdef CONFIG_UBI_WRITE
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_RAM_WEB)
+#define CONFIG_CMD_UBI
+#define CONFIG_CMD_UBIFS
+#define CONFIG_LZO
+#define CONFIG_RBTREE
+#elif defined(CONFIG_UBI_WRITE)
 #define CONFIG_CMD_UBI
 #define CONFIG_RBTREE
 #define IPQ_UBI_VOL_WRITE_SUPPORT
@@ -455,13 +505,19 @@ extern loff_t board_env_size;
  */
 #define CONFIG_IPQ_XTRACT_N_FLASH
 #define CONFIG_IPQ_MIBIB_RELOAD
+#if (!defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
 #define CONFIG_CMD_BOOTCONFIG
 #define CONFIG_CMD_BOOTFLASH
+#endif
 #define CONFIG_CMD_IMI
+#if (!defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_D_RAM_WEB) || defined(CONFIG_H3C_HW_D_NOR_RESCUE)
 #define CONFIG_HTTPD
 #define CONFIG_TCP
 #define CONFIG_LIB_RAND
+#if !defined(CONFIG_H3C_HW_D_RAM_WEB) && !defined(CONFIG_H3C_HW_D_NOR_RESCUE)
 #define CONFIG_HTTPD_DEBUG
+#endif
+#endif
 #define CONFIG_INCLUDE_EXTRA_DTB
 #define CONFIG_CALL_FUNC_CAPTURE
 
@@ -485,7 +541,9 @@ extern loff_t board_env_size;
 /*
  * DHCP Server support
  */
+#if (!defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
 #define CONFIG_DHCPD
+#endif
 
 #ifdef CONFIG_DHCPD
 #define CONFIG_CMD_DISABLE_BOOTP
@@ -496,11 +554,15 @@ extern loff_t board_env_size;
 /*
  * Telnet Server support
  */
+#if (!defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
 #define CONFIG_TELNETD
+#endif
 
 /*
  * wget support
  */
+#if (!defined(CONFIG_H3C_HW_D_RAM_READONLY) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
 #define CONFIG_WGET
+#endif
 
 #endif /* _IPQ5018_H */

@@ -150,6 +150,18 @@ msm_boot_uart_dm_read(unsigned int *data, int *count, int wait,
 
 	/* WAR for http://prism/CR/548280 */
 	if (*data == 0) {
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+		/*
+		 * The RX FIFO word was consumed, so this transfer can no longer
+		 * complete.  Leaving RXSTALE asserted with DMRX at zero strands
+		 * subsequent nonblocking console polls.  Recover the receiver and
+		 * discard this transfer's software accounting on RT3000-B and HW-C only.
+		 */
+		writel(MSM_BOOT_UART_DM_CMD_RESET_ERR_STAT,
+			MSM_BOOT_UART_DM_CR(base));
+		msm_boot_uart_dm_init_rx_transfer(base);
+		total_rx_data = rx_data_read = 0;
+#endif
 		return MSM_BOOT_UART_DM_E_RX_NOT_READY;
 	}
 

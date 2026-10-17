@@ -8,6 +8,7 @@
  */
 
 #include <common.h>
+#include <asm/errno.h>
 #include <command.h>
 #include <console.h>
 #include <malloc.h>
@@ -46,6 +47,30 @@ extern upgrade_type_t upgrade_type;
 typedef void (*register_uri_handlers_func_t)(struct httpd_instance *inst);
 
 register_uri_handlers_func_t register_uri_handlers_funcs[] = {
+#ifdef CONFIG_H3C_HW_D_NOR_RESCUE
+	index_register_uri_handlers,
+	misc_register_uri_handlers,
+	network_register_uri_handlers,
+	sysinfo_register_uri_handlers,
+	upgrade_register_uri_handlers,
+#elif defined(CONFIG_H3C_HW_D_NAND_SERVICE) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	index_register_uri_handlers,
+	html_register_uri_handlers,
+	misc_register_uri_handlers,
+	sysinfo_register_uri_handlers,
+	nor_nand_autoecc_register_uri_handlers,
+	service_hwd_register_uri_handlers,
+	slots_rt3000_b_register_uri_handlers,
+	syslog_register_uri_handlers,
+#elif defined(CONFIG_H3C_HW_D_RAM_WEB) && !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+#ifdef CONFIG_H3C_HW_D_RAM_AUTOECC
+	nor_nand_autoecc_register_uri_handlers,
+#endif
+	index_register_uri_handlers,
+	misc_register_uri_handlers,
+	sysinfo_register_uri_handlers,
+	slots_rt3000_b_register_uri_handlers,
+#else
 	index_register_uri_handlers,
 	html_register_uri_handlers,
 	backup_register_uri_handlers,
@@ -57,9 +82,30 @@ register_uri_handlers_func_t register_uri_handlers_funcs[] = {
 	misc_register_uri_handlers,
 	network_register_uri_handlers,
 	sysinfo_register_uri_handlers,
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+	nor_nand_autoecc_register_uri_handlers,
+#endif
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	buttons_rt3000_b_register_uri_handlers,
+#endif
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_A
+	buttons_h3c_hw_a_register_uri_handlers,
+#endif
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_C
+	buttons_h3c_hw_c_register_uri_handlers,
+#endif
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+	firmware_rt3000_b_register_uri_handlers,
+	slots_rt3000_b_register_uri_handlers,
+	rt3_metadata_register_uri_handlers,
+#endif
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	boot_default_rt3000_b_register_uri_handlers,
+#endif
 	syslog_register_uri_handlers,
 	upgrade_register_uri_handlers,
 	webterm_register_uri_handlers,
+#endif
 };
 
 bool httpd_is_running(void)
@@ -88,7 +134,18 @@ static void print_greeting_message(void)
 static int failsafe_loop(void)
 {
 	int ret;
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+	if (!eth_get_dev_by_name("eth1") || setenv("ethprime", "eth1") ||
+	    setenv("ethact", "eth1") || setenv("ethrotate", "no")) {
+		puts("NX30 D: verified LAN unavailable; stay at recovery CLI\n");
+		return -ENODEV;
+	}
+#endif
 
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+	/* Select the requested device before net_init copies its MAC to ARP. */
+	eth_set_current();
+#endif
 	net_init();
 	if (eth_is_on_demand_init()) {
 		eth_halt();

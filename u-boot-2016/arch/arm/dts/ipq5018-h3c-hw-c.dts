@@ -1,0 +1,186 @@
+/*
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+#include "ipq5018-soc.dtsi"
+/ {
+	host_name = "H3C HW-C";
+	model = "H3C HW-C";
+	h3c,board-family = "HW-C";
+	compatible = "h3c,hw-c", "qca,ipq5018";
+	/* HW-C own CDT and 2026-10-09 native cold boot confirm: machine ID 0x08040101. */
+	machid = <0x08040101>;
+	config_name = "config@mp03.1-c2", "config-mp03.1-c2";
+
+	ddr_size = <256>; /* SMEM RAM table is authoritative; fallback 256 MiB. */
+
+	aliases {
+		console = "/serial@78AF000";
+		nand = "/nand-controller@79B0000";
+	};
+    keys {
+		compatible = "gpio-keys";
+		/* OEM input pinctrl; live press test: RESET=GPIO27 and WPS/MESH=GPIO38, both active-low. */
+
+        reset {
+            gpio = <27>;
+            func = <0>;
+            drvstr = <GPIO_8MA>;
+            pull = <GPIO_PULL_UP>;
+            oe = <GPIO_OE_DISABLE>;
+			active_level = <GPIO_ACTIVE_LOW>;
+        };
+
+        wps {
+            gpio = <38>;
+            func = <0>;
+            drvstr = <GPIO_8MA>;
+            pull = <GPIO_PULL_UP>;
+            oe = <GPIO_OE_DISABLE>;
+			active_level = <GPIO_ACTIVE_LOW>;
+        };
+    };
+
+	console: serial@78AF000 {
+		status = "ok";
+		serial_gpio {
+			blsp0_uart_rx {
+				gpio = <20>;
+				func = <1>;
+				pull = <GPIO_PULL_UP>;
+				drvstr = <GPIO_8MA>;
+				od_en = <GPIO_OD_DISABLE>;
+			};
+			blsp0_uart_tx {
+				gpio = <21>;
+				func = <1>;
+				pull = <GPIO_NO_PULL>;
+				drvstr = <GPIO_8MA>;
+				od_en = <GPIO_OD_DISABLE>;
+			};
+		};
+	};
+
+	nand: nand-controller@79B0000 {
+		status = "okay";
+		nand_gpio {
+			qspi_dat3 {
+				gpio = <4>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_dat2 {
+				gpio = <5>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_dat1 {
+				gpio = <6>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_dat0 {
+				gpio = <7>;
+				func = <2>;
+				pull = <GPIO_NO_PULL>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_cs_n {
+				gpio = <8>;
+				func = <2>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+			qspi_clk {
+				gpio = <9>;
+				func = <2>;
+				od_en = <GPIO_OD_DISABLE>;
+				drvstr = <GPIO_8MA>;
+			};
+		};
+	};
+
+	/* 2026-10-10 isolated live output: GPIO23 red, GPIO24 green, high-active. */
+	leds {
+		compatible = "gpio-leds";
+		status-green {
+			label = "blink_led", "system_led";
+			gpio = <24>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_UP>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+		status-red {
+			label = "power_led";
+			gpio = <23>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_UP>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+		/* Individually driven 17/19 caused no visible light; keep them off. */
+		auxiliary-19 {
+			label = "aux_led_19";
+			gpio = <19>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_NO_PULL>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+		auxiliary-17 {
+			label = "aux_led_17";
+			gpio = <17>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_NO_PULL>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	gmac_cfg {
+		ext_mdio_gpio = <36 37>;
+		/* C native MDIO1 uses GPIO36/37; no unrelated GPIO46 output. */
+
+		gmac1_cfg {
+			unit = <0>;
+			base = <0x39C00000>;
+			phy_address = <7>; /* Independent SoC GEPHY / WAN. */
+		};
+		gmac2_cfg {
+			unit = <1>;
+			base = <0x39D00000>;
+			mac_pwr = <0xaa545>;
+			/* C native: RTL8367S MDIO address29, CPU port6; U-Boot validated 1000/full SGMII. */
+			phy_address = <29>;
+			phy_external_link = <1>;
+			rtl8367s_switch_enable = <1>;
+			rtl8367s_reset_gpio = <39>;
+		};
+	};
+};

@@ -24,11 +24,13 @@
  */
 
 #include <common.h>
+#include <ubifs_uboot.h>
 #include <memalign.h>
 #include "ubifs.h"
 #include <u-boot/zlib.h>
 
 #include <linux/err.h>
+#include <linux/stat.h>
 #include <linux/lzo.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -639,6 +641,120 @@ out:
 	return ret;
 }
 
+static int ubifs_findfile_nofollow(struct super_block *sb, const char *filename,
+				   unsigned long *result)
+{
+	char path[128];
+	char *name, *next;
+	unsigned long parent = 1, inum = 1;
+	int found;
+
+	if (!filename || !result || strlen(filename) >= sizeof(path))
+		return -EINVAL;
+	strlcpy(path, filename, sizeof(path));
+	name = path;
+	while (*name == '/')
+		name++;
+	if (!*name) {
+		*result = 1;
+		return 0;
+	}
+
+	for (;;) {
+		struct inode *dir;
+		struct inode *entry;
+
+		next = strchr(name, '/');
+		if (next) {
+			while (*next == '/')
+				*(next++) = '\0';
+		}
+		if (!*name || !strcmp(name, ".") || !strcmp(name, ".."))
+			return -EINVAL;
+
+		dir = ubifs_iget(sb, parent);
+		if (IS_ERR(dir))
+			return PTR_ERR(dir);
+		if (!S_ISDIR(dir->i_mode)) {
+			ubifs_iput(dir);
+			return -ENOTDIR;
+		}
+		ubifs_iput(dir);
+
+		found = ubifs_finddir(sb, name, parent, &inum);
+		if (found <= 0)
+			return found ? found : -ENOENT;
+		if (!next || !*next) {
+			*result = inum;
+			return 0;
+		}
+
+		entry = ubifs_iget(sb, inum);
+		if (IS_ERR(entry))
+			return PTR_ERR(entry);
+		if (!S_ISDIR(entry->i_mode)) {
+			ubifs_iput(entry);
+			return -ENOTDIR;
+		}
+		ubifs_iput(entry);
+		parent = inum;
+		name = next;
+	}
+}
+
+int ubifs_ro_stat_path(const char *filename, struct ubifs_ro_stat *stat)
+{
+	struct ubifs_info *c;
+	struct inode *inode;
+	unsigned long inum = 0;
+	int err;
+
+	if (!ubifs_sb || !filename || !stat)
+		return -EINVAL;
+	c = ubifs_sb->s_fs_info;
+	if (!c->ubi || IS_ERR(c->ubi))
+		return -EINVAL;
+
+	err = ubifs_findfile_nofollow(ubifs_sb, filename, &inum);
+	if (err)
+		goto out;
+	inode = ubifs_iget(ubifs_sb, inum);
+	if (IS_ERR(inode)) {
+		err = PTR_ERR(inode);
+		goto out;
+	}
+	stat->mode = inode->i_mode;
+	stat->size = inode->i_size;
+	stat->rdev = inode->i_rdev;
+	stat->xattr_count = ubifs_inode(inode)->xattr_cnt;
+	ubifs_iput(inode);
+out:
+	return err;
+}
+
+/*
+ * Read using a temporary read-only UBI handle while preserving the mounted
+ * handle owned by UBIFS. ubifs_read() historically replaces and closes c->ubi.
+ */
+int ubifs_ro_read_path(const char *filename, void *buf, loff_t offset,
+		       loff_t size, loff_t *actread)
+{
+	struct ubifs_info *c;
+	struct ubi_volume_desc *mounted_ubi;
+	int err;
+
+	if (!ubifs_sb)
+		return -EINVAL;
+	c = ubifs_sb->s_fs_info;
+	mounted_ubi = c->ubi;
+	if (!mounted_ubi || IS_ERR(mounted_ubi))
+		return -EINVAL;
+
+	err = ubifs_read(filename, buf, offset, size, actread);
+	c->ubi = mounted_ubi;
+	return err;
+}
+
 int ubifs_exists(const char *filename)
 {
 	struct ubifs_info *c = ubifs_sb->s_fs_info;
@@ -698,7 +814,7 @@ static int read_block(struct inode *inode, void *addr, unsigned int block,
 	struct ubifs_info *c = inode->i_sb->s_fs_info;
 	int err, len, out_len;
 	union ubifs_key key;
-	unsigned int dlen;
+	unsigned int dlen, node_len;
 
 	data_key_init(c, &key, inode->i_ino, block);
 	err = ubifs_tnc_lookup(c, &key, dn);
@@ -715,7 +831,11 @@ static int read_block(struct inode *inode, void *addr, unsigned int block,
 	if (len <= 0 || len > UBIFS_BLOCK_SIZE)
 		goto dump;
 
-	dlen = le32_to_cpu(dn->ch.len) - UBIFS_DATA_NODE_SZ;
+	node_len = le32_to_cpu(dn->ch.len);
+	if (node_len < UBIFS_DATA_NODE_SZ ||
+	    node_len > UBIFS_MAX_DATA_NODE_SZ)
+		goto dump;
+	dlen = node_len - UBIFS_DATA_NODE_SZ;
 	out_len = UBIFS_BLOCK_SIZE;
 	err = ubifs_decompress(c, &dn->data, dlen, addr, &out_len,
 			       le16_to_cpu(dn->compr_type));
@@ -735,7 +855,6 @@ static int read_block(struct inode *inode, void *addr, unsigned int block,
 dump:
 	ubifs_err(c, "bad data node (block %u, inode %lu)",
 		  block, inode->i_ino);
-	ubifs_dump_node(c, dn);
 	return -EINVAL;
 }
 
@@ -871,6 +990,11 @@ int ubifs_read(const char *filename, void *buf, loff_t offset,
 	}
 
 	c->ubi = ubi_open_volume(c->vi.ubi_num, c->vi.vol_id, UBI_READONLY);
+	if (IS_ERR(c->ubi)) {
+		err = PTR_ERR(c->ubi);
+		c->ubi = NULL;
+		return err;
+	}
 	/* ubifs_findfile will resolve symlinks, so we know that we get
 	 * the real file here */
 	inum = ubifs_findfile(ubifs_sb, (char *)filename);
@@ -934,7 +1058,10 @@ put_inode:
 	ubifs_iput(inode);
 
 out:
-	ubi_close_volume(c->ubi);
+	if (c->ubi) {
+		ubi_close_volume(c->ubi);
+		c->ubi = NULL;
+	}
 	return err;
 }
 
