@@ -55,3 +55,7 @@ HW-A/B/C/D 是项目内部分类，用于源码和候选追溯。它不是 H3C �
 感谢 [chenxin527/uboot-qsdk12.5-build](https://github.com/chenxin527/uboot-qsdk12.5-build) 及其上游贡献者。H3C 家族的适配、双系统管理与相关增强在本项目中维护。
 
 U-Boot 和第三方组件保留原有许可证与版权；新增构建和封装代码遵循各自声明。详见 [LICENSE](LICENSE) 和[许可说明](LICENSE-NOTICE.md)。
+
+## 致谢
+
+感谢 [ayu1808](https://github.com/ayu1808)（恩山同名）为本项目提供适配思路，并参与了大量测试。
