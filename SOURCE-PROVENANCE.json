@@ -1,92 +1,74 @@
 {
-  "build_entry_changes": [
-    "Detect and link libbsd host library for legacy strlcpy/strlcat when host libc lacks them.",
-    "Inject the first 12 SOURCE_REVISION hex characters into Kbuild GIT_HASH/GIT_VERSION and record full revision/epoch.",
-    "Build with a separate external O= directory; no .git or fixed /tmp build path required."
-  ],
-  "build_portability_overlay": [
-    {
-      "original_sha256": "422d3bf2b2c32a754ef43d20401d98ee7e6baeac32ef6a1f2ea616ef96b6e391",
-      "path": "u-boot-2016/scripts/Makefile.lib",
-      "reason": "Fix old DTB combined-image rule to find DTS sources from srctree for external O= builds.",
-      "staged_sha256": "a7afcd9e441df0ed4d11c5900bc6eabb10c354c9a31f9b455350213217b2c6af"
-    }
-  ],
-  "build_result": "Four A/B/C/D builds PASS with frozen GCC5.2/binutils2.24; see audit/BUILD-REPORT.md and builds/BUILD-MANIFEST.json.",
-  "excluded": [
-    {
-      "path": "u-boot-2016/tools/elftombn.py",
-      "reason": "Qualcomm confidential/proprietary MBN utility; not needed by independent packager",
-      "sha256": "74070cb3b141c8c9fad8b668ceb47dbcb964f19708db9bdc87b7baf6807576c6",
-      "size": 3219
-    },
-    {
-      "path": "u-boot-2016/tools/mbn_tools.py",
-      "reason": "Qualcomm confidential/proprietary MBN utility; not needed by independent packager",
-      "sha256": "685557613237ba13d33a230945a50f09399befc4ab902b6cd6da01a7ba338ec0",
-      "size": 80271
-    }
-  ],
-  "frozen_original": {
-    "commit": "5f486f5f9852c26d7d16eb5980a06cccea2a5217",
-    "repository_worktree_clean": true,
-    "source_kind": "exact clean frozen candidate evidence repository",
-    "tree": "f7810d8b2056a07bc3ff0976dea5f5d60192dfdd"
+ "schema": 2,
+ "release": "uboot-v0.1.0-pre.2",
+ "source_snapshot_sha256": "b0383f96b3282b0aedbd9765464778a9cf596836f3fd21f73d314c5454262a42",
+ "baseline_snapshot_sha256": "043fd74b5db70e05680f34b4580a60d06f8011b906d7bd38315f0a8f680d458e",
+ "private_commit": {
+  "id": "22778c5e9fe601ced00b898ee662cd1734919c92",
+  "visibility": "private, not published",
+  "note": "Working repository is private; the public tree here is the exported content."
+ },
+ "file_count": 13463,
+ "identity_algorithm": "sha256(json.dumps(files, sort_keys=True, separators=(',',':'))) over the 12,108 baseline paths, using file-content SHA-256",
+ "sanitized_original_files": [
+  {
+   "path": "u-boot-2016/arch/arm/dts/ipq5018-h3c-hw-d-nor-rescue.dts",
+   "original_sha256": "261578c47781213fa15026409ae9939a9e7b1440e31049c6890870247975fa81",
+   "sanitized_sha256": "03f3214c5c1183ed55c598cdac22c5fe8e8a4202e13fee1ca7c306650445d530"
   },
-  "included_uboot_file_count": 11908,
-  "limitations": [
-    "Normalized MBN and partition bytes differ from canonical due GCC5.2 embedded source path at a different build path; arbitrary-path bit-reproducibility is not claimed.",
-    "D neutral label derivative does not inherit hardware qualification of exact installed 5f candidate.",
-    "Toolchain excluded; no approved public URL plus digest recorded.",
-    "No device operation, install qualification, export or GitHub publication."
-  ],
-  "new_release_files": [
-    "build-release.sh",
-    "BUILDING.md",
-    "release-tools/appsbl_packager.py",
-    "release-tools/test_reference_match.py",
-    "release-tools/README.md",
-    "SOURCE-PROVENANCE.json",
-    "LICENSE"
-  ],
-  "not_included": [
-    ".git",
-    "staging_dir (27,170 tracked files; approximately 738 MB)",
-    "private docs, reports, evidence, prior build products, device data and credentials"
-  ],
-  "sanitized_original_files": [
-    {
-      "original_sha256": "261578c47781213fa15026409ae9939a9e7b1440e31049c6890870247975fa81",
-      "path": "u-boot-2016/arch/arm/dts/ipq5018-h3c-hw-d-nor-rescue.dts",
-      "sanitized_sha256": "03f3214c5c1183ed55c598cdac22c5fe8e8a4202e13fee1ca7c306650445d530"
-    },
-    {
-      "original_sha256": "692c91e3c2921dd1df985a9cc5df1ee9bb256a5988065e30f560f039362506ff",
-      "path": "u-boot-2016/arch/arm/dts/ipq5018-h3c-hw-d.dts",
-      "sanitized_sha256": "a94435f10095be986aea38f587ac6ff05858a3e3b6db22b95634584dd5bdd580"
-    },
-    {
-      "original_sha256": "da6501eedec22347ae1f51b197be31a4b6ab56ef05bdc67d1d1219bc2c2788a8",
-      "path": "u-boot-2016/include/nx30_d_uboot_core.h",
-      "sanitized_sha256": "8625d80c3273ccd7abf03c4e5627baffe3d10a0176a79b8c83616a6d4e7f260e"
-    },
-    {
-      "original_sha256": "391200ed70666cf84c4afae23afa64c3878d5dc32a04c618c3a9e4fac723f293",
-      "path": "u-boot-2016/lib/nx30_d_uboot.c",
-      "sanitized_sha256": "d6b808c8544d73a355dc981c755f99761f7d1f99404203492199f77594b8265d"
-    },
-    {
-      "original_sha256": "07d8239f25918df31c3c79553f979587e1d6025ad34a503304934a8d5293016c",
-      "path": "u-boot-2016/test/nx30_d_uboot_core_test.c",
-      "sanitized_sha256": "98e0805162baa6204d31c45330e4fb1db3e98ddca082e894548ede6922b38008"
-    },
-    {
-      "original_sha256": "f98428c0f0bfe69419218011e9a78be632d0c381556c6221bca4156236cad180",
-      "path": "u-boot-2016/test/sysinfo_board_identity_ui_test.js",
-      "sanitized_sha256": "0f25dde0d98a0ba994194bbbe426e3fcc511767c13ff254f9551b2042f40391c"
-    }
-  ],
-  "schema": 2,
-  "source_tree": "U-Boot subtree from frozen commit with separately recorded identity and portable-build overlays; GPL-2.0-or-later independent packager included",
-  "tracked_uboot_file_count": 11910
+  {
+   "path": "u-boot-2016/arch/arm/dts/ipq5018-h3c-hw-d.dts",
+   "original_sha256": "692c91e3c2921dd1df985a9cc5df1ee9bb256a5988065e30f560f039362506ff",
+   "sanitized_sha256": "a94435f10095be986aea38f587ac6ff05858a3e3b6db22b95634584dd5bdd580"
+  },
+  {
+   "path": "u-boot-2016/include/nx30_d_uboot_core.h",
+   "original_sha256": "da6501eedec22347ae1f51b197be31a4b6ab56ef05bdc67d1d1219bc2c2788a8",
+   "sanitized_sha256": "8625d80c3273ccd7abf03c4e5627baffe3d10a0176a79b8c83616a6d4e7f260e"
+  },
+  {
+   "path": "u-boot-2016/lib/nx30_d_uboot.c",
+   "original_sha256": "391200ed70666cf84c4afae23afa64c3878d5dc32a04c618c3a9e4fac723f293",
+   "sanitized_sha256": "d6b808c8544d73a355dc981c755f99761f7d1f99404203492199f77594b8265d"
+  },
+  {
+   "path": "u-boot-2016/test/nx30_d_uboot_core_test.c",
+   "original_sha256": "07d8239f25918df31c3c79553f979587e1d6025ad34a503304934a8d5293016c",
+   "sanitized_sha256": "98e0805162baa6204d31c45330e4fb1db3e98ddca082e894548ede6922b38008"
+  },
+  {
+   "path": "u-boot-2016/test/sysinfo_board_identity_ui_test.js",
+   "original_sha256": "f98428c0f0bfe69419218011e9a78be632d0c381556c6221bca4156236cad180",
+   "sanitized_sha256": "0f25dde0d98a0ba994194bbbe426e3fcc511767c13ff254f9551b2042f40391c"
+  }
+ ],
+ "excluded": [
+  "u-boot-2016/tools/elftombn.py",
+  "u-boot-2016/tools/mbn_tools.py"
+ ],
+ "build_portability_overlay": [
+  {
+   "path": "u-boot-2016/scripts/Makefile.lib",
+   "reason": "Old DTB combined-image rule must locate DTS sources from srctree for external O= builds.",
+   "staged_sha256": "a7afcd9e441df0ed4d11c5900bc6eabb10c354c9a31f9b455350213217b2c6af"
+  }
+ ],
+ "build_entry_changes": [
+  "Detect and link the BSD host library for legacy strlcpy/strlcat when the host libc lacks them.",
+  "Inject the first 12 SOURCE_REVISION hex characters into Kbuild GIT_HASH/GIT_VERSION and record the full revision and epoch.",
+  "Build into a separate external O= directory; no .git or fixed /tmp build path is required."
+ ],
+ "toolchain": {
+  "gcc": "arm-openwrt-linux-gcc (OpenWrt GCC 8.4.0 r16847-f8282da11e) 8.4.0",
+  "binutils": "GNU ld (GNU Binutils) 2.34",
+  "download": "No verified public download address is provided; build with a matching OpenWrt 8.4.0 musl EABI toolchain."
+ },
+ "candidate_build_notes": [
+  "Candidates are built with -ffile-prefix-map so compiled binaries carry a neutral /build/ root instead of a build-host path.",
+  "84 candidates = 4 boards x 21 OEM NAND profiles, all production defconfigs."
+ ],
+ "limitations": [
+  "Not hardware-validated in this release; installation qualification is not claimed.",
+  "SOURCE_DATE_EPOCH is pinned to 1792195200 for reproducible timestamps."
+ ]
 }

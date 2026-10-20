@@ -103,9 +103,11 @@ void main_loop(void)
 	setenv("bootargs", "");
 	setenv("ethprime", "eth1");
 	setenv("ethact", "eth1");
-	setenv("ipaddr", "192.168.1.1");
+	setenv("ipaddr", "192.168.10.1");
+	setenv("netmask", "255.255.255.0");
+	setenv("serverip", "192.168.10.2");
 	ipq_gpio_init();
-	puts("NOR rescue: forced eth1 HTTP recovery at 192.168.1.1\n");
+	puts("NOR rescue: forced eth1 HTTP recovery at 192.168.10.1\n");
 	run_command("httpd", 0);
 	cli_loop();
 	return;

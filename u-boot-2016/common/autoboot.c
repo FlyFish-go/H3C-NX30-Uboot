@@ -13,7 +13,13 @@
 #include <h3c_nand_ecc.h>
 #endif
 #include <autoboot.h>
-#ifdef CONFIG_H3C_RELEASE_SYSTEM_DEFAULT
+#if defined(CONFIG_H3C_RELEASE_SYSTEM_DEFAULT) || \
+    defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || \
+    defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || \
+    defined(CONFIG_H3C_HW_A_RAM_READONLY) || \
+    defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || \
+    defined(CONFIG_H3C_HW_C_RAM_READONLY) || \
+    defined(CONFIG_H3C_HW_D_NOR_RESCUE)
 #include <h3c_boot_policy.h>
 #endif
 #include <bootretry.h>
@@ -419,7 +425,9 @@ void autoboot_command(const char *s)
 	/* Ignore any stored bootcmd and keep the recovery service reachable. */
 	if (setenv("ethprime", "eth1") ||
 	    setenv("ethact", "eth1") ||
-	    setenv("ipaddr", "192.168.1.1"))
+	    setenv("ipaddr", "192.168.10.1") ||
+	    setenv("netmask", "255.255.255.0") ||
+	    setenv("serverip", "192.168.10.2"))
 		puts("NOR rescue: failed to set LAN recovery defaults\n");
 	s = "httpd";
 	stored_bootdelay = 0;
@@ -454,17 +462,35 @@ void autoboot_command(const char *s)
 	stored_bootdelay = 0;
 #endif
 #if defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
-	/* Ignore OEM persistent bootcmd in RAM validation. */
+	/*
+	 * Ignore OEM persistent bootcmd in RAM validation. A/C pin only the
+	 * network values here; port selection stays with each board.
+	 */
+	if (setenv("ipaddr", "192.168.10.1") ||
+	    setenv("netmask", "255.255.255.0") ||
+	    setenv("serverip", "192.168.10.2"))
+		puts("H3C A/C: failed to set RAM recovery LAN defaults\n");
 	s = "httpd";
 	stored_bootdelay = CONFIG_BOOTDELAY;
 #elif defined(CONFIG_H3C_HW_A_PRODUCTION_PORT)
-	/* HW-A production always enters HTTP recovery. */
+	/*
+	 * HW-A production always enters HTTP recovery. The OEM environment
+	 * survives installation with ipaddr=192.168.10.10, so the recovery LAN
+	 * is re-asserted in RAM only (never saved) before httpd starts.
+	 */
+	if (setenv("ipaddr", "192.168.10.1") ||
+	    setenv("netmask", "255.255.255.0") ||
+	    setenv("serverip", "192.168.10.2"))
+		puts("HW-A: failed to set RAM recovery LAN defaults\n");
 	s = "httpd";
 	stored_bootdelay = 0;
 #endif
 #if defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT)
 	/* C's three LAN ports share the RTL8367S CPU link on GMAC1. */
-	if (setenv("ethact", "eth1")) {
+	if (setenv("ethact", "eth1") ||
+	    setenv("ipaddr", "192.168.10.1") ||
+	    setenv("netmask", "255.255.255.0") ||
+	    setenv("serverip", "192.168.10.2")) {
 		puts("HW-C: unable to select LAN for web recovery\n");
 		return;
 	}

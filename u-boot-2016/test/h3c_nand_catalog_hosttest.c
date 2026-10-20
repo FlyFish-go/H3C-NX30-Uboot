@@ -16,8 +16,14 @@ int main(void) {
  assert(h3c_nand_catalog_match_qpic(efba,134217728U,2048U,131072U,64U,4U,64U)==p);
  assert(h3c_nand_catalog_match_oem_probe(efba,"W25N01GWZEIG",134217728U,2048U,131072U,64U,4U,64U)==p);
  assert(h3c_nand_catalog_match_qpic(c2,134217728U,2048U,131072U,128U,8U,80U));
- assert(!h3c_nand_catalog_match_qpic(fm,134217728U,2048U,131072U,64U,4U,64U));
- assert(!h3c_nand_catalog_match_qpic(e521,134217728U,2048U,131072U,128U,4U,64U));
+ p=h3c_nand_catalog_match_qpic(fm,134217728U,2048U,131072U,64U,4U,64U);
+ assert(p && !strcmp(p->profile_id,"h3c-oem-a1a5-128m-2k-sp64-p2048-e131072"));
+ p=h3c_nand_catalog_match_qpic(fm,134217728U,2048U,131072U,128U,8U,80U);
+ assert(p && !strcmp(p->profile_id,"h3c-oem-a1a5-128m-2k-sp128-p2048-e131072"));
+ p=h3c_nand_catalog_match_qpic(e521,134217728U,2048U,131072U,128U,4U,64U);
+ assert(p && !strcmp(p->profile_id,"h3c-oem-e521-128m-2k-sp128"));
+ p=h3c_nand_catalog_match_qpic(c845,536870912U,2048U,131072U,128U,4U,64U);
+ assert(p && p->capacity_bytes==134217728U && p->qpic_capacity_bytes==536870912U);
  assert(!h3c_nand_catalog_match_qpic(c845,134217728U,2048U,131072U,128U,4U,64U));
  assert(!h3c_nand_catalog_match_oem_probe(efba,"W25N01GWZEIG",134217728U,2048U,131072U,64U,8U,80U));
  puts("H3C shared OEM NAND catalog host checks: PASS");

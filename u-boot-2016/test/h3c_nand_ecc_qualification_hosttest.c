@@ -59,7 +59,7 @@ static void all_catalog_profiles(void)
 			m.profile.profile = 100U + i;
 			m.profile.catalog_profile = p;
 			m.profile.physical_spare = p->qpic_raw_spare_bytes;
-			m.profile.nand_size = p->capacity_bytes;
+			m.profile.nand_size = p->qpic_capacity_bytes;
 			m.profile.page_size = p->page_bytes;
 			m.profile.erase_size = p->erase_bytes;
 			m.profile.configured_mode = bits;

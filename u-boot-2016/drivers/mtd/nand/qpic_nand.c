@@ -50,6 +50,18 @@
 #include <h3c_hw_c_readonly.h>
 #endif
 #include <nand.h>
+#ifdef CONFIG_H3C_NAND_PROFILE_ID
+#include <h3c_nand_catalog.h>
+#ifndef CONFIG_H3C_NAND_SOURCE_MASK
+#define CONFIG_H3C_NAND_SOURCE_MASK 0U
+#endif
+#ifndef CONFIG_H3C_NAND_LOAD_ECC_BITS
+#define CONFIG_H3C_NAND_LOAD_ECC_BITS 0U
+#endif
+#ifndef CONFIG_H3C_NAND_STORAGE_ECC_BITS
+#define CONFIG_H3C_NAND_STORAGE_ECC_BITS 0U
+#endif
+#endif
 #if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
 #include <rt3000_b_fw_write.h>
 #include <rt3000_b_fw_core.h>
@@ -635,6 +647,74 @@ static struct qpic_serial_nand_params qpic_serial_nand_tbl[] = {
 	},
 };
 struct qpic_serial_nand_params *serial_params;
+#ifdef CONFIG_H3C_NAND_PROFILE_ID
+static const struct h3c_nand_catalog_profile *qpic_source_profile;
+
+/* Resolve only a build-pinned, exact OEM source profile. A prefix ID alone
+ * never chooses between duplicate source rows. The source and ECC pins must
+ * both be admitted by the selected row, and the observed QPIC alias must
+ * match before the profile can alter runtime spare/ECC settings.
+ */
+static int qpic_nand_select_source_profile(
+	const struct qpic_serial_nand_params *params)
+{
+	const struct h3c_nand_catalog_profile *p;
+	unsigned int mode_bit, storage_mode_bit, i, matches = 0;
+
+	qpic_source_profile = NULL;
+	if (!params)
+		return -EINVAL;
+	if (!CONFIG_H3C_NAND_PROFILE_ID[0]) {
+		/* Legacy unpinned operation is safe only for a unique catalog row
+		 * whose QPIC descriptor exactly agrees with the canonical source
+		 * geometry and mode. Duplicate IDs or known discrepancies require an
+		 * explicit source-bound image configuration.
+		 */
+		for (i = 0; i < H3C_NAND_CATALOG_PROFILE_COUNT; i++) {
+			const struct h3c_nand_catalog_profile *candidate =
+				&h3c_nand_catalog_profiles[i];
+			if (candidate->id[0] == params->id[0] &&
+			    candidate->id[1] == params->id[1] && params->name &&
+			    !strcmp(candidate->qpic_model, params->name)) {
+				p = candidate;
+				matches++;
+			}
+		}
+		if (!matches)
+			return 0;
+		mode_bit = h3c_nand_catalog_mode_bit(
+			params->num_bits_ecc_correctability >= 8U ? 8U : 4U);
+		if (matches != 1U || p->qpic_raw_spare_bytes != params->spare_size ||
+		    !(p->qpic_ecc_mode_mask & mode_bit) ||
+		    p->qpic_capacity_bytes !=
+			params->no_of_blocks * params->pgs_per_blk * params->page_size)
+			return -EINVAL;
+		return 0;
+	}
+	p = h3c_nand_catalog_by_profile_id(CONFIG_H3C_NAND_PROFILE_ID);
+	if (!p || !params || !params->name ||
+	    p->id[0] != params->id[0] || p->id[1] != params->id[1] ||
+	    strcmp(p->qpic_model, params->name) ||
+	    !CONFIG_H3C_NAND_SOURCE_MASK ||
+	    (CONFIG_H3C_NAND_SOURCE_MASK &
+	     (CONFIG_H3C_NAND_SOURCE_MASK - 1U)) ||
+	    !(p->appsbl_source_mask & CONFIG_H3C_NAND_SOURCE_MASK))
+		return -EINVAL;
+	mode_bit = h3c_nand_catalog_mode_bit(CONFIG_H3C_NAND_LOAD_ECC_BITS);
+	storage_mode_bit =
+		h3c_nand_catalog_mode_bit(CONFIG_H3C_NAND_STORAGE_ECC_BITS);
+	if (!mode_bit || !storage_mode_bit ||
+	    CONFIG_H3C_NAND_LOAD_ECC_BITS != CONFIG_H3C_NAND_STORAGE_ECC_BITS ||
+	    !(p->runtime_ecc_mode_mask & storage_mode_bit) ||
+	    !(p->appsbl_ecc_mode_mask & mode_bit) ||
+	    (CONFIG_H3C_NAND_LOAD_ECC_BITS == 4U ?
+	     !(p->appsbl_ecc4_source_mask & CONFIG_H3C_NAND_SOURCE_MASK) :
+	     !(p->appsbl_ecc8_source_mask & CONFIG_H3C_NAND_SOURCE_MASK)))
+		return -EINVAL;
+	qpic_source_profile = p;
+	return 1;
+}
+#endif
 #ifdef CONFIG_H3C_QPIC_DUAL_ECC
 static bool qpic_serial_model_identified;
 int qpic_nand_get_model_info(struct qpic_nand_model_info *info)
@@ -1742,8 +1822,14 @@ static void qpic_serial_update_dev_params(struct mtd_info *mtd)
 	dev->density = serial_params->no_of_blocks * (dev->block_size);
 	mtd->size = dev->density;
 	dev->spare_size = serial_params->spare_size;
-	mtd->oobsize = dev->spare_size;
 	ecc_bits = serial_params->num_bits_ecc_correctability;
+#ifdef CONFIG_H3C_NAND_PROFILE_ID
+	if (qpic_source_profile) {
+		dev->spare_size = qpic_source_profile->appsbl_raw_spare_bytes;
+		ecc_bits = CONFIG_H3C_NAND_STORAGE_ECC_BITS;
+	}
+#endif
+	mtd->oobsize = dev->spare_size;
 	dev->num_pages_per_blk = serial_params->pgs_per_blk;
 	dev->num_pages_per_blk_mask = serial_params->pgs_per_blk - 1;
 	dev->timing_mode_support = serial_params->timing_mode_support;
@@ -2089,6 +2175,9 @@ static int qpic_nand_read_id_serial(struct mtd_info *mtd)
 #ifdef CONFIG_H3C_QPIC_DUAL_ECC
 	qpic_serial_model_identified = false;
 #endif
+#ifdef CONFIG_H3C_NAND_PROFILE_ID
+	qpic_source_profile = NULL;
+#endif
 
 	nand_ret = qpic_nand_fetch_id(mtd);
 	if (!nand_ret) {
@@ -2111,6 +2200,10 @@ static int qpic_nand_read_id_serial(struct mtd_info *mtd)
 					(serial_params->id[1] == serial_dev_id[1]));
 
 			if (is_idfound) {
+#ifdef CONFIG_H3C_NAND_PROFILE_ID
+				if (qpic_nand_select_source_profile(serial_params) < 0)
+					return -EINVAL;
+#endif
 #ifdef CONFIG_H3C_QPIC_DUAL_ECC
 				qpic_serial_model_identified = true;
 #endif

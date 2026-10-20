@@ -124,7 +124,8 @@ static int update(u16 reg,u16 mask,u16 val) {
 static int sds_wait(void) {
  u16 v; int i,ret;
  for(i=0;i<100;i++) { if((ret=reg_read(0x6600,&v))) return ret;
-  if(!(v&0x0100)) return 0; udelay(10); }
+  if(!(v&0x0100)) return 0;
+  udelay(10); }
  return -ETIMEDOUT;
 }
 static int sds_write(u16 addr,u16 val) {
@@ -195,7 +196,8 @@ clear_magic:
  if((ret=reg_write(0x1322,0x0001))) goto fail;
  mdelay(100);
  for(i=0;i<100;i++) { if((ret=reg_read(0x1322,&v))) goto fail;
-  if(!(v&1)) break; mdelay(10); }
+  if(!(v&1)) break;
+  mdelay(10); }
  if(i==100) { ret=-ETIMEDOUT; goto fail; }
  for(i=0;i<ARRAY_SIZE(rtl8367s_init_jam_8365mb_vc);i++)
   if((ret=reg_write(rtl8367s_init_jam_8365mb_vc[i].reg,rtl8367s_init_jam_8365mb_vc[i].val))) goto fail;

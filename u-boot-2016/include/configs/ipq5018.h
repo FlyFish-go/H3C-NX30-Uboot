@@ -272,7 +272,18 @@ extern loff_t board_env_size;
 #define CONFIG_CMD_PING
 #endif
 #define CONFIG_MII
-#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_D)
+/*
+ * The four H3C boards (HW-A/B/C/D) share one recovery LAN: 192.168.10.1/24.
+ * The OEM environment ships ipaddr=192.168.10.10 and serverip=192.168.10.19
+ * and survives installation, so each recovery (httpd) entry point re-asserts
+ * the RAM-only values before starting httpd; these build-time defaults only
+ * apply when the saved environment is absent. Boards outside this list keep
+ * the upstream QCA defaults below.
+ */
+#if defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || \
+    defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || \
+    defined(CONFIG_TARGET_IPQ5018_H3C_HW_D) || \
+    defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B)
 #define CONFIG_IPADDR				192.168.10.1
 #define CONFIG_SERVERIP				192.168.10.2
 #else

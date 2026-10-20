@@ -202,7 +202,10 @@ int nx30_d_firmware_validate(const void *image,size_t length,
  const char *release=NULL; u32 crc; int ret;
  u8 digest[SHA256_SUM_LEN];
  memset(&nx30_d_fw_pending,0,sizeof(nx30_d_fw_pending));
- if (!info) return -EINVAL; memset(info,0,sizeof(*info));
+ if (!info) {
+  return -EINVAL;
+ }
+ memset(info,0,sizeof(*info));
  ret=nx30_d_validate(image,length,&layout,&slots,&map,&release,&crc);
  if (ret) { printf("NX30_D_FW_VALIDATE_FAIL stage=%u ret=%d\n",nx30_d_fw_validate_stage,ret); return ret; }
  sha256_csum_wd(image,length,digest,CHUNKSZ_SHA256);
@@ -233,7 +236,10 @@ static int nx30_fw_write(void *cookie,u64 offset,const u8 *data,u32 size)
 {
  struct nx30_d_fw_mtd_ctx *c=cookie; size_t done=0;
  int ret=mtd_write(c->mtd,offset,size,&done,data);
- if (ret) return ret; return done==size?0:-EIO;
+ if (ret) {
+  return ret;
+ }
+ return done==size?0:-EIO;
 }
 static int nx30_fw_read_window(void *cookie,u64 offset,size_t length,
                                size_t *read_length,u8 *data)

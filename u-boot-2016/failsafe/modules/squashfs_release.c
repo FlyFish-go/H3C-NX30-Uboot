@@ -34,7 +34,8 @@ static int xz_block(const u8 *in, size_t inlen, u8 *out, size_t cap, size_t *ole
  dec = xz_dec_init(XZ_SINGLE, 0); if (!dec) return -ENOMEM;
  b.in=in; b.in_pos=0; b.in_size=inlen; b.out=out; b.out_pos=0; b.out_size=cap;
  r=xz_dec_run(dec,&b); xz_dec_end(dec);
- if(r!=XZ_STREAM_END || b.in_pos!=inlen || b.out_pos>cap) return -EBADMSG; *olen=b.out_pos; return 0;
+ if(r!=XZ_STREAM_END || b.in_pos!=inlen || b.out_pos>cap) return -EBADMSG;
+ *olen=b.out_pos; return 0;
 }
 static int meta_load(struct meta *m)
 {
@@ -63,10 +64,12 @@ static int find_entry(const struct sqfs *s,u64 dirref,const char *wanted,struct 
  if(type==1){if(meta_read(&im,tail,12))return -EBADMSG;start=rd32(tail);dsize=rd16(tail+8);doff=rd16(tail+10);}
  else if(type==8){if(meta_read(&im,tail,24))return -EBADMSG;dsize=rd32(tail+4);start=rd32(tail+8);doff=rd16(tail+18);}
  else return -ENOTDIR;
- if(dsize<3||dsize>SQFS_MAX_DIR_BYTES)return -EBADMSG;dsize-=3;
+ if(dsize<3||dsize>SQFS_MAX_DIR_BYTES)return -EBADMSG;
+ dsize-=3;
  if(meta_at(&dm,s,s->dir_start,start,doff))return -EBADMSG;
  while(dsize){u32 count,iblock,i;if(dsize<12||meta_read(&dm,dhdr,12))return -EBADMSG;dsize-=12;count=rd32(dhdr);iblock=rd32(dhdr+4);
-if(count>=256)return -EBADMSG;count++;
+if(count>=256)return -EBADMSG;
+count++;
   for(i=0;i<count;i++){u8 de[8],name[256];size_t nl;u32 off;if(dsize<8||meta_read(&dm,de,8))return -EBADMSG;dsize-=8;off=rd16(de);nl=(size_t)rd16(de+6)+1;if(!nl||nl>255||nl>dsize||meta_read(&dm,name,nl))return -EBADMSG;dsize-=nl;if(memchr(name,0,nl)||memchr(name,'/',nl))return -EBADMSG;
    if(strlen(wanted)==nl&&!memcmp(name,wanted,nl)){memcpy(found->name,name,nl);found->name[nl]=0;found->ref=((u64)iblock<<16)|off;found->type=rd16(de+4);return 0;}}
  }
@@ -77,7 +80,8 @@ static int data_block(const struct sqfs *s,u64 *pos,u32 enc,u8 *out,size_t cap,s
 static int fragment_read(const struct sqfs *s,u32 idx,u32 off,u8 *dst,size_t n)
 {
  u64 ti,ptr,pos;struct meta m;u8 ent[16],*buf;size_t outn=0;u32 enc;
- if(idx>=s->fragments||s->frag_start>=s->used)return -EBADMSG;ti=(u64)(idx/(SQFS_META/16))*8;if(!span(s,s->frag_start+ti,8))return -EBADMSG;ptr=rd64(s->img+s->frag_start+ti);
+ if(idx>=s->fragments||s->frag_start>=s->used)return -EBADMSG;
+ ti=(u64)(idx/(SQFS_META/16))*8;if(!span(s,s->frag_start+ti,8))return -EBADMSG;ptr=rd64(s->img+s->frag_start+ti);
  if(ptr>0xffffffffU||meta_at(&m,s,0,(u32)ptr,(u16)((idx%(SQFS_META/16))*16))||meta_read(&m,ent,16))return -EBADMSG;
  pos=rd64(ent);enc=rd32(ent+8);if(off>s->block_size||n>s->block_size-off)return -EBADMSG;
  buf=malloc(s->block_size);if(!buf)return -ENOMEM;{int r=data_block(s,&pos,enc,buf,s->block_size,&outn);if(r){free(buf);return r;}}
@@ -90,8 +94,10 @@ static int read_regular(const struct sqfs *s,u64 ref,u8 *out,size_t *outlen)
  if(type==2){if(meta_read(&m,h,16))return -EBADMSG;start=rd32(h);frag=rd32(h+4);offset=rd32(h+8);fsize=rd32(h+12);}
  else if(type==9){u8 l[40];u64 long_start;if(meta_read(&m,l,40))return -EBADMSG;long_start=rd64(l);if(long_start>0xffffffffU||long_start>=s->used)return -EBADMSG;start=(u32)long_start;fsize=rd64(l+8);frag=rd32(l+28);offset=rd32(l+32);}
  else return -ELOOP;
- if(!fsize||fsize>SQFS_MAX_FILE||offset>s->block_size)return -EFBIG;nb=(u32)(fsize/s->block_size);if(frag==SQFS_INVALID_FRAG&&fsize%s->block_size)nb++;if(nb>128)return -EFBIG;
- if(meta_read(&m,sizes,nb*4))return -EBADMSG;pos=start;
+ if(!fsize||fsize>SQFS_MAX_FILE||offset>s->block_size)return -EFBIG;
+ nb=(u32)(fsize/s->block_size);if(frag==SQFS_INVALID_FRAG&&fsize%s->block_size)nb++;if(nb>128)return -EFBIG;
+ if(meta_read(&m,sizes,nb*4))return -EBADMSG;
+ pos=start;
  for(i=0;i<nb;i++){u32 want=s->block_size;size_t got=0;u8 *buf;if(want>fsize-copied)want=fsize-copied;buf=malloc(s->block_size);if(!buf)return -ENOMEM;{int r=data_block(s,&pos,rd32((u8*)sizes+i*4),buf,s->block_size,&got);if(r||got<want){free(buf);return r?r:-EBADMSG;}}if(copied+want>SQFS_MAX_FILE){free(buf);return -EFBIG;}memcpy(out+copied,buf,want);copied+=want;free(buf);}
  if(copied<fsize){size_t rem=fsize-copied;if(frag==SQFS_INVALID_FRAG||rem>s->block_size||fragment_read(s,frag,offset,out+copied,rem))return -EBADMSG;copied+=rem;}
  *outlen=copied;return 0;
@@ -125,7 +131,9 @@ static int parse_release(const u8 *buf,size_t n,const char *kind,char out[97])
 int rt3_squashfs_read_release(const void *image,size_t image_len,char *out,size_t out_len)
 {
  const u8 *im=image;struct sqfs s;struct dirent_ref etc,f;u64 root;u8 file[SQFS_MAX_FILE];u8 sb[96];size_t flen;const char *names[]={"openwrt_release","openwrt_version","os-release"};unsigned i;int r=-ENOENT;char parsed[97];
- if(!image||!out||out_len<2)return -EINVAL;if(image_len<96||image_len>SQFS_MAX_IMAGE)return -EFBIG;memset(&s,0,sizeof(s));s.img=im;s.len=image_len;if(rd32(im)!=SQFS_MAGIC)return -EINVAL;if(image_len<sizeof(sb))return -EBADMSG;memcpy(sb,im,sizeof(sb));
+ if(!image||!out||out_len<2)return -EINVAL;
+ if(image_len<96||image_len>SQFS_MAX_IMAGE)return -EFBIG;
+ memset(&s,0,sizeof(s));s.img=im;s.len=image_len;if(rd32(im)!=SQFS_MAGIC)return -EINVAL;if(image_len<sizeof(sb))return -EBADMSG;memcpy(sb,im,sizeof(sb));
  s.inodes=rd32(sb+4);s.block_size=rd32(sb+12);s.fragments=rd32(sb+16);s.comp=rd16(sb+20);s.flags=rd16(sb+24);root=rd64(sb+32);s.used=rd64(sb+40);s.inode_start=rd64(sb+64);s.dir_start=rd64(sb+72);s.frag_start=rd64(sb+80);
  if(rd16(sb+28)!=4||rd16(sb+30)!=0||s.comp!=SQFS_XZ)return -ENOTSUP;
  if(!s.used||s.used>image_len||s.used>SQFS_MAX_IMAGE||!s.inodes||s.inodes>100000||s.block_size<4096||s.block_size>SQFS_MAX_BLOCK||!valid_block_log(s.block_size,rd16(sb+22))||s.inode_start>=s.used||s.dir_start>=s.used)return -EBADMSG;

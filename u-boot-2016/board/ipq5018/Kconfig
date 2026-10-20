@@ -273,6 +273,44 @@ config H3C_DEFAULT_WEB
       Keep power-on at the common web UI while preserving the selected
       default system for explicit boot. Does not save environment variables.
 
+config H3C_NAND_PROFILE_ID
+    string "Source-bound OEM NAND profile ID"
+    depends on H3C_IPQ5018_COMMON
+    default ""
+    help
+      Pin this image to one exact entry from h3c_nand_catalog.h. This is
+      required when a JEDEC prefix has multiple OEM source variants. Runtime
+      geometry and ECC checks still have to match; this setting does not grant
+      APPSBL write or installation qualification.
+
+config H3C_NAND_SOURCE_MASK
+    hex "Exact OEM source mask for the selected NAND profile"
+    depends on H3C_NAND_PROFILE_ID != ""
+    default 0x0
+    help
+      Must be one exact source bit admitted by the selected profile. Zero is
+      invalid for a pinned image. This binds ambiguous IDs to source evidence.
+
+config H3C_NAND_LOAD_ECC_BITS
+    int "Exact OEM NAND APPSBL load ECC mode"
+    depends on H3C_NAND_PROFILE_ID != ""
+    range 4 8
+    default 4
+    help
+      Declares the ECC4 or ECC8 format used to load the SBL/APPSBL source.
+      It must equal STORAGE_ECC_BITS for this repair path; no conversion is
+      performed. Runtime QPIC identity and geometry are still checked.
+
+config H3C_NAND_STORAGE_ECC_BITS
+    int "Exact OEM NAND system storage ECC mode"
+    depends on H3C_NAND_PROFILE_ID != ""
+    range 4 8
+    default 4
+    help
+      Declares the selected source profile's persisted APPSBL page format.
+      It must equal LOAD_ECC_BITS; QPIC starts in this format. Runtime NAND
+      metadata is still checked before Linux handoff or writes.
+
 config H3C_NAND_ECC_COMPAT
     bool "Evidence-based NAND ECC compatibility"
     depends on H3C_IPQ5018_COMMON && !H3C_HW_D_NOR_RESCUE

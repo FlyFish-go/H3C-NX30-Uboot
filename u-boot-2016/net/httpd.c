@@ -363,13 +363,15 @@ u32 http_make_response_header(struct http_response_info *info, char *buff,
 			    info->content_length);
 
 	/* 添加Content-Encoding头（如果启用了gzip） */
-    if (info->content_encoding)
+	if (info->content_encoding) {
         p += snprintf(p, buff + size - p, "Content-Encoding: %s\r\n",
                 info->content_encoding);
+	}
 
 	/* 添加Vary头（用于缓存协商） */
-    if (info->vary)
+	if (info->vary) {
         p += snprintf(p, buff + size - p, "Vary: %s\r\n", info->vary);
+	}
 
 	if (p >= buff + size)
 		return size;

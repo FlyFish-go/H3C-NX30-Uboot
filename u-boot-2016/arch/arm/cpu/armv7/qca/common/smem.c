@@ -1001,7 +1001,8 @@ int qca_smem_part_to_mtdparts(char *mtdid,int len)
 #if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_RAM_WEB)
   if(!strcmp(p->name,"rootfs")||!strcmp(p->name,"rootfs_1")){
    ret=rt3_layout_linux_mtd_alias(&view,sfi->rootfs.offset,p->name,offset,alias,sizeof(alias));
-   if(ret) goto fail; name=alias;
+   if(ret) goto fail;
+   name=alias;
   }
 #endif
   n=snprintf(dst,left,"%lld%s0x%llx(%s)",(long long)psize,unit,(unsigned long long)offset,name);

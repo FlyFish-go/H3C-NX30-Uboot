@@ -43,8 +43,8 @@ case "$out/" in "$src/"*) echo "Output must be outside source." >&2; exit 2;; es
 
 # A source archive has no .git. Pin both the recorded source identity and
 # effective timestamp explicitly; neither is inferred from a local checkout.
-SOURCE_REVISION="${SOURCE_REVISION:-5f486f5f9852c26d7d16eb5980a06cccea2a5217}"
-SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1792126813}"
+SOURCE_REVISION="${SOURCE_REVISION:-b0383f96b3282b0aedbd9765464778a9cf596836}"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1792195200}"
 [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ && "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
   echo "Invalid SOURCE_REVISION or SOURCE_DATE_EPOCH." >&2; exit 2;
 }
@@ -91,6 +91,15 @@ make "${host_make_args[@]}" -C "$uboot" O="$build" "$config"
 # Explicit release profile. Keep production defaults otherwise unchanged.
 sed -i '/^# CONFIG_H3C_RELEASE_SYSTEM_DEFAULT is not set$/d; /^CONFIG_H3C_RELEASE_SYSTEM_DEFAULT=/d' "$build/.config"
 printf '%s\n' 'CONFIG_H3C_RELEASE_SYSTEM_DEFAULT=y' >> "$build/.config"
+# A profile pin selects a reviewed OEM NAND format; it never converts ECC.
+if [[ -n "${H3C_NAND_PROFILE_ID:-}" ]]; then
+  [[ "$H3C_NAND_PROFILE_ID" =~ ^h3c-oem-[a-z0-9-]+$ ]] || exit 2
+  [[ "${H3C_NAND_SOURCE_MASK:-}" =~ ^(1|2|4|8|16)$ ]] || exit 2
+  [[ "${H3C_NAND_LOAD_ECC_BITS:-}" =~ ^(4|8)$ ]] || exit 2
+  [[ "${H3C_NAND_STORAGE_ECC_BITS:-}" == "$H3C_NAND_LOAD_ECC_BITS" ]] || exit 2
+  sed -i '/^CONFIG_H3C_NAND_PROFILE_ID=/d; /^CONFIG_H3C_NAND_SOURCE_MASK=/d; /^CONFIG_H3C_NAND_LOAD_ECC_BITS=/d; /^CONFIG_H3C_NAND_STORAGE_ECC_BITS=/d' "$build/.config"
+  printf 'CONFIG_H3C_NAND_PROFILE_ID="%s"\nCONFIG_H3C_NAND_SOURCE_MASK=0x%x\nCONFIG_H3C_NAND_LOAD_ECC_BITS=%d\nCONFIG_H3C_NAND_STORAGE_ECC_BITS=%d\n' "$H3C_NAND_PROFILE_ID" "$H3C_NAND_SOURCE_MASK" "$H3C_NAND_LOAD_ECC_BITS" "$H3C_NAND_STORAGE_ECC_BITS" >> "$build/.config"
+fi
 make "${host_make_args[@]}" -C "$uboot" O="$build" olddefconfig
 grep -Fxq 'CONFIG_H3C_RELEASE_SYSTEM_DEFAULT=y' "$build/.config"
 grep -Fxq "$target=y" "$build/.config"
@@ -141,7 +150,7 @@ cat > "$out/provenance.json" <<EOF
   "embedded_git_revision": "$SOURCE_REVISION_SHORT",
   "embedded_git_dirty": false,
   "source_date_epoch": "$SOURCE_DATE_EPOCH",
-  "source_tree_mode": "sanitized source bundle; no .git required",
+  "source_tree_mode": "source snapshot identifier; no Git commit or hardware qualification implied",
   "board": "$board",
   "profile": "release",
   "hardware_validation": "NOT_EXECUTED",

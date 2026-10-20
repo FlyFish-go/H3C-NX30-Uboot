@@ -296,6 +296,26 @@ void do_network_check(void)
 			setenv("bootdelay", "3");
 	}
 #endif
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+	/*
+	 * H3C recovery LAN is fixed at 192.168.10.1/24 on every board. A preserved
+	 * OEM environment carries ipaddr=192.168.10.10, and a stray custom_network
+	 * variable would suppress the normalisation below, so force the three
+	 * values in RAM here (never saved) before anything else can use them.
+	 */
+	{
+		const char *forced_ipaddr = "192.168.10.1";
+		const char *forced_netmask = "255.255.255.0";
+		const char *forced_serverip = "192.168.10.2";
+		setenv("ipaddr", forced_ipaddr);
+		setenv("netmask", forced_netmask);
+		setenv("serverip", forced_serverip);
+		net_ip = string_to_ip(forced_ipaddr);
+		net_netmask = string_to_ip(forced_netmask);
+		net_server_ip = string_to_ip(forced_serverip);
+	}
+#endif
+
 	if (getenv("custom_network"))
 		return;
 
@@ -677,12 +697,13 @@ bool is_load_addr_valid(uintptr_t load_addr)
      * region where linux is executed.
      */
 #ifdef CONFIG_IPQ806X
-    if ((load_addr < IPQ_TFTP_MIN_ADDR) || (load_addr >= IPQ_TFTP_MAX_ADDR))
+    if ((load_addr < IPQ_TFTP_MIN_ADDR) || (load_addr >= IPQ_TFTP_MAX_ADDR)) {
 #else
     if ((load_addr < IPQ_TFTP_MIN_ADDR) || (load_addr >= CONFIG_SYS_SDRAM_END) ||
-        ((load_addr >= CONFIG_IPQ_FDT_HIGH) && (load_addr < CONFIG_TZ_END_ADDR)))
+        ((load_addr >= CONFIG_IPQ_FDT_HIGH) && (load_addr < CONFIG_TZ_END_ADDR))) {
 #endif /* CONFIG_IPQ806X */
         return false;
+    }
 
 	return true;
 }
@@ -701,13 +722,14 @@ bool is_memory_region_available(uintptr_t load_addr, size_t size)
 	 * code/stack area.
 	 */
 #ifdef CONFIG_IPQ806X
-    if (end_addr >= IPQ_TFTP_MAX_ADDR)
+    if (end_addr >= IPQ_TFTP_MAX_ADDR) {
 #else
     if ((end_addr >= CONFIG_SYS_SDRAM_END) ||
         ((end_addr >= CONFIG_IPQ_FDT_HIGH) && (end_addr < CONFIG_TZ_END_ADDR)) ||
-		((load_addr < CONFIG_IPQ_FDT_HIGH) && (end_addr >= CONFIG_TZ_END_ADDR)))
+        ((load_addr < CONFIG_IPQ_FDT_HIGH) && (end_addr >= CONFIG_TZ_END_ADDR))) {
 #endif /* CONFIG_IPQ806X */
         return false;
+    }
 
 	return true;
 }

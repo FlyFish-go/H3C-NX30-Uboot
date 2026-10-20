@@ -1,78 +1,51 @@
-# Building the HW-A/B/C/D U-Boot source bundle
+# Building U-Boot
 
-This directory is a source-review candidate made from U-Boot tree commit
-`5f486f5f9852c26d7d16eb5980a06cccea2a5217`, with a small, documented identity
-sanitization overlay. The source archive is intended to build without a `.git`
-directory. `build-release.sh` writes into a new caller-selected output path and
-does not select a fixed `/tmp` checkout or build directory.
+This page covers `v0.1.0-pre.2`. The repository root `build-release.sh` is the build entry point for the four H3C candidates; the MBN is produced by the independent Python packager in `release-tools/`, so Qualcomm's `elftombn.py` / `mbn_tools.py` are neither needed nor included.
 
-## Inputs
+## Toolchain
 
-Host requirements are Bash, GNU make, Python 3, GNU `sha256sum`, GNU `date`,
-and a working host C compiler, linker, zlib development headers, and the usual
-U-Boot 2016 host build tools. A suitable ARM cross-toolchain must be supplied
-separately. No toolchain is included in this source bundle.
+Candidates were built with **OpenWrt GCC 8.4.0 (`r16847-f8282da11e`) + binutils 2.34**. Rebuilding this source with that toolchain reproduces the published candidates byte for byte.
 
-The toolchain binary prefix must be explicitly provided. For example:
+> [!IMPORTANT]
+> Do not build this release with the GCC 5.2.0 / binutils 2.24 combination used for pre.1: the result is roughly 7-8 KB larger and does not match the published digests.
+
+**No verified public download address is provided.** The version string `r16847-f8282da11e` points to an OpenWrt 21.02-series build, but this repository cannot confirm a matching public download and digest, so no link is given. Obtain a GCC 8.4.0 / binutils 2.34 combination from the official OpenWrt SDK (21.02 branch, musl, EABI, `arm_cortex-a7+neon-vfpv4`); a different version string yields different digests.
+
+## Build
+
+Run from the repository root, passing a toolchain prefix, a path mapping, and an output path that does not exist yet:
 
 ```sh
-CROSS_COMPILE=/opt/toolchains/arm-openwrt-linux- \
-  ./build-release.sh D /absolute/path/to/new-output
+CROSS_COMPILE=/opt/toolchains/bin/arm-openwrt-linux- \
+KCFLAGS="-ffile-prefix-map=$PWD/=/build/" \
+  ./build-release.sh D /tmp/h3c-hw-d-build
 ```
 
-The supplied prefix must resolve `gcc`, `ld`, `strip`, and `nm`. The builder
-uses the board release defconfig, `ARCH=arm`, and a separate `O=` build tree
-under the new output directory. It emits the unstripped and stripped ELF,
-combined and extracted DTB, normalized MBN, and the `0xff`-padded APPSBL
-partition image. The MBN conversion is performed by the accompanying
-independently implemented Python packager; Qualcomm's proprietary
-`elftombn.py` / `mbn_tools.py` are not included or required.
+`KCFLAGS` maps the source root to `/build/`. Published candidates were built this way: binaries carry no build-host path and the result does not depend on where the source lives. Without it your local path is compiled into the binary and the digest differs from the published candidate. The mapping target must be `/build/` and the trailing slash is required.
 
-`SOURCE_REVISION` and `SOURCE_DATE_EPOCH` default to the frozen source commit
-and its recorded effective epoch. Its first 12 hex digits are passed to Kbuild
-as GIT_HASH/GIT_VERSION because the archive has no .git; full revision and
-epoch are written to provenance.json. This embeds the reviewed revision, but
-does not make arbitrary-path builds byte-identical to the frozen candidate.
+The toolchain path above is an example; substitute your own prefix. `gcc`, `ld`, `strip` and `nm` must all be available. The output directory must be outside the source tree, and the entry point refuses to reuse an existing path.
 
-## Limits and portability
+The first argument selects the board defconfig: `A` -> `ipq5018_h3c_hw_a_production`, `B` -> `ipq5018_h3c_rt3000_b`, `C` -> `ipq5018_h3c_hw_c_production`, `D` -> `ipq5018_h3c_hw_d_production`.
 
-The known canonical artifact build used OpenWrt GCC 5.2.0 and binutils 2.24
-from a private tracked `staging_dir`. That directory contains about 738 MB of
-toolchain/staging files and is deliberately excluded. The exact toolchain has
-no approved public download URL plus content hash in this source-review
-bundle. A caller-supplied compiler may therefore produce different bytes.
+The NAND profile is selected with environment variables, matching how the 84 candidates were built:
 
-The old reproducibility procedure used a fixed source/build path because that
-GCC embeds absolute source paths and does not support the needed macro path
-mapping. The four-board build was run with the frozen GCC 5.2.0/binutils 2.24
-toolchain. Its normalized MBN and padded partition hashes differ from the
-canonical candidate on all boards. The stripped ELF size deltas are A +896,
-B +832, C +896, and D +896 bytes. The portable and canonical ELF files embed
-different source locations; the A file contains its portable source path 17
-times. No arbitrary-path bit-reproducibility claim is made. See the archive-root `BUILD-RESULTS.md` for candidate hashes and canonical comparisons.
+| Variable | Value |
+|---|---|
+| `H3C_NAND_PROFILE_ID` | profile name starting with `h3c-oem-`, e.g. `h3c-oem-c841-128m-2k-sp128` |
+| `H3C_NAND_SOURCE_MASK` | `1`, `2`, `4`, `8` or `16` |
+| `H3C_NAND_LOAD_ECC_BITS` | `4` or `8` |
+| `H3C_NAND_STORAGE_ECC_BITS` | must equal `H3C_NAND_LOAD_ECC_BITS` |
 
-The D release DTS uses the same neutral `BOOTBRIDGE-HW-D` label found in the
-frozen D candidate. The former sample-specific identity descriptor was also
-changed to this release label, with its code and matching host-test updates
-recorded as a separate overlay. The reviewed build completed with this neutral label, but its D MBN and
-partition differ from the canonical candidate because the sanitized source
-build is path-sensitive. This derivative does not inherit the installed
-candidate's hardware qualification.
+All four must be supplied together or the build entry point rejects the run.
 
-An MBN or partition image built here remains an offline candidate. It does not
-prove hardware compatibility, NAND/ECC format, physical inactive-slot binding,
-first-install safety, or install readiness. The D installed image and its
-separate device evidence remain tied to their exact recorded candidate.
+The build writes ELF, DTB, `appsbl.mbn`, `appsbl.partition.bin`, the config, provenance records and a digest list.
 
-## Source and license
+## Version and byte identity
 
-Tracked U-Boot files and their original notices are retained. Only the two
-Qualcomm MBN helper scripts carrying confidential/proprietary notices were
-excluded. The release packager and build wrapper are new code marked
-`GPL-2.0-or-later`; this declaration applies only to those new files. It does
-not replace or relicense any upstream component notices.
+Candidates embed the source revision `b0383f96b3282b0aedbd9765464778a9cf596836`, which is the first 40 hex characters of the source snapshot SHA-256 - not a git commit ID. The snapshot algorithm, sanitised files and build adaptations are documented in [`release-metadata/uboot-v0.1.0-pre.2/SOURCE-PROVENANCE.json`](release-metadata/uboot-v0.1.0-pre.2/SOURCE-PROVENANCE.json).
 
-The private review evidence includes the frozen source commit/tree identity,
-per-file SHA-256 manifest, excluded-file hashes, and a per-file identity
-sanitization overlay. It is separate from any public release or publication
-repository.
+The six sanitised files take part in the build: sample identity strings were replaced with the neutral label `BOOTBRIDGE-HW-D`. Rebuilding from this repository therefore matches the published candidates, which were verified to contain no original sample string.
+
+A successful build does not establish installation qualification. If your digests differ from the published ones, validate on your own device.
+
+The pre.1 build notes and results remain in [`releases/uboot-v0.1.0-pre.1.md`](releases/uboot-v0.1.0-pre.1.md) and [`release-metadata/uboot-v0.1.0-pre.1/`](release-metadata/uboot-v0.1.0-pre.1/).

@@ -180,9 +180,34 @@ static int platform_get_profile(struct h3c_nand_ecc_test_profile *p)
 	p->nand_size = mtd->size;
 	p->page_size = mtd->writesize;
 	p->erase_size = mtd->erasesize;
-	p->catalog_profile = h3c_nand_catalog_match_qpic_model(
-		model.id, model.name, (unsigned int)mtd->size, mtd->writesize,
-		mtd->erasesize, spare, mtd->ecc_strength, mtd->oobsize);
+	/* A source-bound build may disambiguate identical JEDEC prefixes, but
+	 * must still match the complete runtime QPIC tuple. Empty means legacy
+	 * catalog matching, which itself fails closed on ambiguous tuples.
+	 */
+#ifdef CONFIG_H3C_NAND_PROFILE_ID
+	if (CONFIG_H3C_NAND_PROFILE_ID[0]) {
+		const struct h3c_nand_catalog_profile *expected =
+			h3c_nand_catalog_by_profile_id(CONFIG_H3C_NAND_PROFILE_ID);
+		if (expected && !strcmp(expected->qpic_model, model.name) &&
+		    expected->id[0] == model.id[0] &&
+		    expected->id[1] == model.id[1] &&
+		    expected->qpic_capacity_bytes == (unsigned int)mtd->size &&
+		    expected->page_bytes == mtd->writesize &&
+		    expected->erase_bytes == mtd->erasesize &&
+		    expected->qpic_raw_spare_bytes == spare &&
+		    (mtd->ecc_strength == 4 || mtd->ecc_strength == 8) &&
+		    h3c_nand_catalog_runtime_read_qualified(expected,
+							mtd->ecc_strength) &&
+		    (mtd->ecc_strength == 4 ?
+		     expected->qpic_mtd_oob_ecc4 :
+		     expected->qpic_mtd_oob_ecc8) == mtd->oobsize)
+			p->catalog_profile = expected;
+	} else
+#endif
+		p->catalog_profile = h3c_nand_catalog_match_qpic_model(
+			model.id, model.name, (unsigned int)mtd->size,
+			mtd->writesize, mtd->erasesize, spare,
+			mtd->ecc_strength, mtd->oobsize);
 	if (!h3c_nand_catalog_runtime_read_qualified(p->catalog_profile,
 						    p->configured_mode))
 		return 0;
@@ -478,7 +503,7 @@ static int h3c_nand_ecc_profile_matches(
 	if (!p)
 		return 0;
 	if (p->catalog_profile)
-		return p->nand_size == p->catalog_profile->capacity_bytes &&
+		return p->nand_size == p->catalog_profile->qpic_capacity_bytes &&
 		       p->page_size == p->catalog_profile->page_bytes &&
 		       p->erase_size == p->catalog_profile->erase_bytes &&
 		       p->physical_spare == p->catalog_profile->qpic_raw_spare_bytes &&

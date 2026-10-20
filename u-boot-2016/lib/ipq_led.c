@@ -45,24 +45,25 @@ static bool led_node_has_label(int node, const char *label)
 static int led_get_out_value(led_op_t op, unsigned int gpio,
         unsigned int active_level, unsigned int *value)
 {
-    if (!value)
-        return -EINVAL;
+	if (!value) {
+		return -EINVAL;
+	}
 
 	switch(op) {
 	case LED_OP_ON:
 		*value = (active_level == GPIO_ACTIVE_HIGH) ? GPIO_OUT_HIGH : GPIO_OUT_LOW;
-        break;
+		break;
 	case LED_OP_OFF:
 		*value = (active_level == GPIO_ACTIVE_HIGH) ? GPIO_OUT_LOW : GPIO_OUT_HIGH;
-        break;
+		break;
 	case LED_OP_TOGGLE:
 		*value = !gpio_get_value(gpio);
-        break;
+		break;
 	default:
 		return -EINVAL;
 	}
 
-    return 0;
+	return 0;
 }
 
 void led_control(led_op_t op, const char *label)
@@ -103,6 +104,6 @@ void led_control_all(led_op_t op)
 		gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", GPIO_NOT_FOUND);
 		active_level = fdtdec_get_uint(gd->fdt_blob, node, "active_level", GPIO_ACTIVE_HIGH);
 		if (gpio != GPIO_NOT_FOUND && !led_get_out_value(op, gpio, active_level, &value))
-            gpio_set_value(gpio, value);
+			gpio_set_value(gpio, value);
 	}
 }
