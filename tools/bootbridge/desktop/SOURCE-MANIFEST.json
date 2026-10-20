@@ -1,0 +1,292 @@
+{
+  "files": [
+    {
+      "bytes": 21326,
+      "path": "design/desktop-offline-ui/strings.json",
+      "sha256": "899e20678a43ee82ad776a4917cf81eaff55516e1365808dc067188376a2fd2b"
+    },
+    {
+      "bytes": 17984,
+      "path": "desktop/COPYING",
+      "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
+    },
+    {
+      "bytes": 868,
+      "path": "desktop/LICENSE",
+      "sha256": "a12d1786476a11b8a38d3506f22a25fd08c53d415afcbe4fa772237d48fc99db"
+    },
+    {
+      "bytes": 1240,
+      "path": "desktop/README.md",
+      "sha256": "f741e98c807ce635abcafbb63d156cad0b978c6eca997637c57c19899e10dc49"
+    },
+    {
+      "bytes": 7992,
+      "path": "desktop/catalog/bb_catalog.c",
+      "sha256": "52e095570baddce297b01d5e1f193713199af09a655f709e8ce1af9a4c647931"
+    },
+    {
+      "bytes": 4174,
+      "path": "desktop/catalog/bb_catalog.h",
+      "sha256": "20670c2f084e3c3890cf85547eea6e317e6f1222b8e3a83147a6466c900decdc"
+    },
+    {
+      "bytes": 2235,
+      "path": "desktop/catalog/test_bundle_selector.c",
+      "sha256": "a5ca4ce88519da4bd5cef0e0829837ff700601301fb3ae6fb2da7a251a1dc122"
+    },
+    {
+      "bytes": 1434,
+      "path": "desktop/gui/app.manifest",
+      "sha256": "a4cae3e0e862b01b14a7f821a3e907051fce43d1876bd2b5aa9d56b77aed7376"
+    },
+    {
+      "bytes": 18534,
+      "path": "desktop/gui/bb_ui_text.c",
+      "sha256": "2cff4264414721739dbf493510e3eb4f63cb8269acbea6cf21db763195d39951"
+    },
+    {
+      "bytes": 4089,
+      "path": "desktop/gui/bb_ui_text.h",
+      "sha256": "093cf2c233102b9a7cea9f6feed3dcc25ffc2250866d149c94c147e192a55bf8"
+    },
+    {
+      "bytes": 7451,
+      "path": "desktop/gui/host-tests/test_bb_net_policy.c",
+      "sha256": "bdb78d1d49ebac164fd637cf94f67bd3962eb8a017aa89b84a1ce663f6b0ba99"
+    },
+    {
+      "bytes": 9619,
+      "path": "desktop/gui/host-tests/test_bb_ui_text.c",
+      "sha256": "b400d78dafe7b221af3a0863c59987d1a89b3c337ece7f2f95c2a74bc8ae627e"
+    },
+    {
+      "bytes": 162088,
+      "path": "desktop/gui/offline_main.c",
+      "sha256": "7f57e8bd50c70ab5579f9279e054abac55aae905a889807980079f68205a5f6f"
+    },
+    {
+      "bytes": 1028,
+      "path": "desktop/gui/resources.rc",
+      "sha256": "28a3f2f669fb9a60d34aebee058f05d7ae5e5d32c12f60812f376e39207e66db"
+    },
+    {
+      "bytes": 21521,
+      "path": "desktop/gui/test_offline_gui_contract.py",
+      "sha256": "8c430d0db62729fae6d7f9868a0c1b3c1bb3d0772a5353ba7f969a55388e8ce2"
+    },
+    {
+      "bytes": 1481,
+      "path": "desktop/guide-models.json",
+      "sha256": "88bdc056f00dfb4240958a9269e8be281eb3babb5f8ec56b1cf0eb1a984bcaf6"
+    },
+    {
+      "bytes": 3654,
+      "path": "desktop/offline/BUILD-WINDOWS.md",
+      "sha256": "fb0cc45a18a13ccdda8545568e391edca327bc37ba9775e173d5096ec3afe61c"
+    },
+    {
+      "bytes": 5160,
+      "path": "desktop/offline/bb_offline_rules.c",
+      "sha256": "da3bd95e095f916af88525af0d1a9e681235febe6a9e4ce59d2dcabafcf3d3da"
+    },
+    {
+      "bytes": 611,
+      "path": "desktop/offline/bb_offline_rules.h",
+      "sha256": "4909b8a5361aeb4a8762f1291e2487bd318dee1d2343afd87ef4f66482c80b38"
+    },
+    {
+      "bytes": 691,
+      "path": "desktop/offline/test_bundle_export.c",
+      "sha256": "def303872420e04e6c409f726e4696f54911c5a1a36166a88a393f8ce92f728c"
+    },
+    {
+      "bytes": 1480,
+      "path": "desktop/offline/test_offline_rules.c",
+      "sha256": "09b52e1ab243725edf6d49bb6ac6152ceafeb9bc938bdd13d1ed15b803adb9a5"
+    },
+    {
+      "bytes": 2554,
+      "path": "desktop/reports/CODE-REVIEW-R1-FIXES.md",
+      "sha256": "ccd570d4e28f240dd39c1f7ce90afadf2f31bff5f70e16eef027a1991f86209b"
+    },
+    {
+      "bytes": 5857,
+      "path": "desktop/reports/CODE-REVIEW-R2-FIXES.md",
+      "sha256": "0a72be6cd24415333506d2d2187aaae4987d218198ac5cd76c049f5e1c6c0abe"
+    },
+    {
+      "bytes": 14187,
+      "path": "desktop/reports/windows-acceptance-v2/README.md",
+      "sha256": "5bae0db282c5dc6bf8ae429984350e9a3d44d355abeeb19deecba1eb7cd32409"
+    },
+    {
+      "bytes": 14706,
+      "path": "desktop/reports/windows-acceptance-v2/assemble_windows_acceptance_v2.py",
+      "sha256": "9163ecb4d86a3d15725b8295575bb0559b64dfe99d8486c42d87bc21e16e381a"
+    },
+    {
+      "bytes": 7778,
+      "path": "desktop/reports/windows-acceptance-v2/dispatch-interactive-gui.ps1",
+      "sha256": "49215d73dbac8363b9836adfbbb14525c306864c3c64e04c16ccc68dbcb91e1f"
+    },
+    {
+      "bytes": 2090,
+      "path": "desktop/reports/windows-acceptance-v2/export_all_bundles_host.c",
+      "sha256": "498a6b85c1c6e1e226b9e037e84c279b0c75cabf88079423b0dc1c399a8d58a9"
+    },
+    {
+      "bytes": 45920,
+      "path": "desktop/reports/windows-acceptance-v2/run-auto-offline-gui-acceptance-v6.ps1",
+      "sha256": "5962803fa0132746aefb405b0d0d2c747724a9e5507bb8c0e83f747e32c76933"
+    },
+    {
+      "bytes": 17044,
+      "path": "desktop/reports/windows-acceptance-v2/run_four_source_linux_pipeline.py",
+      "sha256": "369bbe4ae2f8d462cf5229378ab0da70ec2872564e1a8681aa597603ef859c17"
+    },
+    {
+      "bytes": 8997,
+      "path": "desktop/reports/windows-acceptance-v2/run_host_rt_dispatch_proofs.py",
+      "sha256": "8f0b0536a4e5ce944bc8199cfd97670e15939bd208b670f14122c042655da94c"
+    },
+    {
+      "bytes": 2812,
+      "path": "desktop/reports/windows-acceptance-v2/test_rt_combined_export.c",
+      "sha256": "2704909f5fd5eefa96532c984744b786966d26a12984dafa7d2c01d237858b4c"
+    },
+    {
+      "bytes": 2569,
+      "path": "desktop/reports/windows-acceptance-v2/test_rt_legacy_ambiguity.c",
+      "sha256": "fa49360575581070931c3ab9234b11c53ac7e7760a78b045c4e83a0b410e5f9a"
+    },
+    {
+      "bytes": 20286,
+      "path": "desktop/reports/windows-acceptance-v2/verify_host_preconditions.py",
+      "sha256": "9ca1b68e51680161e88c4f4fb66a3924ec9f882d8eea25e1db3d56efbea4f5b3"
+    },
+    {
+      "bytes": 13322,
+      "path": "desktop/src/bb_export.c",
+      "sha256": "5e7507b993ce4dcff0916dd824b6ba631cd9fde4798769f457feda7eeae92452"
+    },
+    {
+      "bytes": 1707,
+      "path": "desktop/src/bb_export.h",
+      "sha256": "40d25ec07b48c352f2fef419712165f7600cfc749485ed609e48b58f6b2a4223"
+    },
+    {
+      "bytes": 1451,
+      "path": "desktop/src/bb_export_plan.h",
+      "sha256": "993631de32f1fe6a6fce3385fa9a0ddf80cd42c5c25fdc9b180f3d5bffcca0d0"
+    },
+    {
+      "bytes": 9428,
+      "path": "desktop/src/bb_fetch.c",
+      "sha256": "096c3a2ce581214d1eeee6f3ef35db45b99a5db42e8474f4d39997bc5dde5046"
+    },
+    {
+      "bytes": 1901,
+      "path": "desktop/src/bb_fetch.h",
+      "sha256": "00f6989dd46ec790f2dd6c4755f73dbe7e1ab800313a8f3fe0a9b16e81d0f7b8"
+    },
+    {
+      "bytes": 3859,
+      "path": "desktop/src/bb_net.h",
+      "sha256": "be643992c2d4e7a55e3630f3ac963ce19d91c9676f38977c48b7429753c3703b"
+    },
+    {
+      "bytes": 4685,
+      "path": "desktop/src/bb_net_policy.c",
+      "sha256": "17c909486898b49aebe6dbe5d7a62cc95ad458f446d4b957d98f188c01cefbb2"
+    },
+    {
+      "bytes": 16140,
+      "path": "desktop/src/bb_net_win.c",
+      "sha256": "846447362fc4614a59f79443abbd84e4be885d889969f8eef7c385e0faa22ee5"
+    },
+    {
+      "bytes": 2880,
+      "path": "desktop/src/bridge_sha256.h",
+      "sha256": "848076f85c9ca48382f11045a500e17116e4fca35f6700c93f38bd24c654dbc0"
+    },
+    {
+      "bytes": 14069,
+      "path": "desktop/src/official_api.c",
+      "sha256": "a7d30683589ea322f0ce1503965addb30868562ea20163f6a7d1a5a65da7e56c"
+    },
+    {
+      "bytes": 3349,
+      "path": "desktop/src/official_api.h",
+      "sha256": "50e2011e9bb5658d2bcb4e798469b2a463ad48fc87e6c60bf922925699afe631"
+    },
+    {
+      "bytes": 43012,
+      "path": "desktop/tools/assemble_release.py",
+      "sha256": "541e53769adc98d5215417bf0d92319de21e59db8c9498996e78f77fcdd3114b"
+    },
+    {
+      "bytes": 14288,
+      "path": "desktop/tools/build-offline-generated.py",
+      "sha256": "2639b70bea3461f81a66c741707069eecfcaf93ad12bac64acc3b9c7e6cbabe5"
+    },
+    {
+      "bytes": 10035,
+      "path": "desktop/tools/build-windows-offline.sh",
+      "sha256": "35d8d831091c550b42aaa85d93590de501b933202df23638f84b5a20f12102e0"
+    },
+    {
+      "bytes": 21312,
+      "path": "desktop/tools/build_offline_bundle_catalog.py",
+      "sha256": "fa23e3e41eddb9e48ee3c1301d3e89b7b02639d6cb157925b0dd5c3609f93572"
+    },
+    {
+      "bytes": 5814,
+      "path": "desktop/tools/build_offline_catalog.py",
+      "sha256": "a0f9e78d5876d812a6bf671c822405638ac30eadbd45e9828deb65cb7ed4895a"
+    },
+    {
+      "bytes": 1424,
+      "path": "desktop/tools/check-offline-pe.sh",
+      "sha256": "605b6c1fba8465825b449d8b261ff45adc2fbe65e3c259cf8b48350d8d8360f0"
+    },
+    {
+      "bytes": 12528,
+      "path": "desktop/tools/compile_delta_plan.py",
+      "sha256": "fa8f5aa9e22e60f2b0f59c2c13612b4442e3125b4cb9645b139620fa838ac2cf"
+    },
+    {
+      "bytes": 5425,
+      "path": "desktop/tools/gen_guide_models.py",
+      "sha256": "bf64145a68c63e62f7a6885c3b00d9f819d4682bcf8ffbc476088840ae5ac537"
+    },
+    {
+      "bytes": 11260,
+      "path": "desktop/tools/gen_ui_strings.py",
+      "sha256": "61f13ddb8400c0347fc05a404f3461ba67c93fead9d9c662475df04fcc9a99a5"
+    },
+    {
+      "bytes": 34995,
+      "path": "desktop/tools/prepare_offline_bundles.py",
+      "sha256": "7840ca94bc801902ea62bd6ab9a0091f72d0c72f724d1dab75a05c26930da783"
+    },
+    {
+      "bytes": 30385,
+      "path": "desktop/tools/test_build_offline_bundle_catalog.py",
+      "sha256": "bf24e9fc2103654e2c591a91ac202b2be7eea909aaab4e7840df52d195d1731b"
+    },
+    {
+      "bytes": 3358,
+      "path": "desktop/tools/test_build_offline_catalog.py",
+      "sha256": "a0e5fbd44c2b2d42bffe0f863d53c2e696a3eaf2f72b8d216ef93406b302cb0a"
+    },
+    {
+      "bytes": 22206,
+      "path": "desktop/tools/verify_pe_catalog.py",
+      "sha256": "f4e6aa25764d55623f771399ea03cebd87eeb8a82fb284039935a6a0f158116f"
+    }
+  ],
+  "schema": "bootbridge-offline-source-snapshot-v2",
+  "source_count": 57,
+  "status": "SOURCE_ONLY"
+}

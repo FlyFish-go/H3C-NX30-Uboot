@@ -1,0 +1,71 @@
+#!/bin/sh
+# Runs as PID 1 in an isolated QEMU guest. All destructive writes target only
+# the guest's nandsim MTD backed by this disposable initramfs.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+fail() {
+    echo "R3_GUEST_SETUP_FAIL step=$1" >/dev/console
+    sync
+    reboot -f
+    while :; do sleep 1; done
+}
+
+mount -t proc proc /proc || fail mount-proc
+mount -t sysfs sysfs /sys || fail mount-sys
+mount -t devtmpfs devtmpfs /dev || fail mount-dev
+mkdir -p /newroot /dev /run
+mount -t tmpfs -o mode=0755 tmpfs /run || fail mount-run
+
+insmod /r3/modules/mtd.ko || fail insmod-mtd
+insmod /r3/modules/bch.ko || fail insmod-bch
+insmod /r3/modules/nandcore.ko || fail insmod-nandcore
+insmod /r3/modules/nand.ko || fail insmod-nand
+insmod /r3/modules/r3_mtd_slots.ko || fail insmod-slots
+insmod /r3/modules/nandsim.ko id_bytes=0x98,0xda,0x90,0x15 || fail insmod-nandsim
+[ -e /sys/class/mtd/mtd20 ] || fail nandsim-index
+
+insmod /r3/modules/ubi.ko || fail insmod-ubi
+mkdir -p /dev
+mknod /dev/mtd20 c 90 40 2>/dev/null || true
+mknod /dev/ubi_ctrl c 10 63 2>/dev/null || true
+expected_image_sha=$(cat /r3/image.sha256)
+actual_image_sha=$(sha256sum /r3/input/bridge.ubi | cut -d ' ' -f 1)
+[ "$expected_image_sha" = "$actual_image_sha" ] || fail guest-image-sha256
+/r3/bin/nandwrite -p /dev/mtd20 /r3/input/bridge.ubi || fail guest-nandwrite
+vid_offset=$(cat /r3/input/ubi-vid-offset)
+case "$vid_offset" in ''|*[!0-9]*) fail ubi-vid-offset; esac
+/r3/bin/ubiattach -O "$vid_offset" -m 20 /dev/ubi_ctrl || fail guest-ubiattach
+insmod /r3/modules/gluebi_guest.ko || fail insmod-gluebi
+insmod /r3/modules/mtd_blkdevs_guest.ko || fail insmod-mtd-blkdevs-compat
+insmod /r3/modules/mtdblock_guest.ko || fail insmod-mtdblock-compat
+insmod /r3/modules/squashfs.ko || fail insmod-squashfs
+mknod /dev/mtdblock24 b 31 24 2>/dev/null || true
+
+i=0
+while [ ! -e /sys/class/mtd/mtd24/name ] && [ "$i" -lt 20 ]; do
+    i=$((i + 1))
+    sleep 1
+done
+[ -e /sys/class/mtd/mtd24/name ] || fail gluebi-mtd24
+echo "R3_GUEST_MTD_MAP begin" >/dev/console
+cat /proc/mtd >/dev/console
+ls -l /dev/mtdblock24 /sys/class/mtd/mtd24 /sys/class/mtd/mtd24/mtdblock24 /sys/dev/block/31:24 2>&1 >/dev/console || true
+cat /sys/class/mtd/mtd24/dev /sys/class/mtd/mtd24/name /sys/class/mtd/mtd24/type /sys/class/mtd/mtd24/size /sys/class/mtd/mtd24/erasesize /sys/class/mtd/mtd24/writesize /sys/class/mtd/mtd24/mtdblock24/dev 2>&1 >/dev/console || true
+echo "R3_GUEST_BLOCK_MAP begin" >/dev/console
+ls -l /sys/class/block /sys/block 2>&1 >/dev/console || true
+cat /proc/devices 2>&1 >/dev/console || true
+ls -l /sys/module/mtdblock_guest /sys/module/mtd_blkdevs_guest 2>&1 >/dev/console || true
+find /sys -name '*mtdblock*' -print 2>&1 >/dev/console || true
+dmesg | tail -60 >/dev/console 2>&1 || true
+mkdir -p /newroot
+/r3/bin/mount-root || fail mount-real-rootfs
+[ -d /newroot/tmp ] || fail rootfs-tmp-missing
+mount --bind /proc /newroot/proc || fail bind-proc
+mount --bind /sys /newroot/sys || fail bind-sys
+mount --bind /dev /newroot/dev || fail bind-dev
+mount -t tmpfs -o mode=0755 tmpfs /newroot/tmp || fail mount-probe-tmpfs
+cp /r3/probe /newroot/tmp/probe || fail copy-probe
+chmod 0755 /newroot/tmp/probe || fail chmod-probe
+echo "R3_GUEST_READY image_sha256=$(cat /r3/image.sha256) root_source=mtd:ubi_rootfs" >/dev/console
+exec /usr/sbin/switch_root /newroot /tmp/probe

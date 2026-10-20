@@ -1,0 +1,22 @@
+BootBridge project code — GPL-2.0-or-later
+
+Unless a file or an accompanying notice states otherwise, the newly authored
+BootBridge code in this project is licensed under the GNU General Public
+License, version 2 or (at your option) any later version. The complete text of
+version 2 is in COPYING.
+
+Third-party and upstream components retain their own applicable licenses and
+notices. This grant does not relicense upstream U-Boot or other separately
+identified material. Review file-level notices before redistribution.
+
+Source-specific provenance notes: src/bridge_sha256.h, tools/vendor_fit.py,
+and tools/vendor_ubi.py have no file-level copyright or SPDX notices in this
+snapshot. The two Python tools use Python standard-library modules to parse FIT
+and UBI structures; no third-party parser attribution is present in these
+files. If these are newly authored BootBridge code, the grant above applies;
+otherwise retain the source implementation's notices and license.
+
+The build also consumes h3c_nand_catalog.h from the separate companion U-Boot
+source tree. That header declares SPDX-License-Identifier: GPL-2.0+ and is not
+included or relicensed by this project COPYING file. Preserve its own notice
+and bind the exact header revision and hash when building or redistributing it.

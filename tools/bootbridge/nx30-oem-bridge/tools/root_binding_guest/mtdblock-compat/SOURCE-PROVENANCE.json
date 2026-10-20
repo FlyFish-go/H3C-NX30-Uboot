@@ -1,0 +1,11 @@
+{
+  "source_archive": "Debian linux 6.12.111-1",
+  "dsc_sha256": "6935287a25ed12865714b53cb936959db5875ee025abdaadea8df6335fe74d55",
+  "upstream_source_archive_sha256": "716516cd85c3ff9e5c197203730b698ad7c0fb4c6c2d1d1e44ab3ced2faba178",
+  "upstream_file_path": "linux-6.12.111/drivers/mtd/mtd_blkdevs.c",
+  "original_mtd_blkdevs_sha256": "33c5211618bff0940f5da7a5980d358a29ffde9c7aa1dde0777227aa9565073b",
+  "compat_mtd_blkdevs_sha256": "fdffda75991475b30a13fd192d39958282584a6aabb22c6198f75b5ce16e4412",
+  "only_change": "Remove MTD_UBIVOLUME from the two skip conditions so the guest mtdblock translation layer registers read-only GlueBI volumes. No production or kernel validator source is modified.",
+  "unchanged_mtdblock_sha256": "7e1c53b3e3229d8fbc0a167336d4d59e437c58b784f6b50d4e8e610ba5505128",
+  "mtdcore_header_sha256": "98e980cd635f40ece5eb1bbb78d292741d5b007fc95ead8380477de93c8fd805"
+}

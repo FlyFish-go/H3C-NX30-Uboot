@@ -1,0 +1,3 @@
+#!/bin/sh
+# The bridge PID 1 validates the image before touching runtime mounts/devices.
+exec /sbin/init

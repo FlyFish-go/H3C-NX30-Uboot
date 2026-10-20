@@ -1,0 +1,16 @@
+BootBridge project code — GPL-2.0-or-later
+
+Unless a file or an accompanying notice states otherwise, the newly authored
+BootBridge code in this project is licensed under the GNU General Public
+License, version 2 or (at your option) any later version. The complete text of
+version 2 is in COPYING.
+
+Third-party and upstream components retain their own applicable licenses and
+notices. This grant does not relicense upstream U-Boot or other separately
+identified material. Review file-level notices before redistribution.
+
+Source-specific provenance note: src/bridge_sha256.h has no file-level
+copyright or SPDX notice in this snapshot. It implements the standard SHA-256
+algorithm. If it is newly authored BootBridge code, the grant above applies;
+if it derives from an external implementation, retain that implementation's
+required attribution and license instead.

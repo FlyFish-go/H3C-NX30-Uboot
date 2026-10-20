@@ -1,0 +1,46 @@
+{
+  "schema": "bootbridge-guide-models-v1",
+  "source": "R6 prepared bundles run05; audited official inputs only",
+  "models": [
+    {
+      "id": "NX30",
+      "primary": "NX30",
+      "alias": "RX3000",
+      "products": ["NX30", "RX3000"],
+      "version": "NX30V100R012",
+      "bytes": 31981568,
+      "sha256": "61fbc2a356aa9d5d73eaa9f02eb87f455adea8c32684ffb627b2a35afc2ce922",
+      "url": ""
+    },
+    {
+      "id": "RT3000",
+      "primary": "RT3000",
+      "alias": "",
+      "products": ["RT3000"],
+      "version": "RT3000V100R015",
+      "bytes": 34078720,
+      "sha256": "cb2966e54ae1e143c6c7dd55acdb6ed22bb011a0e421c8860d5724c419d8f28b",
+      "url": "https://h3c-magic.oss-cn-hangzhou.aliyuncs.com/gateway-version/RT3000V100R015.bin"
+    },
+    {
+      "id": "RC3000",
+      "primary": "RC3000",
+      "alias": "",
+      "products": ["RC3000"],
+      "version": "RC3000V100R013L01",
+      "bytes": 33554432,
+      "sha256": "69d3e558e770f4dc26f0ff9ddd6a5a10f541b3fdc826aacf3cbeaf1f93469c44",
+      "url": "https://h3c-magic.oss-cn-hangzhou.aliyuncs.com/gateway-version/RC3000V100R013L01.bin"
+    },
+    {
+      "id": "RW3000",
+      "primary": "RW3000",
+      "alias": "RW3010",
+      "products": ["RW3000"],
+      "version": "RW3000V100R012",
+      "bytes": 33554432,
+      "sha256": "5d2d8c62dd244db7dbb4b5a4f0430453b411b886ec70445903e3d0b578766fb5",
+      "url": "https://h3c-magic.oss-cn-hangzhou.aliyuncs.com/gateway-version/RW3000V100R012.bin"
+    }
+  ]
+}

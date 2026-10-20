@@ -6,9 +6,9 @@
 
 目前主要维护 NX30、RT3000、RX3000、RC3000、RW3000 的相关硬件变体。适配按具体硬件、NAND/ECC 和启动链核验，详见[硬件范围](docs/HARDWARE.md)。
 
-**首轮先提供 U-Boot 源码与测试候选；BootBridge 配套工具后续在本仓库维护和发布。**
+**当前测试版：U-Boot v0.1.0-pre.2 与 BootBridge v0.1.0-pre.1（规则 R4），正在由测试人员上机测试，尚未取得整机验收结论。** 首次安装请用 [BootBridge 网页版](https://flyfish-go.github.io/H3C-NX30-Uboot/)。
 
-[首个预发布说明](releases/uboot-v0.1.0-pre.1.md) · [适配范围](docs/HARDWARE.md) · [验证记录](docs/VALIDATION.md) · [构建说明](docs/BUILDING.md) · [工具进度](tools/bootbridge/README.md)
+[U-Boot pre.2 说明](releases/uboot-v0.1.0-pre.2.md) · [BootBridge pre.1 说明](releases/bootbridge-v0.1.0-pre.1.md) · [适配范围](docs/HARDWARE.md) · [验证记录](docs/VALIDATION.md) · [构建说明](docs/BUILDING.md) · [BootBridge](tools/bootbridge/README.md)
 
 ## 项目功能
 
@@ -20,22 +20,22 @@
 
 ## HW-A/B/C/D 分类与当前候选
 
-| HW 工程组 | 主要实物结构 / OEM 代表 machid | U-Boot `v0.1.0-pre.1` | QSDK 11.5 的现有进展 |
+| HW 工程组 | 主要实物结构 / OEM 代表 machid | U-Boot `v0.1.0-pre.2` | QSDK 11.5 的现有进展 |
 |---|---|---|---|
-| [**HW-A**](docs/HARDWARE.md#hw-a) | 长板；IPQ5018 / 外置 DDR / QCA8337；`0x08040001` | 独立候选，**本轮待实测** | 当前未建立独立整机验收 |
-| [**HW-B**](docs/HARDWARE.md#hw-b) | 短板；IPQ5000 / 集成 DDR / QCA8337；`0x08040000` | 独立候选，**本轮待实测** | RT3000 B 的 Product R1 r5 阶段实测 |
-| [**HW-C**](docs/HARDWARE.md#hw-c) | 长板；IPQ5018 / 外置 DDR / RTL8367S；`0x08040101` | 独立候选，**本轮待实测** | RT3000 C 的 Native08 已持久安装、有界验证；仍有开放项 |
-| [**HW-D**](docs/HARDWARE.md#hw-d) | NX30 型长板；IPQ5000 / 集成 DDR / QCA8337；`0x08040000` | **一台 NX30 指定候选有限实测通过** | 独立构建候选，**尚未取得整机验收结论** |
+| [**HW-A**](docs/HARDWARE.md#hw-a) | 长板；IPQ5018 / 外置 DDR / QCA8337；`0x08040001` | 84 候选之一，**测试中** | 当前未建立独立整机验收 |
+| [**HW-B**](docs/HARDWARE.md#hw-b) | 短板；IPQ5000 / 集成 DDR / QCA8337；`0x08040000` | 84 候选之一，**测试中** | RT3000 B 的 Product R1 r5 阶段实测 |
+| [**HW-C**](docs/HARDWARE.md#hw-c) | 长板；IPQ5018 / 外置 DDR / RTL8367S；`0x08040101` | 84 候选之一，**测试中** | RT3000 C 的 Native08 已持久安装、有界验证；仍有开放项 |
+| [**HW-D**](docs/HARDWARE.md#hw-d) | NX30 型长板；IPQ5000 / 集成 DDR / QCA8337；`0x08040000` | 84 候选之一，**测试中**（pre.1 曾有一台 NX30 有限实测通过） | 独立构建候选，**尚未取得整机验收结论** |
 
 **B、D 可共用 `0x08040000` / MP02.1；machid 不是四组唯一编码。** 这些是工程分组和候选状态，不是通刷资格。如何依据实物照片、CDT/APPSBL 和控制 FDT 判组，见 [详细硬件与 OEM 依据](docs/HARDWARE.md)；对应 U-Boot 实测门见 [验证记录](docs/VALIDATION.md)。
 
-> **安装前请先阅读：** 本次 APPSBL 分区 BIN 不能直接上传原厂升级页。本轮不提供普通用户的首次安装工具；普通用户请等待后续工具和对应指南。测试者仅按覆盖自己精确样机的已有安装、备份与恢复流程操作。
+> **安装前请先阅读：** 本次 APPSBL 分区 BIN 不能直接上传原厂升级页。首次安装请使用 BootBridge。当前为测试版，没有独立恢复手段和自己样机写前备份的用户，请等待测试结论。
 
 HW-A/B/C/D 是项目内部分类，用于源码和候选追溯。它不是 H3C 官方版型，也不是供用户凭型号或外观猜选镜像的菜单。[安装说明](docs/INSTALLATION.md) · [NAND 与 ECC](docs/NAND-ECC.md)
 
 ## 获取源码与参与测试
 
-首个[预发布说明](releases/uboot-v0.1.0-pre.1.md)列出候选内容、精确摘要和实测范围。配套安装工具后续在本仓库发布。
+[pre.2 说明](releases/uboot-v0.1.0-pre.2.md)列出候选内容、精确摘要和实测范围。安装工具见 [tools/bootbridge](tools/bootbridge/README.md)。
 
 构建者从[构建说明](docs/BUILDING.md)开始，准备兼容 ARM 工具链。自行重建的镜像需按自己的文件摘要重新验证，不能直接继承已发布候选的硬件结论。
 
@@ -49,7 +49,7 @@ HW-A/B/C/D 是项目内部分类，用于源码和候选追溯。它不是 H3C �
 | `build-release.sh`、`release-tools/` | H3C 四类候选的构建入口和独立封装工具 |
 | `docs/` | 硬件范围、构建、验证、安装与测试文档 |
 | `releases/`、`release-metadata/` | 发布说明、候选摘要和去敏验证记录 |
-| `tools/bootbridge/` | 配套工具入口；本轮只有进度说明 |
+| `tools/bootbridge/` | BootBridge 源码（Windows 版、网页版、桥接程序）与规则 |
 
 源码、文档与配套工具的组织方式见[完整目录说明](docs/REPOSITORY-STRUCTURE.md)。
 

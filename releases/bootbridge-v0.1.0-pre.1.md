@@ -24,9 +24,9 @@
 
 | 文件 | SHA-256 |
 |---|---|
-| `BootBridge-Windows-x64-R4.zip`（EXE + `BootBridge.rules.dat`） | `<填写>` |
-| `BootBridge-Windows-x86-R4.zip`（EXE + `BootBridge.rules.dat`） | `<填写>` |
-| `BootBridge-Web-0.1.0.zip`（离线网页包） | `09ee94c05d03927c26abbadd57106d5a8be632c351b5175c3c0be1d469d6a62f` |
+| `BootBridge-Windows-x64-R4.zip`（EXE + `BootBridge.rules.dat`） | `e7f4be327638040ab1747da735651aed7779138dff62b50282284d859c582534` |
+| `BootBridge-Windows-x86-R4.zip`（EXE + `BootBridge.rules.dat`） | `06027348d83b42280f0934bf8e86ec91c5564c6b1e94e90745e798783c0cb57b` |
+| `BootBridge-Web-0.1.0.zip`（离线网页包） | `ce7e524077f605427b6471e641908ab2fd2125f8c87ac8aa30d62f1c8885d035` |
 | `BootBridge-Offline-x64.exe` | `ede23b880af03a4432b9aa6188dfe3a59dacce8d2ec126caad66bd2e477afce4` |
 | `BootBridge-Offline-x86.exe` | `2cf1df30401cd30aeea3772289d4865347f567195da4d718b29f0cb3c64d6c33` |
 | `BootBridge.rules.dat` | `c29a9aac5bd32076c4f1fccf549562c038a15ae26e6428e3e039b640b7f6c342` |

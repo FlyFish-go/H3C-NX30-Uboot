@@ -1,0 +1,65 @@
+{
+  "/soc/qpic-nand@79b0000": {
+    "compatible": "71636f6d2c656269322d6e616e64632d62616d2d76322e312e3100",
+    "reg": "079b000000010000",
+    "#address-cells": "00000001",
+    "#size-cells": "00000000",
+    "clocks": "000000030000006800000003000000670000000300000069",
+    "clock-names": "636f726500616f6e00696f5f6d6163726f00",
+    "dmas": "0000000b000000000000000b000000010000000b000000020000000b00000003",
+    "dma-names": "747800727800636d640073746174757300",
+    "qpic,io_macro_clk_rates": "016e360005f5e1000bebc2001312d000",
+    "status": "6f6b00",
+    "pinctrl-0": "0000000c",
+    "pinctrl-names": "64656661756c7400"
+  },
+  "/soc/qpic-nand@79b0000/nandcs@0": {
+    "compatible": "71636f6d2c6e616e64637300",
+    "reg": "00000000",
+    "#address-cells": "00000001",
+    "#size-cells": "00000001",
+    "nand-ecc-strength": "00000004",
+    "nand-ecc-step-size": "00000200",
+    "nand-bus-width": "00000008"
+  },
+  "/soc/pinctrl@1000000/qspi_nand_pins": {
+    "linux,phandle": "0000000c",
+    "phandle": "0000000c"
+  },
+  "/soc/pinctrl@1000000/qspi_nand_pins/qspi_clock": {
+    "pins": "6770696f3900",
+    "function": "717370695f636c6b00",
+    "drive-strength": "00000008",
+    "bias-disable": ""
+  },
+  "/soc/pinctrl@1000000/qspi_nand_pins/qspi_cs": {
+    "pins": "6770696f3800",
+    "function": "717370695f637300",
+    "drive-strength": "00000008",
+    "bias-disable": ""
+  },
+  "/soc/pinctrl@1000000/qspi_nand_pins/qspi_data_0": {
+    "pins": "6770696f3700",
+    "function": "717370693000",
+    "drive-strength": "00000008",
+    "bias-disable": ""
+  },
+  "/soc/pinctrl@1000000/qspi_nand_pins/qspi_data_1": {
+    "pins": "6770696f3600",
+    "function": "717370693100",
+    "drive-strength": "00000008",
+    "bias-disable": ""
+  },
+  "/soc/pinctrl@1000000/qspi_nand_pins/qspi_data_2": {
+    "pins": "6770696f3500",
+    "function": "717370693200",
+    "drive-strength": "00000008",
+    "bias-disable": ""
+  },
+  "/soc/pinctrl@1000000/qspi_nand_pins/qspi_data_3": {
+    "pins": "6770696f3400",
+    "function": "717370693300",
+    "drive-strength": "00000008",
+    "bias-disable": ""
+  }
+}

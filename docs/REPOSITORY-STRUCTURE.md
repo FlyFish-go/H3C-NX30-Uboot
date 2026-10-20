@@ -22,18 +22,32 @@ H3C-NX30-Uboot/
 │   ├── TEST-REPORT-TEMPLATE.md   测试反馈模板
 │   └── REPOSITORY-STRUCTURE.md
 ├── releases/
-│   └── uboot-v0.1.0-pre.1.md     首个预发布说明草稿
+│   ├── uboot-v0.1.0-pre.2.md         U-Boot pre.2 发布说明
+│   ├── bootbridge-v0.1.0-pre.1.md    BootBridge pre.1 发布说明（规则 R4）
+│   └── uboot-v0.1.0-pre.1.md         首个预发布说明
 ├── release-metadata/
+│   ├── uboot-v0.1.0-pre.2/
+│   │   ├── CANDIDATES.json           84 个候选的摘要清单
+│   │   ├── SOURCE-PROVENANCE.json    来源、去敏与构建适配记录
+│   │   └── SHA256SUMS.txt
 │   └── uboot-v0.1.0-pre.1/
 │       ├── HARDWARE-SCOPE.json
 │       ├── HW-D-SUMMARY.json
 │       ├── CANDIDATES.json
 │       ├── SOURCE-PROVENANCE.json
 │       ├── ASSETS.json
+│       ├── BUILDING-pre.1.md
 │       └── SHA256SUMS.txt
 └── tools/
     └── bootbridge/
-        └── README.md            同仓配套工具进度
+        ├── README.md                 BootBridge 入口说明
+        ├── desktop/                  Windows 离线版源码
+        ├── web/                      网页版源码
+        ├── nx30-oem-bridge/          在设备上运行的桥接程序源码
+        ├── design/desktop-offline-ui/ 界面设计源文件与文案
+        ├── rules/H3C-BOOTBRIDGE-NAND-OEM-20261020-R4/  规则头文件与清单
+        ├── LICENSE
+        └── COPYING
 ```
 
 `u-boot-2016/`、`build-release.sh`、`release-tools/` 和根级 `SOURCE-PROVENANCE.json` 对应已审源码归档的 `source/` 层。上表聚焦本项目的源码、文档与发布入口，保留的上游其它目录未逐项展开。
@@ -46,9 +60,9 @@ U-Boot 源码继续使用上游的 `u-boot-2016/` 位置，便于比较和整理
 
 上游的 `build.sh`、`staging_dir/` 和 `.github/workflows/` 单独保留。H3C 候选使用上述专用入口，精确工具链不包含在本次源码归档中；本次发布不依赖上游自动发布工作流。
 
-## 配套工具后续目录
+## 配套工具目录
 
-工具准备好后，在 `tools/bootbridge/` 下加入桌面工具、桥接运行程序及各自构建说明。具体子目录随实际导入确定，本轮只放进度页，不导入 EXE、DAT 或工具源码。
+工具准备好后，在 `tools/bootbridge/` 下加入桌面工具、桥接运行程序及各自构建说明。具体子目录随实际导入确定，EXE、DAT 与网页包作为 Release 附件发布；网页站点部署在 `gh-pages` 分支。
 
 安装规则、U-Boot 候选和共享 NAND 信息通过精确版本与摘要清单关联。同仓便于同时审阅这些变化，工具版本仍可独立推进。
 

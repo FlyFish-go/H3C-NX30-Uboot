@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<title>BootKit · 桥接安装</title><link rel="stylesheet" href="/style.css"><script src="/main.js" defer></script></head><body>
+
+
+
+<svg width="0" height="0" class="bk-icon-sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="bk-i-router" viewBox="0 0 24 24"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 16.5h.01M11 16.5h3.5"/><path d="M12 9V6a3 3 0 0 1 3-3"/><path d="M8.5 9.5a5 5 0 0 1 7 0M6 7a8 8 0 0 1 11.3 0"/></symbol>
+    <symbol id="bk-i-download" viewBox="0 0 24 24"><path d="M12 4v10m0 0 4-4m-4 4-4-4"/><path d="M5 18.5h14"/></symbol>
+    <symbol id="bk-i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.2 2.9 7.3 7 8.5 4.1-1.2 7-4.3 7-8.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="bk-i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></symbol>
+    <symbol id="bk-i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></symbol>
+    <symbol id="bk-i-wrench" viewBox="0 0 24 24"><path d="M15 3.5a5 5 0 0 0-6 6.4L3.6 15.3a2 2 0 0 0 0 2.8l2.3 2.3a2 2 0 0 0 2.8 0l5.4-5.4A5 5 0 0 0 20.5 9l-3 3-3-3z"/></symbol>
+    <symbol id="bk-i-plug" viewBox="0 0 24 24"><path d="M9 3v5m6-5v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></symbol>
+    <symbol id="bk-i-alert" viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4m0 3h.01"/></symbol>
+  </defs>
+</svg>
+
+<div id="bootkit-bridge-proposal">
+  <div id="app" class="bk-app" aria-label="BootKit 桥接安装向导">
+    <div class="bk-shell">
+      <aside class="bk-sidebar" aria-label="安装步骤">
+        <div class="bk-brand"><span class="bk-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3.2"/><path d="M8.5 9.5 11 12l-2.5 2.5"/><path d="M12.5 14.5H16"/></svg></span><div><strong>BootKit</strong><small>设备安装向导</small></div></div>
+        <p class="bk-nav-label">安装流程</p>
+        <ol class="bk-nav"><li data-step="1"><span class="bk-number">1</span><span class="bk-step-text">检查设备</span></li><li data-step="2"><span class="bk-number">2</span><span class="bk-step-text">备份与准备</span></li><li data-step="3"><span class="bk-number">3</span><span class="bk-step-text">安装 U-Boot</span></li><li data-step="4"><span class="bk-number">4</span><span class="bk-step-text">完成与重启</span></li></ol>
+      </aside>
+      <main class="bk-main">
+        <header class="bk-head"><div><p class="bk-eyebrow">BOOTKIT · 安装向导</p><h1>安装 U-Boot</h1></div></header>
+        <section class="bk-stage" aria-live="polite">
+          <div class="bk-stage-head"><div><p id="stage-kicker" class="bk-eyebrow bk-kicker">第 1 步 · 设备检查</p><h2 id="stage-title" class="bk-title">正在读取设备状态</h2></div><span id="phase-badge" class="bk-badge">检查中</span></div>
+          <p id="stage-message" class="bk-message">正在读取设备状态和安装检查结果。</p>
+          <div id="device" hidden class="bk-device"><span class="bk-device-mark"><svg aria-hidden="true"><use href="#bk-i-router"/></svg></span><div class="bk-device-text"><strong id="device-name">等待设备信息</strong><small id="device-sub" class="bk-device-sub">正在读取设备信息</small></div></div>
+          
+          <div id="backup-area" hidden class="bk-backup"><span class="bk-backup-icon"><svg aria-hidden="true"><use href="#bk-i-download"/></svg></span><div class="bk-backup-text"><div class="bk-backup-heading"><strong>保存恢复备份</strong><span class="bk-optional">可选</span></div><p>备份含设备私有数据，请保存在电脑，勿公开分享。</p></div><a id="backup-link" class="bk-button bk-secondary bk-backup-button cursor-interaction" href="/backup.zip" download="bootbridge-recovery-backup.zip">下载备份</a></div>
+          <div id="notice" class="bk-notice" hidden><span class="bk-notice-icon"><svg aria-hidden="true"><use href="#bk-i-alert"/></svg></span><div><strong id="notice-title" class="bk-notice-title"></strong><p id="notice-copy" class="bk-notice-copy"></p></div></div>
+          <div id="progress-area" class="bk-progress" hidden><div class="bk-progress-head"><strong id="progress-text" class="bk-progress-label">等待设备报告进度</strong><span id="progress-count" class="bk-percent">0%</span></div><div id="progress-track" class="bk-track" role="progressbar" aria-label="安装进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill" class="bk-fill"></div></div></div>
+          <div id="success" class="bk-success" hidden><div class="bk-success-row"><span class="bk-symbol"><svg aria-hidden="true"><use href="#bk-i-power"/></svg></span><div><strong>正常开机，直接进入系统</strong><p>本次重启将启动保留下来的原厂系统。</p></div></div><div class="bk-success-row"><span class="bk-symbol"><svg aria-hidden="true"><use href="#bk-i-wrench"/></svg></span><div><strong id="success-maintenance-title">维护网页入口尚未核验</strong><p id="success-maintenance-copy">后端尚未提供已核验的维护入口。</p></div></div></div>
+          <div class="bk-actions"><small id="action-note" class="bk-action-note">等待设备核验</small><div class="bk-actions-right"><small id="primary-note" class="bk-primary-note">检查通过后才能安装</small><div class="bk-action-buttons"><button id="return-button" type="button" class="bk-button bk-return bk-install-peer cursor-interaction" disabled aria-describedby="primary-note">返回原厂系统</button><button id="quick-diagnostics-button" type="button" class="bk-button bk-secondary bk-install-peer cursor-interaction">下载诊断信息</button><button id="install-button" type="button" class="bk-button bk-primary cursor-interaction" disabled>等待检查通过</button></div></div></div>
+        </section>
+        <details id="technical" class="bk-technical"><summary class="cursor-interaction"><span class="bk-summary-label">技术信息与检查明细</span><span class="bk-detail-hint">供排查问题时查看</span></summary><div class="bk-tech-body"><h3 class="bk-technical-label">检查结果</h3><div id="check-list" class="bk-checks"></div><h3 class="bk-technical-label">设备与安装信息</h3><dl id="target-details"></dl><h3 class="bk-technical-label">候选文件</h3><dl id="candidate-details-2"></dl><h3 class="bk-technical-label">检查事件</h3><table class="bk-event-table"><thead><tr><th>检查项</th><th>结果</th><th>设备说明</th></tr></thead><tbody id="technical-checks"></tbody></table><p id="capability-note" class="bk-support"></p><button id="diagnostics-button" class="bk-button bk-secondary bk-tech-download" type="button">保存诊断信息</button></div></details>
+        <div class="bk-author"><a href="https://github.com/FlyFish-go" target="_blank" rel="noopener noreferrer">作者：FlyFish-go</a></div>
+      </main>
+    </div>
+    <div id="confirm-overlay" class="bk-overlay" hidden><section class="bk-dialog" role="dialog" aria-modal="true" aria-labelledby="bk-confirm-title"><div class="bk-dialog-icon"><svg aria-hidden="true"><use href="#bk-i-shield"/></svg></div><h2 id="bk-confirm-title">确认安装 U-Boot？</h2><p id="dialog-copy" class="bk-dialog-copy"></p><div class="bk-dialog-actions"><button type="button" id="cancel-button" class="bk-button bk-secondary bk-cancel cursor-interaction">取消</button><button type="button" id="confirm-button" class="bk-button bk-primary bk-confirm cursor-interaction">确认安装</button></div></section></div>
+    <div id="toast" class="bk-toast" role="status" hidden></div>
+  </div>
+</div>
+
+
+
+</body></html>

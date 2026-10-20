@@ -1,0 +1,216 @@
+{
+  "schema": "h3c-rx3000-official-ota-source-evidence-v1",
+  "review_date": "2026-10-16",
+  "mode": "READ_ONLY_EXISTING_VM_AND_WSL_EVIDENCE",
+  "conclusion": "A real RX3000 sample is independently confirmed by its private read-only runtime capture; preflight and captured ENV select RX3000 product configuration. A salted-HMAC-only comparison confirms the OTA config serial equals the sample ENV manucode without disclosing either value. Offline UBI reconstruction proves the captured active kernel Image is byte-identical to archived NX30 R010, so the configured gwVer=NX30V100R010 is corroborated by actual runtime bytes. The retained official API response for this identity/current-version pair returns NX30V100R012, and the RX-named 31,981,568-byte R012 payload hash exactly matches the separately verified NX30 R012 package. Its NX30/D019 rootfs contains RX3000 ProductNumber=98 configuration matching the captured runtime selector. Treat the image as a verified shared-source payload for RX and NX contexts, not a distinct RX binary; do not infer support/qualification for all RX board classes or ABCD combinations.",
+  "official_entry": {
+    "query_host": "magic.h3c.com",
+    "getbest_endpoint": "/smarthomeback/rest/ihomers/getGwBestVerNew",
+    "getdownload_endpoint": "/smarthomeback/rest/ihomers/getGwDownloadNew",
+    "request_identity_note": "The retained fetch helper reads RX3000_GWSN from private config and sets gwVersion=NX30V100R010. The config serial was compared to the real sample captured ENV manucode using random-salt HMAC; the comparison returned MATCH only. The actual sample active kernel Image exactly matches the NX30 R010 Image SHA, corroborating the configured current version. Serial, ENV value, salt, and comparison digest are withheld.",
+    "getbest": {
+      "http_status": 200,
+      "retCode": 0,
+      "gwBestVer": "NX30V100R012"
+    },
+    "getdownload": {
+      "http_status": 200,
+      "retCode": 0,
+      "gwBestVer": "NX30V100R012",
+      "verurl_host": "h3c-magic.oss-cn-hangzhou.aliyuncs.com",
+      "verurl_object_basename": "1HyM98z0p7el.bin",
+      "signed_query_parameters": "WITHHELD"
+    },
+    "availability": "Retained official API getBest/getDownload records are linked to one real RX sample identity through an HMAC-only match to captured ENV manucode. Signed VerURL is temporary; no reusable public static download URL was verified.",
+    "identity_provenance": {
+      "status": "CONFIRMED_FOR_ONE_RX_SAMPLE_BY_PRIVATE_CAPTURE_AND_HMAC_MATCH",
+      "serial_input_present_in_private_config": true,
+      "serial_value": "WITHHELD",
+      "operator_instruction_in_config": "Obtain SN from router management page or device label",
+      "retained_label_or_management_page_capture": false,
+      "retained_evidence_that_serial_belongs_to_rx3000": true,
+      "gwver_source": "Editable config/script field; independently validated against the captured active kernel Image matching NX30 R010",
+      "configured_gwver": "NX30V100R010",
+      "script_sha256": "2cbb5237122b75e6ba005844ee625332e26af9fb076feb7bf59b876ea94d6c48",
+      "config_sha256": "dbaafb03581c460b8ed71fb3542b22df112540fcdd9220a14e09cdb597516368",
+      "independent_real_rx_sample_exists": true,
+      "serial_to_env_manucode_comparison": "HMAC_MATCH_ONLY_VALUE_AND_DIGEST_WITHHELD"
+    },
+    "flow_consistency": {
+      "generic_helper": "rx3000_oneclick.py expects branded RX3000V100R012 in auto mode and would stop on internal NX30V100R012 response",
+      "dedicated_fetch_helper": "rx3000_fetch_r012.py documents accepting NX30V100R012 or RX3000V100R012, uses configured RX serial with gwVersion=NX30V100R010, and writes the returned object to the RX-named local path",
+      "dedicated_fetch_helper_sha256": "897671a86d949907f69410b933e63de1d854b77c4b0e1d5759c6f18b6139b1a5",
+      "resolution": "The specialized fetch helper explains the retained internal NX30 version response; the generic helper guard is not the source of the retained dedicated RX R012 result."
+    }
+  },
+  "archived_download_object": {
+    "wsl_relative_path": "h3c-firmware-archaeology-20260929/firmware/RX3000/RX3000V100R012.bin",
+    "local_filename": "RX3000V100R012.bin",
+    "api_returned_object_basename": "1HyM98z0p7el.bin",
+    "bytes": 31981568,
+    "sha256": "61fbc2a356aa9d5d73eaa9f02eb87f455adea8c32684ffb627b2a35afc2ce922",
+    "recorded_by": "raw-responses/rx3000-r012-download-summary.json",
+    "head_probe_status": 403,
+    "full_object_get_status": "NOT_RECORDED_IN_DOWNLOAD_SUMMARY",
+    "provenance_note": "The archived summary associates the local file, checksum and embedded identity with the API-returned object. Its full payload SHA and size exactly match a separately verified NX30 R012 package, corroborating bytes independently of the incomplete RX-side transport log. RX-side summary records HEAD 403 and no full-object GET status; do not claim a retained successful full transfer transcript."
+  },
+  "independent_package_identity": {
+    "vendor_header_marker": "H3C_+k",
+    "vendor_header_marker_offset": 0,
+    "embedded_model_version": "NX30V100R012",
+    "embedded_model_version_offset": 99,
+    "generation_marker": "D019",
+    "generation_marker_offset": 136,
+    "fit_header_offset": 160,
+    "fit_totalsize": 31936116,
+    "fit_sha256": "6f9a767d0e8f28440ef23581942b3602d3cde8045a9c3563c3fdd124b6ebb26f",
+    "bytes_after_fit": 45292,
+    "kernel_fit_payload_sha256": "5878e39213f37fb3d26b51a5197e09b05e7de18ee275fd7f430ea6eac5e7dc85",
+    "rootfs_sha256": "6fe8faf57b2908cf69499e9a4df0753dbdb11ebc960ea2536be3d2540a3808a3",
+    "multi_sku_rx_product_config": "Present in extracted rootfs: RX3000/product_RX3000.ini, ProductNumber 98; does not change the package header identity."
+  },
+  "evidence_records": [
+    {
+      "path": "raw-responses/rx3000-r012-getbest.json",
+      "bytes": 527,
+      "sha256": "284d71c30214dd25b3e2fbf99a7b5e295880c92fcc427bada46b88465287c01f"
+    },
+    {
+      "path": "raw-responses/rx3000-r012-getdownload2.json",
+      "bytes": 493,
+      "sha256": "ec889f7cc1187e0b891533d9c339e5bd51ab1cd1266a46d2a89643ee875ec013"
+    },
+    {
+      "path": "raw-responses/rx3000-r012-download-summary.json",
+      "bytes": 917,
+      "sha256": "1fe800112774fff5bc5bf29706b8e3056806eb96194bc6c6dab3efbfc567826f"
+    },
+    {
+      "path": "analysis/rx3000-r012-final-summary.txt",
+      "bytes": 1585,
+      "sha256": "51ddf3462d191761193e4718823fe0f5681f02fe84977cc4275b026947fa8a71"
+    },
+    {
+      "path": "analysis/cross-product-unpack/RX3000V100R012/meta.json",
+      "bytes": 6520,
+      "sha256": "0cb9676aede869ff082417798af84d1eb6030e8546f9ed7fec5798fd980909eb"
+    },
+    {
+      "path": "scripts/rx3000_oneclick.py",
+      "bytes": 10789,
+      "sha256": "2cbb5237122b75e6ba005844ee625332e26af9fb076feb7bf59b876ea94d6c48"
+    },
+    {
+      "path": "scripts/rx3000_fetch_r012.py",
+      "bytes": 6424,
+      "sha256": "897671a86d949907f69410b933e63de1d854b77c4b0e1d5759c6f18b6139b1a5"
+    }
+  ],
+  "limitations": [
+    "No new API request or download was performed; no current recommendation/latest-version claim is made.",
+    "One real RX3000 runtime is confirmed by private read-only capture: product RX3000, productname/productconfig RX3000, and config serial HMAC-matches its captured ENV manucode. The serial and ENV value remain private.",
+    "The captured active kernel Image exactly matches archived NX30 R010 and differs from NX30 R012; this independently confirms NX30 internal version lineage for this RX sample.",
+    "The retained official getBest response returns NX30V100R012 for the RX sample identity/current version. The dedicated fetch helper accepts the internal NX30 version and the RX-named R012 payload exactly matches the independently verified NX30 R012 payload.",
+    "The package header names NX30V100R012/D019 and its rootfs contains RX3000 ProductNumber=98. This supports a shared-source image for RX and NX; it is not a distinct RX-only binary.",
+    "No RX ABCD board-class installation or boot qualification is inferred from one sample; other RX hardware revisions remain unqualified.",
+    "The RX-side download summary records HEAD status 403 and does not preserve a full-object GET status. Payload identity is corroborated by exact hash equality with separately verified NX30 R012 package bytes."
+  ],
+  "actual_rx_runtime_evidence": {
+    "status": "REAL_RX3000_RUNTIME_PRODUCT_IDENTITY_CONFIRMED_FROM_PRIVATE_READ_ONLY_CAPTURE",
+    "local_private_evidence_root": "evidence/rx3000-all-partitions-20261011-1555/",
+    "capture_method": "Original OEM TCP23 Telnet authenticated session; root uid verified; metadata and partitions read only",
+    "preflight_web_product": "RX3000",
+    "kernel_release": "Linux OpenWrt 4.4.60, built 2024-06-14 13:48:17 CST",
+    "captured_apppsblenv_safe_fields": {
+      "productname": "RX3000",
+      "productconfig": "/etc/config/RX3000/product_RX3000.ini",
+      "hardversion": "VER.A"
+    },
+    "sanitized_preflight_json_sha256": "b1cb2e2cebda37fd0ca05e9a1f3d23fcce90d98ea06b4ed16e0d5cc5a5a367aa",
+    "hardware_observed_in_private_readme": {
+      "soc": "IPQ5018/AP-MP03.1-C2",
+      "switch": "RTL8367S",
+      "nand": "Winbond W25N01GWZEIG EF:BA",
+      "geometry": "128MiB, 2048-byte page, 64-byte OOB, 128KiB eraseblock, ECC4",
+      "bootargs_nand_format": "nandspare=64 nandeccbits=4"
+    },
+    "product_configuration_relation": {
+      "package_rootfs_path": "etc/config/RX3000/product_RX3000.ini",
+      "product_number": 98,
+      "package_header": "NX30V100R012 / D019",
+      "package_sha256_matches_separately_verified_nx30_r012": true
+    },
+    "scope": "Confirms this specific RX sample selects RX3000 runtime configuration; the old OTA config serial HMAC-matches the captured ENV manucode, and the active kernel matches archived NX30 R010. The NX30-family multi-SKU R012 payload contains the selected RX3000 configuration. Does not qualify other RX board classes or ABCD combinations.",
+    "captured_appsblenv_sha256": "3afcec7aa56c4601b2348350795c629e5eab5985c70c595e92137650927aa8b0",
+    "offline_kernel_reconstruction": {
+      "source": "Captured mtd15 UBI kernel volume reconstructed and matched byte-for-byte against captured mtd21",
+      "fit_sha256": "79b76c80b2ceb487872b0d9a34545fa2278511beadbf077d5bbb1f70d8e5f6b6",
+      "fit_sha256_verified": "79b76c80b2ceb487872b0d9a34545fa2278511beadbf077d5bbb1f70d8e5f6b6",
+      "decompressed_image_sha256": "39a2cd50e3a07ce953726e94ba1553173427f374e99ded02d0e7f50c71abcc74",
+      "matches_archived_nx30_r010_image": true,
+      "nx30_r012_image_sha256": "24a9a6fd841af1a7693017130053ba773ed6e3aba5d2fa2df66b2f5426cf1140",
+      "matches_nx30_r012_image": false
+    },
+    "serial_linkage": {
+      "config_gwsn_equals_captured_env_manucode": true,
+      "method": "Ephemeral random-salt HMAC comparison executed separately in VM and WSL",
+      "reported_result": "MATCH only",
+      "raw_values_salt_and_digests_retained_in_report": false
+    },
+    "package_comparison": {
+      "rx_named_r012_path": "WSL evidence/h3c-firmware-archaeology-20260929/firmware/RX3000/RX3000V100R012.bin",
+      "nx_r012_path": "WSL RT3000 evidence/nx30-r012-download-20261007T102100Z/NX30V100R012.bin",
+      "both_bytes": 31981568,
+      "both_sha256": "61fbc2a356aa9d5d73eaa9f02eb87f455adea8c32684ffb627b2a35afc2ce922",
+      "sha256_equal": true
+    },
+    "private_capture_hash_pins": {
+      "manifest_sha256": "5e242cab5e6bb4ba668c2f1cdc6432357fd9a634d2b54ee164a758128d95017a",
+      "read_only_preflight_json_sha256": "b1cb2e2cebda37fd0ca05e9a1f3d23fcce90d98ea06b4ed16e0d5cc5a5a367aa",
+      "read_only_session_log_sha256": "da5605fd9ceb7516fe8461e8249e631b522ac85a0baea831e8fe3b668604140e",
+      "mtd15_active_rootfs_sha256": "db24893ff19b0871a0b43db7febcbc59e3ad0c52d9dd007604ababf588d927e9",
+      "mtd21_kernel_ubi_volume_sha256": "79b76c80b2ceb487872b0d9a34545fa2278511beadbf077d5bbb1f70d8e5f6b6",
+      "capture_completed_utc": "2026-10-11T08:06:33.578794+00:00"
+    },
+    "active_rootfs_ubi_reconstruction": {
+      "source_mtd": "mtd15 read from /dev/mtd15ro; 40 MiB; ECC4 decoded main-data bytes; no raw OOB",
+      "mtd15_sha256": "db24893ff19b0871a0b43db7febcbc59e3ad0c52d9dd007604ababf588d927e9",
+      "physical_pebs": 320,
+      "valid_ec_headers": 320,
+      "vid_offset": 2048,
+      "data_offset": 4096,
+      "leb_bytes": 126976,
+      "layout_copies_match": true,
+      "volume_table": [
+        {
+          "id": 0,
+          "name": "kernel",
+          "reserved_pebs": 50
+        },
+        {
+          "id": 1,
+          "name": "wifi_fw",
+          "reserved_pebs": 50
+        },
+        {
+          "id": 2,
+          "name": "bt_fw",
+          "reserved_pebs": 3
+        },
+        {
+          "id": 3,
+          "name": "ubi_rootfs",
+          "reserved_pebs": 137
+        },
+        {
+          "id": 4,
+          "name": "rootfs_data",
+          "reserved_pebs": 56
+        }
+      ],
+      "kernel_volume_id_0_reconstructed_matches_mtd21": true,
+      "scope": "Read-only offline parsing of saved partition data. The dynamic ubi_rootfs and rootfs_data contents are not transaction-snapshot guarantees."
+    }
+  },
+  "supersedes_interim_conclusion": "This final review supersedes the earlier interim statement that the RX query serial was unlinked or that RX route identity was unproven. A private one-time salted-HMAC comparison returned MATCH between the OTA config serial and the actual RX sample captured ENV manucode; no identifier, salt, HMAC digest, or secret value is retained."
+}
