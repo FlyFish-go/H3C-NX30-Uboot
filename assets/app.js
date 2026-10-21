@@ -525,7 +525,7 @@
     var l = L(), hint = '', nextDis = false;
     if (S.step === 3) {
       nextDis = !S.upgraded;
-      hint = '<span class="check' + (S.upgraded ? ' on' : '') + '" role="checkbox" tabindex="0" aria-checked="' + S.upgraded + '" data-act="toggle-up"><span class="box">' + ic('check') + '</span><span>' + fmt(l.s3check, { v: esc(G().version) }) + '</span></span>';
+      hint = '<span class="check' + (S.upgraded ? ' on' : '') + '" role="checkbox" tabindex="0" aria-checked="' + S.upgraded + '" aria-label="' + esc(fmt(l.s3check, { v: G().version })) + '" data-act="toggle-up"><span class="check-box" aria-hidden="true">' + ic('check') + '</span><span>' + fmt(l.s3check, { v: esc(G().version) }) + '</span></span>';
     }
     if (S.step === 4 && busy()) nextDis = true;
     return '<div class="panel-foot"><span class="hint">' + hint + '</span><span class="sp"></span>' +
