@@ -89,7 +89,8 @@
     "helpT": "遇到问题？",
     "s6recT": "以后要进入 U-Boot 恢复页：",
     "s6rec": "系统启动失败时，路由器会自动进入恢复页；也可以先断电，按住 Reset 键再通电，保持几秒后松开。电脑网卡保持「自动获取 IP」即可拿到 192.168.10.x 地址，然后在浏览器打开 192.168.10.1。",
-    "rulesLatest": "规则集 {rs} · 已是最新"
+    "rulesLatest": "规则集 {rs} · 已是最新",
+    "by": "作者"
   },
   "en": {
     "edition": "Web",
@@ -180,6 +181,7 @@
     "helpT": "Need help?",
     "s6recT": "Entering U-Boot recovery later:",
     "s6rec": "If the system fails to boot, the router opens the recovery page automatically. You can also power it off, hold Reset while powering on, and release after a few seconds. Leave the network adapter on automatic (DHCP) to get a 192.168.10.x address, then open 192.168.10.1 in your browser.",
-    "rulesLatest": "Rule set {rs} · Up to date"
+    "rulesLatest": "Rule set {rs} · Up to date",
+    "by": "by"
   }
 }
