@@ -552,7 +552,7 @@
 
   var rendered = 0;
   function render() {
-    var l = L(), d = document.documentElement;
+    var l = L(), d = document.documentElement, m = CAT.meta;
     d.setAttribute('data-theme', S.theme); d.lang = S.lang === 'zh' ? 'zh-CN' : 'en';
     document.title = 'BootBridge ' + l.edition;
     var content = [null, step1, step2, step3, step4, step5, step6][S.step]();
@@ -560,7 +560,8 @@
     var ae = document.activeElement, focusId = ae && ae.id, selS = null, selE = null;
     if (focusId === 'sn') { selS = ae.selectionStart; selE = ae.selectionEnd; }
     root.innerHTML = '<div class="page">' +
-      '<header class="topbar"><div class="wrap"><div class="brand">' + LOGO + '<span class="name">' + l.title + '</span><span class="tag">' + l.edition + '</span></div>' +
+      '<header class="topbar"><div class="wrap"><div class="brand">' + LOGO + '<span class="name">' + l.title + '</span><span class="tag">' + l.edition + '</span>' +
+      (m.repo ? '<a class="author" href="' + esc(m.repo) + '" target="_blank" rel="noopener noreferrer" title="FlyFish-go / H3C-NX30-Uboot">' + '<span class="byw">' + esc(l.by) + ' </span>FlyFish-go</a>' : '') + '</div>' +
       '<div class="right"><div class="seg" role="group" aria-label="language"><button data-set="lang" data-val="zh" aria-pressed="' + (S.lang === 'zh') + '">中文</button><button data-set="lang" data-val="en" aria-pressed="' + (S.lang === 'en') + '">EN</button></div>' +
       '<button class="iconbtn" data-act="open-modal" title="' + esc(l.settings) + '" aria-label="' + esc(l.settings) + '">' + ic('gear') + '</button></div></div></header>' +
       stepper() +

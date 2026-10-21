@@ -270,6 +270,9 @@ details.faq + .callout{margin-top:16px}
 .topbar .wrap{height:var(--topbar);display:flex;align-items:center;justify-content:space-between;gap:12px}
 .topbar .right{display:flex;align-items:center;gap:8px}
 .brand .tag{white-space:nowrap}
+.author{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:12.5px;color:var(--secondary);text-decoration:none;padding:2px 7px;border-radius:999px;border:1px solid transparent;margin-left:2px;white-space:nowrap}
+.author:hover{color:var(--teal);border-color:var(--line);background:var(--soft)}
+.author:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 
 /* horizontal stepper */
 .stepper{background:var(--panel);border-bottom:1px solid var(--line)}
@@ -358,6 +361,13 @@ details.faq + .callout{margin-top:16px}
 @media (max-width:640px){
   :root{--gut:12px;--topbar:56px}
   .brand .name{font-size:15px}
+
+  /* Narrow header: keep the author link but drop the edition pill and the
+     "by" prefix so brand + language + settings still fit one row. */
+  .brand .tag{display:none}
+  .author .byw{display:none}
+  .author{font-size:11.5px;padding:2px 6px;margin-left:0}
+  .topbar .wrap{gap:8px}
   .hsteps{padding:8px 0;gap:2px}
   .hsteps li.cur .hs .tx span{display:none}
   .layout{padding-top:12px;padding-bottom:16px;gap:14px}
