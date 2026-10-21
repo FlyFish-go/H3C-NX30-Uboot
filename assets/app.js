@@ -359,7 +359,7 @@
       '<div class="sumrow"><span class="k">' + l.sumVer + '</span><span class="v mono">' + esc(g.version) + '</span></div>' +
       '<ul class="checks">' + chk(stepDone(2), l.sumFw, fw) + chk(stepDone(3), l.sumUp, S.upgraded ? fmt(l.stUpOk, { v: esc(g.version) }) : l.stUpTodo) + chk(stepDone(4), l.sumBridge, br) + '</ul></div>' +
       '<div class="box"><h2>' + l.trustT + '</h2><div class="trust">' +
-      (S.rules === 'ok' ? '<div class="row"><span class="gd"></span><span>' + l.rulesOk + '<br><span class="muted">' + l.rulesOff + '</span></span></div>'
+      (S.rules === 'ok' ? '<div class="row"><span class="gd"></span><span>' + l.rulesOk + '<br><span class="muted">' + fmt(l.rulesOff, { rs: esc(CAT.meta.release) }) + '</span></span></div>'
         : '<div class="row bad">' + ic('alert') + '<span>' + l.rulesBadT + '</span></div>') +
       '<div class="row">' + ic('shield') + '<span>' + l.privacyLine + '</span></div>' +
       '<div class="row">' + ic('info') + '<span>' + l.diagNoSn + '</span></div></div></div>' +
@@ -544,7 +544,7 @@
       '<div class="msec mgrid2"><div><h4>' + l.mLang + '</h4>' + seg('lang', [['zh', '中文'], ['en', 'English']]) + '</div><div><h4>' + l.mTheme + '</h4>' + seg('theme', [['auto', l.themeAuto], ['light', l.themeLight], ['dark', l.themeDark]]) + '</div></div>' +
       '<div class="msec"><h4>' + l.mUpdate + '</h4><div class="offline-box">' + l.offlineUpd + '</div></div>' +
       '<div class="msec"><h4>' + l.mDiag + '</h4><div class="mrow"><div class="l"><span>' + l.diagS + ' · ' + l.diagNoSn + '</span></div><button class="btn" data-copy="diag">' + ic('copy') + l.copyDiag + '</button></div></div>' +
-      '<div class="msec"><h4>' + l.mAbout + '</h4><div class="about">' + fmt(l.about, { v: esc(m.web), e: esc(m.engine) }) + '</div>' +
+      '<div class="msec"><h4>' + l.mAbout + '</h4><div class="about">' + fmt(l.about, { v: esc(m.web), e: esc(m.engine), rs: esc(m.release) }) + '</div>' +
       '<dl class="kv compact"><dt>' + l.release + '</dt><dd><span class="mono">' + esc(m.release) + '</span></dd>' + (m.label ? '<dt>Build</dt><dd><span class="mono">' + esc(m.label) + '</span></dd>' : '') + '</dl>' +
       '<div class="about-links">' + links + '</div><div class="fine">' + ic('info') + '<span>' + l.sumNote + '</span></div></div>' +
       '</div></div></div>';
