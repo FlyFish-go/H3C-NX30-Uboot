@@ -2627,8 +2627,8 @@ static void handle_element(HWND hwnd, int index) {
         wchar_t windows_version[64];
         digest_hex(digest, state.input_digest);
         get_windows_version(windows_version, 64);
-        swprintf(diag, 2048, L"BootBridge %ls\nRules: %ls\nABI: %u\nWindows: %ls\nDPI: %d\nStep: %d\nFile: %ls\nSize: %llu\nSHA-256: %ls\nError: %ls",
-                 self_version, state.rules_ok ? L"R6" : L"FAILED", BB_ENGINE_REVISION,
+        swprintf(diag, 2048, L"BootBridge %ls\nRules: %hs\nABI: %u\nWindows: %ls\nDPI: %d\nStep: %d\nFile: %ls\nSize: %llu\nSHA-256: %ls\nError: %ls",
+                 self_version, state.rules_ok ? bb_offline_rules_release_set() : "FAILED", BB_ENGINE_REVISION,
                  windows_version,
                  dpi, state.step, state.input[0] ? state.input : L"-",
                  (unsigned long long)state.input_size, digest, state.last_error);
