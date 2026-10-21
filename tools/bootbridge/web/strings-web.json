@@ -4,7 +4,7 @@
     "edition": "网页版",
     "version": "网页版 {v}",
     "rulesOk": "规则目录已校验",
-    "rulesOff": "规则集 R6 · 在本机浏览器处理",
+    "rulesOff": "规则集 {rs} · 在本机浏览器处理",
     "rulesBoot": "正在检查浏览器…",
     "openBrowser": "新标签页打开",
     "dropN": "文件只在本机浏览器里读取，不会上传",
@@ -34,7 +34,7 @@
     "memT": "浏览器内存不足",
     "memS": "请关闭其他标签页后重试，或改用电脑上的最新版 Chrome / Edge / Firefox。",
     "offlineUpd": "网页版不会自动更新。在线打开时总是当前发布的版本；离线使用的压缩包请到发布页下载新版本。",
-    "about": "BootBridge 网页版 {v} · 规则集 R6 · 引擎 v{e}\nGPL-2.0-or-later · 所有处理都在本机浏览器里完成",
+    "about": "BootBridge 网页版 {v} · 规则集 {rs} · 引擎 v{e}\nGPL-2.0-or-later · 所有处理都在本机浏览器里完成",
     "release": "规则发布",
     "source": "源代码",
     "sumNote": "可以对照发布页的 SHA256SUMS 核对文件。",
@@ -88,13 +88,14 @@
     "privacyLine": "固件文件只在本机浏览器里处理，不会上传",
     "helpT": "遇到问题？",
     "s6recT": "以后要进入 U-Boot 恢复页：",
-    "s6rec": "系统启动失败时，路由器会自动进入恢复页；也可以先断电，按住 Reset 键再通电，保持几秒后松开。电脑网卡保持「自动获取 IP」即可拿到 192.168.10.x 地址，然后在浏览器打开 192.168.10.1。"
+    "s6rec": "系统启动失败时，路由器会自动进入恢复页；也可以先断电，按住 Reset 键再通电，保持几秒后松开。电脑网卡保持「自动获取 IP」即可拿到 192.168.10.x 地址，然后在浏览器打开 192.168.10.1。",
+    "rulesLatest": "规则集 {rs} · 已是最新"
   },
   "en": {
     "edition": "Web",
     "version": "Web {v}",
     "rulesOk": "Rule catalog verified",
-    "rulesOff": "Rule set R6 · processed in your browser",
+    "rulesOff": "Rule set {rs} · processed in your browser",
     "rulesBoot": "Checking browser…",
     "openBrowser": "Open in new tab",
     "dropN": "The file is read in your browser only and never uploaded",
@@ -124,7 +125,7 @@
     "memT": "The browser ran out of memory",
     "memS": "Close other tabs and try again, or use the latest Chrome / Edge / Firefox on a computer.",
     "offlineUpd": "The web edition never updates itself. Online it is always the current release; for the offline ZIP, download a new version from the release page.",
-    "about": "BootBridge Web {v} · Rule set R6 · Engine v{e}\nGPL-2.0-or-later · Everything runs in your browser",
+    "about": "BootBridge Web {v} · Rule set {rs} · Engine v{e}\nGPL-2.0-or-later · Everything runs in your browser",
     "release": "Rule release",
     "source": "Source code",
     "sumNote": "Files can be checked against SHA256SUMS on the release page.",
@@ -178,6 +179,7 @@
     "privacyLine": "Firmware files are processed in your browser and never uploaded",
     "helpT": "Need help?",
     "s6recT": "Entering U-Boot recovery later:",
-    "s6rec": "If the system fails to boot, the router opens the recovery page automatically. You can also power it off, hold Reset while powering on, and release after a few seconds. Leave the network adapter on automatic (DHCP) to get a 192.168.10.x address, then open 192.168.10.1 in your browser."
+    "s6rec": "If the system fails to boot, the router opens the recovery page automatically. You can also power it off, hold Reset while powering on, and release after a few seconds. Leave the network adapter on automatic (DHCP) to get a 192.168.10.x address, then open 192.168.10.1 in your browser.",
+    "rulesLatest": "Rule set {rs} · Up to date"
   }
 }
