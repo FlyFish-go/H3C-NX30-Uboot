@@ -74,10 +74,22 @@ struct dhcpd_pkt {
 
 #define DHCP_FLAG_BROADCAST	0x8000
 
-#define DHCPD_DEFAULT_IP_STR            "192.168.1.1"
-#define DHCPD_DEFAULT_NETMASK_STR	    "255.255.255.0"
-#define DHCPD_DEFAULT_POOL_START_STR	"192.168.1.100"
-#define DHCPD_DEFAULT_POOL_END_STR	    "192.168.1.200"
+/*
+ * Fallback addressing used only when net_ip/net_netmask were never populated
+ * (zero).  That happens when a saved `custom_network` environment makes
+ * do_network_check() return early, or when setenv() was called
+ * programmatically and on_ipaddr() skipped the net_ip cache.  The recovery
+ * page and this DHCP server must stay on the same subnet as the board's
+ * CONFIG_IPADDR, otherwise a client gets a lease it cannot use and loses the
+ * LAN.  H3C boards define CONFIG_IPADDR as 192.168.10.1; the upstream QCA
+ * default for every other board stays 192.168.1.1.
+ */
+#if defined(CONFIG_IPADDR)
+#define DHCPD_DEFAULT_IP_STR		__stringify(CONFIG_IPADDR)
+#else
+#define DHCPD_DEFAULT_IP_STR		"192.168.1.1"
+#endif
+#define DHCPD_DEFAULT_NETMASK_STR	"255.255.255.0"
 
 #define DHCPD_POOL_OFFSET	99
 #define DHCPD_POOL_SIZE		101
@@ -151,12 +163,17 @@ static void dhcpd_calculate_pool(void)
 		}
 	}
 
-	/* 回退到默认配置 */
-	struct in_addr default_start = string_to_ip(DHCPD_DEFAULT_POOL_START_STR);
-	struct in_addr default_end = string_to_ip(DHCPD_DEFAULT_POOL_END_STR);
+	/*
+	 * 回退到默认配置：地址池跟随服务器地址所在子网，而不是固定的
+	 * 192.168.1.100-200，避免恢复页(.10.1)与 DHCP 租约(1.x)不同网段。
+	 */
+	{
+		struct in_addr def = string_to_ip(DHCPD_DEFAULT_IP_STR);
+		u32 base = ntohl(def.s_addr) & 0xFFFFFF00u;
 
-	pool_start_host = ntohl(default_start.s_addr);
-	pool_end_host = ntohl(default_end.s_addr);
+		pool_start_host = base + DHCPD_POOL_OFFSET + 1; /* .100 */
+		pool_end_host = base + DHCPD_POOL_OFFSET + DHCPD_POOL_SIZE; /* .200 */
+	}
 
 	debug_cond(DEBUG_DEV_PKT,
 		  "dhcpd: using default pool %u.%u.%u.%u - %u.%u.%u.%u\n",
