@@ -1,0 +1,10 @@
+# Rule release H3C-BOOTBRIDGE-NAND-OEM-20261022-R5
+#
+# Files stored in this directory:
+c18cb569dcc010bdd1a13659d5b401c39ea497ec24e6a4a86a4f262912d99ec5  bb_offline_catalog_generated.h
+4bb69f31621494c61300da6b60d2e99835080ad418f73d08b3456fc2491d1188  bundle-catalog-manifest.json
+#
+# Release assets (download from the bootbridge-v0.1.0-pre.3 release):
+# BootBridge.rules.dat             73c0d34e912829e286e0d85c2408c1833b7d3cf4d3d11b532b6966202f20765c
+# BootBridge-Offline-x64.exe       6682ebf605d0095881289713bf0886079475c67b43bf90b7654ad7712cd0c909
+# BootBridge-Offline-x86.exe       f7303a419a421a8fe103f290bc18f448b063379099b70b399464172396bc0543
