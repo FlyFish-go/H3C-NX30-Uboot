@@ -355,7 +355,7 @@ class InstallerTests(unittest.TestCase):
                             "-I", str(variant), *include, str(HARNESS), str(SRC),
                             str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"),
                             str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"),
-                            str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(exe)],
+                            str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(exe)],
                            capture_output=True, text=True)
             if compile_result.returncode:
                 raise RuntimeError(compile_result.stderr)
@@ -381,7 +381,7 @@ class InstallerTests(unittest.TestCase):
                         "-I", str(provider_include), *include, str(HARNESS), str(SRC),
                         str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"),
                         str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"),
-                        str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"),
+                        str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"),
                         "-o", str(cls.provider_return_exe)], capture_output=True, text=True)
         if provider_compile.returncode:
             raise RuntimeError(provider_compile.stderr)
@@ -398,11 +398,11 @@ class InstallerTests(unittest.TestCase):
                         "-I", str(provider_rx_include), *include, str(HARNESS), str(SRC),
                         str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"),
                         str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"),
-                        str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"),
+                        str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"),
                         "-o", str(cls.provider_return_rx_exe)], capture_output=True, text=True)
         if provider_rx_compile.returncode:
             raise RuntimeError(provider_rx_compile.stderr)
-        subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-DBRIDGE_INSTALL_TEST", "-DBRIDGE_OEM_COMPILED_TEST_MANIFEST", *include, str(HARNESS), str(SRC), str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.exe)], check=True)
+        subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-DBRIDGE_INSTALL_TEST", "-DBRIDGE_OEM_COMPILED_TEST_MANIFEST", *include, str(HARNESS), str(SRC), str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.exe)], check=True)
         # This immutable, compiled synthetic registry exercises the same real
         # bv_evaluate path as production, not the compatibility fixture adapter.
         cls.version_exe = Path(cls.tmp.name) / "version_install_harness"
@@ -422,11 +422,11 @@ class InstallerTests(unittest.TestCase):
         (catalog_include / "test_version_registry.h").write_text(header)
         subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-DBRIDGE_INSTALL_TEST", "-DBRIDGE_OEM_COMPILED_TEST_MANIFEST",
                         "-DBRIDGE_VERSION_COMPILED_TEST_REGISTRY", *include, str(HARNESS), str(SRC),
-                        str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.version_exe)], check=True)
+                        str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.version_exe)], check=True)
         guard = Path(__file__).with_name("production_fixture_guard.c")
-        subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", *include, "-I", str(ROOT / "src"), str(guard), str(SRC), str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.prod_guard)], check=True)
+        subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", *include, "-I", str(ROOT / "src"), str(guard), str(SRC), str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.prod_guard)], check=True)
         cls.prod_return_guard = Path(cls.tmp.name) / "production_return_fixture_guard"
-        subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-DBRIDGE_RETURN_ONLY", "-DBI_HAVE_PAYLOAD=0", *include, "-I", str(ROOT / "src"), str(guard), str(SRC), str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.prod_return_guard)], check=True)
+        subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-DBRIDGE_RETURN_ONLY", "-DBI_HAVE_PAYLOAD=0", *include, "-I", str(ROOT / "src"), str(guard), str(SRC), str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"), str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"), str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"), "-o", str(cls.prod_return_guard)], check=True)
         cls.prod_v2_guard = Path(cls.tmp.name) / "production_provider_return_fixture_guard"
         subprocess.run(["cc", "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror",
                         "-DBI_RETURN_SOURCE_REGISTRY_V2=1",
@@ -436,7 +436,7 @@ class InstallerTests(unittest.TestCase):
                         "-I", str(provider_include), *include, "-I", str(ROOT / "src"), str(guard), str(SRC),
                         str(ROOT / "src/bridge_version.c"), str(ROOT / "src/bridge_oem_slot.c"),
                         str(ROOT / "src/bridge_backup.c"), str(ROOT / "src/bridge_root_binding.c"),
-                        str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_install_identity.c"),
+                        str(ROOT / "src/bridge_first_install.c"), str(ROOT / "src/bridge_mtd_observer.c"), str(ROOT / "src/bridge_install_identity.c"),
                         "-o", str(cls.prod_v2_guard)], check=True)
 
         cls.no_manifest_exe=Path(cls.tmp.name)/"no_oem_manifest"

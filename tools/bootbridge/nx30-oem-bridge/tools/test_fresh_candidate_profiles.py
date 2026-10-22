@@ -32,6 +32,7 @@ import build_return_source as return_source
 import candidate_manifest
 import candidate_profile_codegen
 import nand_schema
+import root_binding_contract
 import test_compiled_install_profile as legacy_harness
 import vendor_fit
 
@@ -221,6 +222,9 @@ def run_qualifier(args, archive, descriptor, tuple_rows, board_class, official, 
         (include / "bridge_oem_manifest.h").write_text(
             '#include "bridge_oem_slot.h"\nstatic const bos_manifest bootbridge_oem_manifest = {0};\n',
             encoding="ascii")
+        root_contract = root_binding_contract.derive(identity["sha256"], legacy_harness.official_ubi(official))
+        (include / root_binding_contract.HEADER_NAME).write_text(
+            root_binding_contract.render_header(root_contract), encoding="ascii")
         catalog_path = include / "h3c_nand_catalog.h"
         catalog_path.write_bytes(catalog_bytes)
         catalog_binding = build.public_catalog_binding(
@@ -264,6 +268,7 @@ def run_qualifier(args, archive, descriptor, tuple_rows, board_class, official, 
             '-DBI_FIRST_INSTALL_PROFILE_HEADER="bridge_first_install_profile.h"',
             '-DBI_RETURN_SOURCE_HEADER="bridge_oem_return_source.h"',
             '-DBI_OEM_MANIFEST_HEADER="bridge_oem_manifest.h"',
+            root_binding_contract.COMPILE_FLAG,
             "-I", str(include), "-I", str(project_src),
             str(PROJECT / "tests/compiled_install_profile_harness.c"),
             *[str(project_src / name) for name in SOURCES], "-lz", "-o", str(executable)]
