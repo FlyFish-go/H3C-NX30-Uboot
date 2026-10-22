@@ -306,7 +306,22 @@ bii_code bii_check_public_candidate(const char *board,const char *source_product
 /* The supplied RC R013L01/C stock ENV has no machid. Do not change the
  * candidate's missing-field policy: substitute only this exact source's live
  * C route, already bound by the bridge/source/dispatcher contracts. Neither
- * an absent route nor an A/B/D route grants this platform assertion. */
+ * an absent route nor an A/B/D route grants this platform assertion.
+ *
+ * This proof only stands in for a MISSING ENV machid; it never admits a
+ * candidate by itself. policies[] stays the sole authority on which digests
+ * are admissible, so the predicate is restricted to records that table
+ * already admits for class C at machid 08040101. Enumerating the table rather
+ * than naming one digest keeps a release from shipping a provider whose own
+ * payload the runtime path then refuses as BII_ENV_MACHID. */
+static unsigned policy_admits_c_candidate(const char *candidate)
+{
+    for(size_t i=0;i<sizeof(policies)/sizeof(policies[0]);i++)
+        if(eq("C",policies[i].board)&&eq("08040101",policies[i].machid)&&
+           eq(candidate,policies[i].candidate))return 1;
+    return 0;
+}
+
 static unsigned rc_c_runtime_platform(const char *board,const char *product,
         const char *source,const char *machid,const char *candidate,
         const uint8_t *compatible,size_t bytes)
@@ -315,7 +330,7 @@ static unsigned rc_c_runtime_platform(const char *board,const char *product,
     char normalized[16];
     return eq(board,"C")&&eq(product,"RC3000")&&
         eq(source,"69d3e558e770f4dc26f0ff9ddd6a5a10f541b3fdc826aacf3cbeaf1f93469c44")&&
-        eq(candidate,"e768be512e985980070c811cea56f44a822bee3a938bb91f821454764e89cd84")&&
+        policy_admits_c_candidate(candidate)&&
         !parse_machid(machid,normalized)&&eq(normalized,"08040101")&&
         compatible&&bytes==sizeof(exact_route)&&!memcmp(compatible,exact_route,sizeof(exact_route));
 }
