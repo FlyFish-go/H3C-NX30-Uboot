@@ -1,0 +1,7 @@
+== PRE-FIX identity TU (1bb3ded) sha: 8122fb6f12bf0635c87d86a73af65e5ffb8e26217d4a7f712f6909709128d0a8
+build.py exit=1
+== policy header present?
+ls: cannot access '/tmp/va-neutral3/80972/out/.generated-include/bii_candidate_policy.generated.h': No such file or directory
+== error:
+    raise RuntimeError(f"command failed; see {log}")
+RuntimeError: command failed; see /tmp/va-neutral3/80972/out/logs/bridge-check-compile.log

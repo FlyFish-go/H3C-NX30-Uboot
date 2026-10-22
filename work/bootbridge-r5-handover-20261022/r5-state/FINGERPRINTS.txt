@@ -1,0 +1,6 @@
+# R5 RC3000 reachability fingerprints (measured 2026-10-22T05:52:11Z)
+providers_total=68
+providers_with_c2_route=68
+providers_with_stale_e768be51=0
+candidate_bytes=17695572
+candidate_sha256=514d0f29071049132aa2e758dde46335e5cebfb73a2f6155cdc0d708dbe5ce34
