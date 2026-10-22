@@ -14,7 +14,11 @@ typedef struct {
 typedef enum {
     BV_FIRST_INSTALL = 0, BV_SKIP_IDENTICAL, BV_UPGRADE,
     BV_REJECT_DOWNGRADE, BV_REJECT_UNKNOWN, BV_REJECT_INCOMPATIBLE,
-    BV_INVALID_REGISTRY
+    BV_INVALID_REGISTRY,
+    /* Installed APPSBL is unknown, but the candidate is a valid registered
+     * custom release. Never produced by bv_evaluate(); the installer derives
+     * it to overwrite whatever U-Boot is installed. */
+    BV_OVERRIDE_UNKNOWN
 } bv_decision;
 typedef struct {
     bv_decision decision;

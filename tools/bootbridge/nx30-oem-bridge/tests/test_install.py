@@ -1036,7 +1036,7 @@ class InstallerTests(unittest.TestCase):
                                           ("candidate", "ready", "跳过重复"),
                                           ("old", "ready", "允许升级"),
                                           ("new", "blocked", "拒绝降级"),
-                                          ("unknown", "blocked", "未命中"),
+                                          ("unknown", "ready", "覆盖安装"),
                                           ("wrong_scope", "blocked", "不兼容")]:
             with self.subTest(variant=variant):
                 d = self.fixture(active_payload=variant == "candidate")
@@ -1053,6 +1053,14 @@ class InstallerTests(unittest.TestCase):
 
     def test_compiled_old_release_upgrade_executes_real_transaction(self):
         d = self.fixture(); (d / "dev/mtd7").write_bytes(self.version_bytes["old"])
+        protected = (d / "dev/mtd7").read_bytes()
+        _, (state,) = status_result(self.version_exe, d, "nand_noise_recheck")
+        self.assertEqual(state["phase"], "complete", state["blocked_reason"])
+        self.assertEqual((d / "dev/mtd7").read_bytes(), protected)
+        self.assertEqual((d / "dev/mtd6").read_bytes(), (d / "etc/bridge/uboot.bin").read_bytes())
+
+    def test_compiled_unknown_active_override_executes_real_transaction(self):
+        d = self.fixture(); (d / "dev/mtd7").write_bytes(self.version_bytes["unknown"])
         protected = (d / "dev/mtd7").read_bytes()
         _, (state,) = status_result(self.version_exe, d, "nand_noise_recheck")
         self.assertEqual(state["phase"], "complete", state["blocked_reason"])

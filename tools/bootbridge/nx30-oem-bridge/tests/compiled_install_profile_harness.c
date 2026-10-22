@@ -280,8 +280,44 @@ int main(int argc, char **argv)
     expect_reject(parts, &env, &id, candidate, &pages);
     g_oem_pool_match.exit_policy = BI_FIRST_INSTALL_OEM_EXIT_POLICY;
 
-    g_version = evaluate_version("0000000000000000000000000000000000000000000000000000000000000000",
-                                 candidate_hash);
+    /* Overwrite install: an unknown running APPSBL (an earlier custom U-Boot)
+     * is accepted for a registered candidate; every hardware gate still holds. */
+    uint8_t *old_custom = malloc(p->target_size);
+    assert(old_custom);
+    memcpy(old_custom, active, p->target_size);
+    old_custom[p->target_size - 1] ^= 0x5a;
+    char old_hash[65];
+    hash_hex(old_custom, p->target_size, old_hash);
+    parts[1].snapshot = old_custom;
+    snprintf(g_active_hash, sizeof(g_active_hash), "%s", old_hash);
+    g_version = evaluate_version(old_hash, candidate_hash);
+    assert(g_version.decision == BV_OVERRIDE_UNKNOWN);
+    g_first_install_qualified = 0;
+    if (qualify_compiled_first_install(parts, 7, &parts[0], &env, &id, candidate, &pages) != 0) {
+        fprintf(stderr, "overwrite install rejected an unknown running APPSBL: %s\n", g_blocked);
+        return 14;
+    }
+    assert(g_first_install_qualified == 1 && g_first_install_profile == &profiles[0]);
+    assert(g_modified == 0 && g_can_reboot == 0);
+    /* The running APPSBL must still be the one the version decision saw. */
+    old_custom[0] ^= 1;
+    expect_reject(parts, &env, &id, candidate, &pages);
+    old_custom[0] ^= 1;
+    /* Hardware gates are unchanged in overwrite mode. */
+    parts[0].snapshot[0] ^= 1;
+    expect_reject(parts, &env, &id, candidate, &pages);
+    parts[0].snapshot[0] ^= 1;
+    pages.appsbl[1].ecc_uncorrected_after = 1;
+    expect_reject(parts, &env, &id, candidate, &pages);
+    pages.appsbl[1].ecc_uncorrected_after = 0;
+    parts[4].snapshot[400] ^= 1;
+    expect_reject(parts, &env, &id, candidate, &pages);
+    parts[4].snapshot[400] ^= 1;
+    expect_reject(parts, &env, &id, other_candidate, &pages);
+    parts[1].snapshot = active;
+    free(old_custom);
+    /* An unregistered candidate never becomes an override. */
+    g_version = evaluate_version(old_hash, old_hash);
     assert(g_version.decision == BV_REJECT_UNKNOWN);
     expect_reject(parts, &env, &id, candidate, &pages);
 

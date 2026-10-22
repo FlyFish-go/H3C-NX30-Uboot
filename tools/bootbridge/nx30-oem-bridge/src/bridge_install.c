@@ -1198,7 +1198,7 @@ static const char *version_scope(void){
     return BI_VERSION_SCOPE;
 #endif
 }
-static bv_result evaluate_version(const char *installed,const char *candidate){
+static bv_result evaluate_registry(const char *installed,const char *candidate){
 #if defined(BRIDGE_RETURN_ONLY)
     (void)installed;(void)candidate;
     bv_result reject={BV_REJECT_UNKNOWN,0,0};return reject;
@@ -1222,6 +1222,15 @@ static bv_result evaluate_version(const char *installed,const char *candidate){
                        candidate,APPSBL_BYTES,installed,APPSBL_BYTES);
 #endif
 }
+/* An unknown installed APPSBL (e.g. an earlier custom U-Boot) is overwritten
+ * only when the candidate itself is a registered custom release: evaluating
+ * the candidate against itself yields SKIP_IDENTICAL exactly then. */
+static bv_result evaluate_version(const char *installed,const char *candidate){
+    bv_result r=evaluate_registry(installed,candidate);
+    if(r.decision==BV_REJECT_UNKNOWN&&evaluate_registry(candidate,candidate).decision==BV_SKIP_IDENTICAL)
+        r.decision=BV_OVERRIDE_UNKNOWN;
+    return r;
+}
 static const char *version_reason(bv_decision decision){
     switch(decision){
     case BV_FIRST_INSTALL:return "可信OEM基线：允许首次安装已登记候选";
@@ -1230,6 +1239,7 @@ static const char *version_reason(bv_decision decision){
     case BV_REJECT_DOWNGRADE:return "已安装可信较新版本：拒绝降级";
     case BV_REJECT_INCOMPATIBLE:return "APPSBL版本scope或候选类型不兼容";
     case BV_INVALID_REGISTRY:return "编译可信版本注册表无效：拒绝安装";
+    case BV_OVERRIDE_UNKNOWN:return "当前APPSBL不是原厂或已登记版本：覆盖安装，不保留原U-Boot";
     default:return "完整APPSBL未命中可信版本注册表：拒绝安装";
     }
 }
@@ -1744,6 +1754,15 @@ static int qualify_compiled_first_install(bi_part *parts,size_t n,bi_part *sbl,b
     if(collect_install_facts(&profile,parts,n,sbl,id,pages,&facts)){
         install_unavailable("first_install_record","当前分区、保护快照或NAND事实不符合编译安装组合");return -1;
     }
+    /* Overwrite install: bind the running APPSBL that the version decision saw
+     * instead of the OEM one. Every other NAND/SBL/BC/slot/page gate below
+     * still applies unchanged. */
+    if(g_version.decision==BV_OVERRIDE_UNKNOWN){
+        if(strcmp(facts.active_sha256,g_active_hash)){
+            install_unavailable("first_install_record","覆盖安装：活动APPSBL与版本判定时的内容不一致");return -1;
+        }
+        profile.active_oem_sha256=facts.active_sha256;
+    }
     facts.route_contract_verified=
         !strcmp(BI_FIRST_INSTALL_SOURCE_SHA256,BI_RETURN_SOURCE_OFFICIAL_SHA256)&&
         !strcmp(BI_FIRST_INSTALL_ROUTE,BI_RETURN_SOURCE_ROUTE)&&
@@ -1763,8 +1782,8 @@ static int qualify_compiled_first_install(bi_part *parts,size_t n,bi_part *sbl,b
     if(identity!=BII_OK){install_unavailable("install_identity",bii_code_name(identity));return -1;}
     const char *reason=bfi_match_install_profile(&profile,candidate,&facts);
     if(reason){install_unavailable("first_install_record",reason);return -1;}
-    if(g_version.decision!=BV_FIRST_INSTALL){
-        install_unavailable("first_install_record","当前路径仅允许保留活动原厂U-Boot的首次安装");return -1;
+    if(g_version.decision!=BV_FIRST_INSTALL&&g_version.decision!=BV_OVERRIDE_UNKNOWN){
+        install_unavailable("first_install_record","当前路径仅允许首次安装或覆盖安装");return -1;
     }
     g_first_install_record=candidate;g_first_install_profile=selected_profile;g_first_install_qualified=1;
     add_check("first_install_record","pass",candidate->name);
@@ -1803,7 +1822,8 @@ static void qualify_install(bi_part*parts,size_t n,bi_part*sbl,bi_part*env,bi_pa
     if(!g_bound_payload_hash[0])snprintf(g_bound_payload_hash,sizeof(g_bound_payload_hash),"%s",hash);
     add_check("candidate_payload","pass","候选文件全分区大小/hash与编译构建ID一致");
     g_version=evaluate_version(g_active_hash,g_candidate_hash);
-    if(g_version.decision!=BV_FIRST_INSTALL&&g_version.decision!=BV_UPGRADE&&g_version.decision!=BV_SKIP_IDENTICAL){
+    if(g_version.decision!=BV_FIRST_INSTALL&&g_version.decision!=BV_UPGRADE&&g_version.decision!=BV_SKIP_IDENTICAL&&
+       g_version.decision!=BV_OVERRIDE_UNKNOWN){
         install_unavailable("trusted_version",version_reason(g_version.decision));return;}
     add_check("trusted_version","pass",version_reason(g_version.decision));
     struct bmo_appsbl_pair_report pages;memset(&pages,0,sizeof(pages));
