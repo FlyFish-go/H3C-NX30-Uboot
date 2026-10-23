@@ -26,6 +26,7 @@ H3C-NX30-Uboot/
 │   ├── bootbridge-v0.1.0-pre.1.md    BootBridge pre.1 发布说明（规则 R4）
 │   ├── bootbridge-v0.1.0-pre.3.md    BootBridge pre.3 发布说明（规则 R5）
 │   ├── bootbridge-v0.1.0-pre.4.md    BootBridge pre.4 发布说明（规则 R6）
+│   ├── bootbridge-v0.1.0-pre.5.md    BootBridge pre.5 发布说明（规则 R7）
 │   └── uboot-v0.1.0-pre.1.md         首个预发布说明
 ├── release-metadata/
 │   ├── uboot-v0.1.0-pre.2/
@@ -47,7 +48,7 @@ H3C-NX30-Uboot/
         ├── web/                      网页版源码
         ├── nx30-oem-bridge/          在设备上运行的桥接程序源码
         ├── design/desktop-offline-ui/ 界面设计源文件与文案
-        ├── rules/H3C-BOOTBRIDGE-NAND-OEM-20261022-R6/  规则头文件与清单
+        ├── rules/H3C-BOOTBRIDGE-NAND-OEM-20261023-R7/  规则头文件与清单
         ├── LICENSE
         └── COPYING
 ```
