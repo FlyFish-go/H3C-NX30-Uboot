@@ -6,9 +6,9 @@
 
 目前主要维护 NX30、RT3000、RX3000、RC3000、RW3000 的相关硬件变体。适配按具体硬件、NAND/ECC 和启动链核验，详见[硬件范围](docs/HARDWARE.md)。
 
-**当前测试版：U-Boot v0.1.0-pre.2 与 BootBridge v0.1.0-pre.5（规则 R7），正在由测试人员上机测试，尚未取得整机验收结论。** 首次安装请用 [BootBridge 网页版](https://flyfish-go.github.io/H3C-NX30-Uboot/)。
+**当前测试版：U-Boot v0.1.0-pre.2 与 BootBridge v0.1.0-pre.6（规则 R8），正在由测试人员上机测试，尚未取得整机验收结论。** 首次安装请用 [BootBridge 网页版](https://flyfish-go.github.io/H3C-NX30-Uboot/)。
 
-[U-Boot pre.2 说明](releases/uboot-v0.1.0-pre.2.md) · [BootBridge pre.5 说明](releases/bootbridge-v0.1.0-pre.5.md) · [适配范围](docs/HARDWARE.md) · [验证记录](docs/VALIDATION.md) · [构建说明](docs/BUILDING.md) · [BootBridge](tools/bootbridge/README.md)
+[U-Boot pre.2 说明](releases/uboot-v0.1.0-pre.2.md) · [BootBridge pre.6 说明](releases/bootbridge-v0.1.0-pre.6.md) · [适配范围](docs/HARDWARE.md) · [验证记录](docs/VALIDATION.md) · [构建说明](docs/BUILDING.md) · [BootBridge](tools/bootbridge/README.md)
 
 ## 项目功能
 

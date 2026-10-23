@@ -342,8 +342,7 @@ async function run() {
   assert.equal(oem.canRebootOEM(),false,"a reset entry explicitly marked unverified cannot be advertised");
   oem.stop();
 
-  // Rendered success and confirmation copy describe the actual UART entry,
-  // explicitly preserving the unverified status of physical RESET.
+  // Rendered success and confirmation copy describe the RESET rescue entry.
   const uiNodes=new Map();
   const uiElement=id=>{if(!uiNodes.has(id))uiNodes.set(id,new Element());return uiNodes.get(id);};
   uiElement("connection-label").previousElementSibling=new Element();
@@ -353,13 +352,13 @@ async function run() {
   await uartUI.load();
   assert.equal(uartUI.canRebootOEM(),true);
   assert.equal(uiElement("success").hidden,false);
-  assert.match(uiElement("success-maintenance-title").textContent,/串口中断/);
-  assert.match(uiElement("success-maintenance-copy").textContent,/3 秒内/);
+  assert.match(uiElement("success-maintenance-title").textContent,/按住 RESET 开机/);
+  assert.match(uiElement("success-maintenance-copy").textContent,/红灯闪烁约 3 秒/);
   assert.match(uiElement("success-maintenance-copy").textContent,/192\.168\.10\.1/);
-  assert.match(uiElement("success-maintenance-copy").textContent,/物理 RESET 入口未核验/);
+  assert.doesNotMatch(uiElement("success-maintenance-copy").textContent,/串口|httpd/);
   uiElement("install-button").click();
-  assert.match(uiElement("dialog-copy").textContent,/3 秒内通过串口/);
-  assert.match(uiElement("dialog-copy").textContent,/物理 RESET 入口未核验/);
+  assert.match(uiElement("dialog-copy").textContent,/按住 RESET 再通电/);
+  assert.doesNotMatch(uiElement("dialog-copy").textContent,/串口|httpd/);
   const unknownStatus=baseStatus(Object.assign({},uartProof,{phase:"complete",install_ready:false,can_reboot:true,
     boot_policy:{verified:true,normal_boot:"selected_system",maintenance_entry:"unknown",next_boot:"oem"}}));
   uartUI.update({status:unknownStatus});

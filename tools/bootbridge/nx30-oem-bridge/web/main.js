@@ -202,7 +202,7 @@
       [["版本",candidate.version],["SHA-256",candidate.sha256],["大小",candidate.bytes?`${candidate.bytes} 字节`:null],["维护地址",candidate.ip],["原厂返回接口",s.actions&&s.actions.return_oem===true?"后端已声明，仍需安全条件通过":"当前后端未提供"],["重启进入原厂接口",s.actions&&s.actions.reboot_oem===true?"后端已声明，仍需完整安装及启动策略核验":"当前后端未提供"]].forEach(([k,v])=>kv(secondary,k,v));
       const entry=app.maintenanceEntry();
       const verifiedPolicy=app.canRebootOEM() && entry;
-      setText("capability-note",verifiedPolicy?(entry==="uart"?"原厂槽、启动记录和串口启动中断维护入口已核验；物理 RESET 入口未核验。":"原厂槽、启动记录和按住 RESET 开机进入维护网页的策略已由后端明确核验。"):(s.oem_return&&s.oem_return.reason||dispatch.reason||"原厂返回及重启进入原厂，需要后端明确核验原厂槽与启动记录。缺少核验时对应按钮保持禁用。"));
+      setText("capability-note",verifiedPolicy?("原厂槽、启动记录和 RESET 救援入口均已核验。"):(s.oem_return&&s.oem_return.reason||dispatch.reason||"原厂返回及重启进入原厂，需要后端明确核验原厂槽与启动记录。缺少核验时对应按钮保持禁用。"));
     }
     function render(app) {
       const s=app.status||{},phase=PHASES.has(s.phase)?s.phase:"checking",waiting=app.uncertain||(!app.connected&&!!app.status);
@@ -242,13 +242,13 @@
       setText("notice-copy",waiting?"恢复连接后继续读取同一操作的状态。":phase==="failed"?(s.may_have_modified===true?"设备报告可能已写入部分内容。已禁止重试、返回原厂和重启，请保存诊断。":"安装事务已停止。只有后端明确核验返回能力后才能返回原厂；请保存诊断。"):(installUnavailable?installUnavailableMessage:(s.blocked_reason||s.message||"设备未提供通过结果，安装保持禁用。")));
       show("success",!returning&&phase==="complete"&&app.canRebootOEM()&&!waiting&&!rebooting);
       const entry=app.maintenanceEntry();
-      setText("success-maintenance-title",entry==="uart"?"启动时通过串口中断，启动维护网页":entry==="reset"?"按住 RESET 开机，进入维护网页":"维护网页入口尚未核验");
-      setText("success-maintenance-copy",entry==="uart"?"上电启动后 3 秒内通过串口发送启动中断，在提示符下输入 httpd 并回车，再访问 192.168.10.1。物理 RESET 入口未核验。":entry==="reset"?"按住 RESET 并开机；通过网线连接后访问 192.168.10.1。":"后端尚未提供已核验的维护入口。");
+      setText("success-maintenance-title",entry?"按住 RESET 开机，进入救援系统":"救援系统入口尚未核验");
+      setText("success-maintenance-copy",entry?"断电后按住 RESET 键再接通电源，红灯闪烁约 3 秒后转为绿灯常亮，此时松手即进入救援系统。用网线连接 LAN 口，在浏览器访问 192.168.10.1。":"后端尚未提供已核验的救援系统入口。");
       show("return-button",["checking","ready","blocked","failed"].includes(phase));
       $("return-button").disabled=!app.canReturnOEM();
       $("return-button").title=app.canReturnOEM()?"后端已核验返回原厂能力":waiting?"连接状态待确认，暂不能提交返回原厂":submitted?"请求已发送，不会重复提交":(s.oem_return&&s.oem_return.reason)||s.dispatch&&s.dispatch.reason||"当前后端未提供已核验的返回原厂能力";
       show("quick-diagnostics-button",["checking","ready","blocked","failed"].includes(phase));
-      setText("action-note",s.may_have_modified===true?"设备报告可能已修改":s.may_have_modified===false?"设备报告尚未写入":"写入状态待核验");
+      setText("action-note",phase==="complete"&&s.may_have_modified===true?"已写入新 U-Boot":s.may_have_modified===true?"设备报告可能已修改":s.may_have_modified===false?"设备报告尚未写入":"写入状态待核验");
       const primary=$("install-button");primary.disabled=true;
       let caption="检查通过后才能安装",button="等待检查通过";
       if(waiting){button="重新读取状态";caption="仅读取，不重复提交操作";primary.disabled=app.pending;}
@@ -269,7 +269,7 @@
       dialogAction=action;dialogBinding=actionBinding();previousFocus=doc.activeElement;
       setText("bk-confirm-title",action==="install"?"确认安装 U-Boot？":action==="return"?"返回原厂系统？":"重启并启动原厂系统？");
       const maintenanceEntry=wizard.maintenanceEntry();
-      const rebootCopy=maintenanceEntry==="uart"?"安装、原厂系统与启动策略核验已通过。确认后重启进入原厂；如需维护网页，在上电启动后 3 秒内通过串口发送启动中断，在提示符下输入 httpd 并回车，再访问 192.168.10.1。物理 RESET 入口未核验。":maintenanceEntry==="reset"?"安装、原厂系统与启动策略核验已通过。确认后重启进入原厂；以后按住 RESET 开机进入 U-Boot。":"维护入口尚未核验，当前不能重启并启动原厂系统。";
+      const rebootCopy=maintenanceEntry?"安装、原厂系统和启动策略均已核验通过。确认后将重启进入原厂系统。以后如需进入救援系统，断电后按住 RESET 再通电，红灯闪约 3 秒转绿灯常亮时松手，然后访问 192.168.10.1。":"救援系统入口尚未核验，当前不能重启并启动原厂系统。";
       setText("dialog-copy",action==="install"?"将安装当前设备已核验的内置 U-Boot。安装过程中请保持供电稳定和网线连接。":action==="return"?"原厂槽与启动记录已由后端核验。确认后只提交一次返回原厂请求，并等待设备状态确认；此操作不表示 U-Boot 安装完成。":rebootCopy);
       setText("confirm-button",action==="install"?"确认安装":action==="return"?"确认返回":"确认重启");
       $("app").querySelector(".bk-shell").inert=true;show("confirm-overlay",true);$("cancel-button").focus();
