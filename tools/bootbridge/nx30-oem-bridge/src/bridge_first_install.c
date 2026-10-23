@@ -403,15 +403,17 @@ const char *bfi_match_install_profile(const bfi_install_profile *p,
        f->oem_offset!=p->oem_offset||f->oem_selector!=p->oem_selector||
        f->oem_bytes!=p->oem_bytes)return "bridge/OEM slots";
     if(f->route_contract_verified!=1||f->unsigned_boot_allowed!=1||f->env_bootargs_verified!=1)return "route/auth/bootargs";
-    if(!f->pages.observation_complete||!f->pages.binding_valid||!f->pages.clean)return "page observation";
+    if(!f->pages.observation_complete||!f->pages.binding_valid)return "page observation";
+    /* Corrected bitflips are what ECC is for; ECCGETSTATS counts them
+     * cumulatively since boot, so one weak bit would block a board on every
+     * boot. Only uncorrectable reads or missing counters refuse the install. */
     for(unsigned i=0;i<2;i++){
         const struct bmo_partition_report *r=&f->pages.appsbl[i];
-        if(!r->observation_complete||!r->binding_valid||!r->clean||
+        if(!r->observation_complete||!r->binding_valid||
            r->pages_read!=p->target_size/p->page||r->covered_bytes!=p->target_size||
            r->eraseblocks_checked!=p->target_size/p->erase||
            !bfi_install_profile_accepts_mtd_oob(p,r->observed_oob_bytes)||
            r->ecc_stats_state!=BMO_ECC_STATS_SUPPORTED||
-           r->ecc_corrected_before||r->ecc_corrected_after||
            r->ecc_uncorrected_before||r->ecc_uncorrected_after||r->badblocks)return "page observation";
     }
     return NULL;

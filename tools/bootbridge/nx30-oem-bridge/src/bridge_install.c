@@ -1056,6 +1056,22 @@ static bii_code check_current_candidate_identity(const uint8_t *env,size_t env_b
         bytes>0&&bytes<(ssize_t)sizeof(compatible)?compatible:NULL,
         bytes>0&&bytes<(ssize_t)sizeof(compatible)?(size_t)bytes:0,NULL);
 }
+/* Keep the code name first (status JSON and tests key on it) and say in
+ * plain words which ENV/platform fact did not fit. */
+static const char *__attribute__((unused)) identity_reason(bii_code c)
+{
+    switch(c){
+    case BII_POLICY:return "policy：本构建的板型/候选/原厂固件组合不在身份登记表中";
+    case BII_SIZE:return "size：APPSBLENV分区大小不是512 KiB";
+    case BII_CRC:return "crc：APPSBLENV的CRC校验失败（ENV损坏或由其他U-Boot以不同大小保存）";
+    case BII_FORMAT:return "format：APPSBLENV含控制字符、重复bootcmd或无法解析的变量";
+    case BII_PRODUCT:return "product：ENV中productname缺失、重复或与原厂固件机型不一致";
+    case BII_ENV_MACHID:return "env-machid：ENV中machid缺失（且无可替代的设备树路由证明）、重复或与板型不符";
+    case BII_CMDLINE_MACHID:return "cmdline-machid：内核启动参数中的machid重复或与板型不符";
+    case BII_BOOTARGS:return "bootargs：ENV中bootargs重复，或含本板型U-Boot会自行追加的root/ubi参数";
+    default:return bii_code_name(c);
+    }
+}
 #endif
 static int machid_value_ok(const char *value){char *end;unsigned long parsed;const char*p=value;if(!p||!*p)return 0;if(p[0]=='0'&&(p[1]=='x'||p[1]=='X'))p+=2;if(!*p)return 0;for(const char*q=p;*q;q++)if(!((*q>='0'&&*q<='9')||(*q>='a'&&*q<='f')||(*q>='A'&&*q<='F')))return 0;errno=0;parsed=strtoul(value,&end,16);return !errno&&end!=value&&!*end&&parsed==0x8040000UL;}
 static int __attribute__((unused)) verify_cmdline_machid(void){char line[2048],value[64]="";if(text_file("proc/cmdline",line,sizeof(line)))return -1;char *save=NULL;for(char*t=strtok_r(line," \t\r\n",&save);t;t=strtok_r(NULL," \t\r\n",&save)){if(!strncmp(t,"machid=",7)){const char*v=t+7;if(!machid_value_ok(v))return -1;if(value[0]&&strcmp(value,v))return -1;if(!value[0]&&safe_copy(value,sizeof(value),v))return -1;}}return 0;}
@@ -1565,9 +1581,14 @@ static void install_unavailable(const char*name,const char*reason){
     g_first_install_record=NULL;
     g_first_install_profile=NULL;
 #endif
-    snprintf(g_install_rejected_check,sizeof(g_install_rejected_check),"%s",name);
-    snprintf(g_install_rejected_reason,sizeof(g_install_rejected_reason),"%s",reason);
-    add_check(name,"unavailable",reason);if(!g_return_ready)snprintf(g_blocked,sizeof(g_blocked),"%s",reason);
+    /* Qualification keeps going after a failure so one boot reports every
+     * blocker; the first one stays the headline reason. */
+    int first=!g_install_rejected_check[0];
+    if(first){
+        snprintf(g_install_rejected_check,sizeof(g_install_rejected_check),"%s",name);
+        snprintf(g_install_rejected_reason,sizeof(g_install_rejected_reason),"%s",reason);
+    }
+    add_check(name,"unavailable",reason);if(first&&!g_return_ready)snprintf(g_blocked,sizeof(g_blocked),"%s",reason);
 }
 /* Observe the actual Linux MTD read path. This adds no SBL/load-format grant.
  * The complete reads must still match this transaction's physical snapshots.
@@ -1596,9 +1617,21 @@ static int observe_install_appsbl(bi_part *parts,size_t n,struct bmo_appsbl_pair
     if(strcmp(current_boot,g_boot_id)){install_unavailable("appsbl_read_observation","采集启动会话与预检不一致");return -1;}
     int rc=bmo_observe_appsbl_pair(copies[0]->fd,copies[0]->dev,
         copies[1]->fd,copies[1]->dev,PAGE_BYTES,ERASE_BYTES,&report);
-    if(rc!=BMO_RESULT_OK||!report.observation_complete||!report.binding_valid||!report.clean){
+    /* NON_CLEAN also covers corrected-only bitflips; those stay installable.
+     * Uncorrectable reads and unsupported ECC counters still refuse. */
+    int ecc_ok=1;unsigned corrected[2]={0,0};
+    for(size_t i=0;i<2;i++){
+        const struct bmo_partition_report *r=&report.appsbl[i];
+        if(r->ecc_stats_state!=BMO_ECC_STATS_SUPPORTED||r->ecc_uncorrected_before||r->ecc_uncorrected_after)ecc_ok=0;
+        corrected[i]=r->ecc_corrected_after;
+    }
+    if((rc!=BMO_RESULT_OK&&rc!=BMO_RESULT_NON_CLEAN)||!report.observation_complete||!report.binding_valid||!ecc_ok){
         snprintf(detail,sizeof(detail),"MTD逐页观察未通过：%.160s",report.reason);
         install_unavailable("appsbl_read_observation",detail);return -1;
+    }
+    if(corrected[0]||corrected[1]){
+        snprintf(detail,sizeof(detail),"两份APPSBL自开机累计已纠正位翻转 %u / %u，均在ECC纠错能力内，不影响安装",corrected[0],corrected[1]);
+        add_check("appsbl_ecc","pass",detail);
     }
     for(size_t i=0;i<2;i++){
         hash_hex(copies[i]->snapshot,APPSBL_BYTES,expected);
@@ -1729,6 +1762,17 @@ static int qualify_compiled_first_install(bi_part *parts,size_t n,bi_part *sbl,b
     bfi_install_profile profile;
     const bfi_candidate_record *const candidates[]={candidate};
     bfi_facts facts;char cmdline[2048];
+    /* ENV/platform identity depends only on the candidate, so report it
+     * alongside any profile mismatch below instead of hiding behind it. */
+    bii_code identity=BII_POLICY;int identity_failed=0;
+    if(candidate){
+        if(text_file("proc/cmdline",cmdline,sizeof(cmdline))||!env->snapshot){
+            install_unavailable("install_identity","无法读取当前启动参数或完整ENV快照");identity_failed=1;
+        }else{
+            identity=check_current_candidate_identity(env->snapshot,env->size,cmdline,candidate->partition_sha256);
+            if(identity!=BII_OK){install_unavailable("install_identity",identity_reason(identity));identity_failed=1;}
+        }
+    }
     if(BI_BOOT_CHAIN_QUALIFICATION_AVAILABLE!=1||!board||!candidate||!selected_profile||
        strcmp(candidate->name,BI_FIRST_INSTALL_RECORD)||board->machid!=BI_EXPECTED_MACHID||
        selected_profile->candidates||selected_profile->candidate_count){
@@ -1774,12 +1818,8 @@ static int qualify_compiled_first_install(bi_part *parts,size_t n,bi_part *sbl,b
     facts.unsigned_boot_allowed=verify_qfprom_authenticate()==0;
     facts.declared_load_ecc=BI_APPSBL_LOAD_ECC_BITS;
     facts.declared_storage_ecc=BI_APPSBL_STORAGE_ECC_BITS;
-    if(text_file("proc/cmdline",cmdline,sizeof(cmdline))||!env->snapshot){
-        install_unavailable("install_identity","无法读取当前启动参数或完整ENV快照");return -1;
-    }
-    bii_code identity=check_current_candidate_identity(env->snapshot,env->size,cmdline,candidate->partition_sha256);
     facts.env_bootargs_verified=identity==BII_OK;
-    if(identity!=BII_OK){install_unavailable("install_identity",bii_code_name(identity));return -1;}
+    if(identity_failed)return -1;
     const char *reason=bfi_match_install_profile(&profile,candidate,&facts);
     if(reason){install_unavailable("first_install_record",reason);return -1;}
     if(g_version.decision!=BV_FIRST_INSTALL&&g_version.decision!=BV_OVERRIDE_UNKNOWN){
@@ -1802,42 +1842,63 @@ static void qualify_install(bi_part*parts,size_t n,bi_part*sbl,bi_part*env,bi_pa
     g_first_install_record=NULL;
     g_first_install_profile=NULL;
 #endif
-    if(verify_qfprom_authenticate()){install_unavailable("qfprom_authenticate","qfprom非明确0：未签名候选安装关闭；不替代原厂退出合同");return;}
-    add_check("qfprom_authenticate","pass","未签名候选安装所需qfprom明确0");
+    /* Every read-only check runs even after an earlier one failed, so the
+     * diagnostics list all blockers at once. Checks that need an earlier
+     * result (NAND identity, payload, page report) run only when it exists.
+     * Any failure still leaves g_install_ready at 0. */
+    int ok=1,have_id=0,have_payload=0,have_pages=0;
+    if(verify_qfprom_authenticate()){install_unavailable("qfprom_authenticate","qfprom非明确0：未签名候选安装关闭；不替代原厂退出合同");ok=0;}
+    else add_check("qfprom_authenticate","pass","未签名候选安装所需qfprom明确0");
     if(read_nand_probe_identity(&id)||!match_nand_profile(parts,n,&id,&ecc,&oob)){
-        install_unavailable("candidate_format","candidate格式名单/读格式条件不匹配；不代表独立stage资格");return;}
-    if(verify_sbl(sbl)){install_unavailable("sbl1","候选安装SBL内容合同未通过");return;}
+        install_unavailable("candidate_format","candidate格式名单/读格式条件不匹配；不代表独立stage资格");ok=0;}
+    else have_id=1;
+    if(verify_sbl(sbl)){install_unavailable("sbl1","候选安装SBL内容合同未通过");ok=0;}
 #if !BI_HAVE_INSTALL_PROFILE
-    if(parse_env_product(env,&why)){install_unavailable("appsblenv",why);return;}
-    {char detail[256];snprintf(detail,sizeof(detail),"候选安装ENV产品 %.64s / CRC条件通过；不作为硬件资格",why&&why[0]?why:"有效唯一产品名");add_check("appsblenv","pass",detail);}
-    if(verify_cmdline_machid()){install_unavailable("machid","候选安装平台字段冲突；不据machid推断硬件等级");return;}
-    add_check("machid","pass","候选平台字段无冲突；不据此区分B/D");
+    if(parse_env_product(env,&why)){install_unavailable("appsblenv",why);ok=0;}
+    else{char detail[256];snprintf(detail,sizeof(detail),"候选安装ENV产品 %.64s / CRC条件通过；不作为硬件资格",why&&why[0]?why:"有效唯一产品名");add_check("appsblenv","pass",detail);}
+    if(verify_cmdline_machid()){install_unavailable("machid","候选安装平台字段冲突；不据machid推断硬件等级");ok=0;}
+    else add_check("machid","pass","候选平台字段无冲突；不据此区分B/D");
 #else
     (void)why; /* Board/source identity is checked after exact candidate binding. */
 #endif
-    if(target_has_badblock(inactive)){install_unavailable("candidate_target","非活动APPSBL含坏块；安装关闭");return;}
+    if(target_has_badblock(inactive)){install_unavailable("candidate_target","非活动APPSBL含坏块；安装关闭");ok=0;}
     if(read_payload(payload,hash)||strcmp(hash,g_candidate_hash)){
-        install_unavailable("candidate_payload","候选文件缺失/大小/hash不匹配；原厂退出独立核验");return;}
-    if(g_bound_payload_hash[0]&&strcmp(g_bound_payload_hash,hash)){install_unavailable("candidate_payload","候选文件在本次会话变化");return;}
-    if(!g_bound_payload_hash[0])snprintf(g_bound_payload_hash,sizeof(g_bound_payload_hash),"%s",hash);
-    add_check("candidate_payload","pass","候选文件全分区大小/hash与编译构建ID一致");
+        install_unavailable("candidate_payload","候选文件缺失/大小/hash不匹配；原厂退出独立核验");ok=0;}
+    else if(g_bound_payload_hash[0]&&strcmp(g_bound_payload_hash,hash)){install_unavailable("candidate_payload","候选文件在本次会话变化");ok=0;}
+    else{
+        if(!g_bound_payload_hash[0])snprintf(g_bound_payload_hash,sizeof(g_bound_payload_hash),"%s",hash);
+        add_check("candidate_payload","pass","候选文件全分区大小/hash与编译构建ID一致");
+        have_payload=1;
+    }
     g_version=evaluate_version(g_active_hash,g_candidate_hash);
     if(g_version.decision!=BV_FIRST_INSTALL&&g_version.decision!=BV_UPGRADE&&g_version.decision!=BV_SKIP_IDENTICAL&&
        g_version.decision!=BV_OVERRIDE_UNKNOWN){
-        install_unavailable("trusted_version",version_reason(g_version.decision));return;}
-    add_check("trusted_version","pass",version_reason(g_version.decision));
+        install_unavailable("trusted_version",version_reason(g_version.decision));ok=0;}
+    else add_check("trusted_version","pass",version_reason(g_version.decision));
     struct bmo_appsbl_pair_report pages;memset(&pages,0,sizeof(pages));
-    if(observe_install_appsbl(parts,n,&pages))return;
+    if(observe_install_appsbl(parts,n,&pages))ok=0;
+    else have_pages=1;
 #if !BI_TEST
+    if(have_id&&have_payload&&have_pages){
 #if BI_HAVE_INSTALL_PROFILE
-    if(qualify_compiled_first_install(parts,n,sbl,env,&id,*payload,&pages))return;
+        if(qualify_compiled_first_install(parts,n,sbl,env,&id,*payload,&pages))ok=0;
 #else
-    if(qualify_d_first_install(parts,n,sbl,env,&id,*payload,&pages))return;
+        if(qualify_d_first_install(parts,n,sbl,env,&id,*payload,&pages))ok=0;
 #endif
+    }
+#else
+    (void)have_id;(void)have_payload;(void)have_pages;
 #endif
 #if !BI_HAVE_INSTALL_PROFILE
-    if(g_oem_pool_match.exit_policy!=BOS_EXIT_NX30_R012_REGISTERED_STOCK_BASELINE0||g_oem_pool_match.product!=BOS_PRODUCT_NX30){install_unavailable("oem_install_handoff","候选对应OEM加载策略未知");return;}
+    if(g_oem_pool_match.exit_policy!=BOS_EXIT_NX30_R012_REGISTERED_STOCK_BASELINE0||g_oem_pool_match.product!=BOS_PRODUCT_NX30){install_unavailable("oem_install_handoff","候选对应OEM加载策略未知");ok=0;}
 #endif
+    if(!ok){
+#if !BI_TEST
+        /* A record may have matched while an independent check failed. */
+        g_first_install_qualified=0;g_first_install_record=NULL;g_first_install_profile=NULL;
+#endif
+        return;
+    }
     g_install_ready=install_chain_qualified()&&oem_boot_contract(g_candidate_hash,1);
     add_check("install_chain_qualification",install_chain_qualified()?"pass":"unavailable",install_chain_qualified()?"当前会话与精确首次安装记录匹配（合成测试另标）":"首次安装组合不匹配；安装关闭");
     add_check("oem_boot_contract",oem_boot_contract(g_candidate_hash,1)?"pass":"unavailable",oem_boot_contract(g_candidate_hash,1)?"候选默认原厂系统/维护入口合同已绑定":"候选默认系统/维护入口合同缺失；原厂退出独立判断");

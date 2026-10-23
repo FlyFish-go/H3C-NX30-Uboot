@@ -89,15 +89,33 @@ int main(void){
         printf("FAIL unknown digest admitted\n");fail=1;
     }
 
-    /* The proof is C/RC3000 only: board A must not accept a C candidate. */
+    /* The route is a PCB property: an RT3000 HW-C with the same machid-less
+     * stock ENV is admitted through its own source row. */
+    {
+        uint8_t rt_env[0x80000];
+        static const char rt_text[]="productname=RT3000\0bootcmd=bootipq\0";
+        memset(rt_env,0,sizeof rt_env);memcpy(rt_env+4,rt_text,sizeof rt_text);
+        uint32_t crc=0xffffffffu;
+        for(size_t i=4;i<0x40000;i++){crc^=rt_env[i];for(unsigned j=0;j<8;j++)crc=(crc>>1)^(0xedb88320u&-(int32_t)(crc&1));}
+        crc=~crc;rt_env[0]=crc;rt_env[1]=crc>>8;rt_env[2]=crc>>16;rt_env[3]=crc>>24;
+        const char *rt_src="cb2966e54ae1e143c6c7dd55acdb6ed22bb011a0e421c8860d5724c419d8f28b";
+        if(bii_check_public_candidate_runtime("C","RT3000",rt_src,"08040101",r4,
+                rt_env,sizeof rt_env,NULL,route,sizeof route,NULL)!=BII_OK){
+            printf("FAIL rt3000 hw-c exact-route no-machid refused\n");fail=1;
+        }
+        if(bii_check_public_candidate_runtime("C","RT3000",rt_src,"08040101",r4,
+                rt_env,sizeof rt_env,NULL,other,sizeof other,NULL)!=BII_ENV_MACHID){
+            printf("FAIL rt3000 hw-c wrong-route admitted\n");fail=1;
+        }
+    }
+
+    /* Board A must not accept a C candidate. */
     if(bii_check_public_candidate_runtime("A","RC3000",src,"08040001",r4,
             env,sizeof env,NULL,route,sizeof route,NULL)!=BII_POLICY){
         printf("FAIL board-a accepted c candidate\n");fail=1;
     }
-    /* Nor may another source product borrow the RC3000 proof. The exact
-     * refusal code is an implementation detail (this returns BII_PRODUCT
-     * because RT3000's own ENV product name is absent), so assert only that
-     * the candidate is not admitted. */
+    /* An RT3000 source still needs its own product name in ENV; the route
+     * proof never stands in for productname. */
     if(bii_check_public_candidate_runtime("C","RT3000",
             "cb2966e54ae1e143c6c7dd55acdb6ed22bb011a0e421c8860d5724c419d8f28b",
             "08040101",r4,env,sizeof env,NULL,route,sizeof route,NULL)==BII_OK){

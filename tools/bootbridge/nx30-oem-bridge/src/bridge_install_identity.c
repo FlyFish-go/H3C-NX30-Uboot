@@ -208,9 +208,12 @@ bii_code bii_check_public_candidate(const char *board,const char *source_product
 }
 
 /* The supplied RC R013L01/C stock ENV has no machid. Do not change the
- * candidate's missing-field policy: substitute only this exact source's live
- * C route, already bound by the bridge/source/dispatcher contracts. Neither
- * an absent route nor an A/B/D route grants this platform assertion.
+ * candidate's missing-field policy: substitute only the live C route of the
+ * running stock kernel. The OEM loader picks that FIT config from the board
+ * itself, so the route is a property of the PCB, not of the product brand:
+ * every source whose matrix row admits class C (checked by the caller's
+ * source_context) may use it. Neither an absent route nor an A/B/D route
+ * grants this platform assertion.
  *
  * This proof only stands in for a MISSING ENV machid; it never admits a
  * candidate by itself. policies[] stays the sole authority on which digests
@@ -226,15 +229,12 @@ static unsigned policy_admits_c_candidate(const char *candidate)
     return 0;
 }
 
-static unsigned rc_c_runtime_platform(const char *board,const char *product,
-        const char *source,const char *machid,const char *candidate,
-        const uint8_t *compatible,size_t bytes)
+static unsigned c_runtime_platform(const char *board,const char *machid,
+        const char *candidate,const uint8_t *compatible,size_t bytes)
 {
     static const uint8_t exact_route[]="qcom,ipq5018-mp03.1-c2\0qcom,ipq5018";
     char normalized[16];
-    return eq(board,"C")&&eq(product,"RC3000")&&
-        eq(source,"69d3e558e770f4dc26f0ff9ddd6a5a10f541b3fdc826aacf3cbeaf1f93469c44")&&
-        policy_admits_c_candidate(candidate)&&
+    return eq(board,"C")&&policy_admits_c_candidate(candidate)&&
         !parse_machid(machid,normalized)&&eq(normalized,"08040101")&&
         compatible&&bytes==sizeof(exact_route)&&!memcmp(compatible,exact_route,sizeof(exact_route));
 }
@@ -248,7 +248,7 @@ bii_code bii_check_public_candidate_runtime(const char *board,const char *source
 {
     return check_public_candidate(board,source_product,official_source_sha256,machid,
         candidate_sha256,env,env_bytes,cmdline,out,
-        rc_c_runtime_platform(board,source_product,official_source_sha256,machid,candidate_sha256,compatible,compatible_bytes));
+        c_runtime_platform(board,machid,candidate_sha256,compatible,compatible_bytes));
 }
 
 int bii_return_env_product_allowed(const char *official_source_sha256,

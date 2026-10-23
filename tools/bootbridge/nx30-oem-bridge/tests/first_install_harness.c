@@ -233,7 +233,10 @@ int main(int argc,char **argv){
         REJECT_PUBLIC(f.declared_load_ecc=8);
         REJECT_PUBLIC(f.target_offset=0x640000);
         REJECT_PUBLIC(f.bridge_bytes=0x2000000);
-        REJECT_PUBLIC(f.pages.appsbl[1].ecc_corrected_after=1);
+        /* Corrected-only bitflips are within ECC strength and stay installable. */
+        f=good;f.pages.appsbl[1].ecc_corrected_after=1;f.pages.appsbl[0].ecc_corrected_before=3;f.pages.clean=0;selected=NULL;
+        assert(!bfi_check_d_first_install_record(&f,p,n,&selected));assert(selected);cases++;
+        REJECT_PUBLIC(f.pages.appsbl[1].ecc_uncorrected_after=1);
         p[0x3000]^=1;assert(!bfi_d_candidate_select(p,n));p[0x3000]^=1;cases++;
         p[n-1]=0;assert(!bfi_d_candidate_select(p,n));p[n-1]=0xff;cases++;
         assert(!bfi_d_candidate_select(p,n-1));cases++;
@@ -258,8 +261,11 @@ int main(int argc,char **argv){
     REJECT(f.bridge_offset=0x3100000);REJECT(f.oem_offset=0x900000);REJECT(f.oem_selector=0);
     REJECT(f.bridge_and_oem_verified=0);REJECT(f.r012_route_verified=0);REJECT(f.env_bootargs_verified=0);REJECT(f.unsigned_boot_allowed=0);
     REJECT(f.bridge_bytes=0x2000000);
-    REJECT(f.pages.clean=0);REJECT(f.pages.appsbl[0].pages_read--);
-    REJECT(f.pages.appsbl[1].ecc_corrected_after=1);REJECT(f.pages.appsbl[1].ecc_uncorrected_after=1);
+    REJECT(f.pages.appsbl[0].pages_read--);REJECT(f.pages.binding_valid=0);
+    /* Corrected-only bitflips (pair report non-clean) must not refuse. */
+    f=good;f.pages.clean=0;f.pages.appsbl[1].clean=0;f.pages.appsbl[1].ecc_corrected_after=1;
+    assert(bfi_check_d_first_install(&f,p,n)==bfi_check_d_first_install(&good,p,n));cases++;
+    REJECT(f.pages.appsbl[1].ecc_uncorrected_after=1);REJECT(f.pages.appsbl[0].ecc_uncorrected_before=1);
     REJECT(f.pages.appsbl[1].ecc_stats_state=BMO_ECC_STATS_UNSUPPORTED);
     REJECT(f.pages.appsbl[1].observed_oob_bytes=128);
     p[0x3000]^=1;assert(!bfi_d_candidate_format(p,n));p[0x3000]^=1;cases++;

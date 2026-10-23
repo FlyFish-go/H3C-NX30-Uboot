@@ -903,6 +903,19 @@ class InstallerTests(unittest.TestCase):
             checks={c["name"]:c for c in s["checks"]}
             self.assertEqual(checks["qfprom_authenticate"]["status"],"unavailable")
 
+    def test_qualification_reports_every_blocker_in_one_pass(self):
+        # One preflight must list independent blockers together, so a tester
+        # can report them all from a single boot instead of one per release.
+        d=self.fixture()
+        (d/"sys/devices/system/qfprom/qfprom0/authenticate").write_text("1\n")
+        (d/"etc/bridge/uboot.bin").write_bytes(b"X"*APPSBL)
+        _,(s,)=status_result(self.exe,d)
+        self.assertFalse(s["install_ready"])
+        unavailable=[c["name"] for c in s["checks"] if c["status"]=="unavailable"]
+        self.assertIn("qfprom_authenticate",unavailable)
+        self.assertIn("candidate_payload",unavailable)
+        self.assertLess(unavailable.index("qfprom_authenticate"),unavailable.index("candidate_payload"))
+
     def test_candidate_machid_conflict_does_not_close_independent_return(self):
         d=self.fixture()
         (d/"proc/cmdline").write_text("console=ttyMSM0 machid=08040001 ubi.mtd=rootfs root=/dev/ubiblock0_3\n")
