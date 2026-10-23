@@ -3,7 +3,7 @@
 BootBridge 用于在原厂系统上首次安装本仓库的 U-Boot：用 H3C 官方固件在你自己的电脑上生成"桥接包"，通过原厂升级页上传；桥接程序启动后识别设备、做写前检查，再在维护页安装 U-Boot。普通用户不需要选择 HW-A/B/C/D。
 
 > [!WARNING]
-> **测试版 `bootbridge-v0.1.0-pre.3`（规则 `H3C-BOOTBRIDGE-NAND-OEM-20261022-R5`）正在由测试人员上机测试，尚未取得整机验收结论。**
+> **测试版 `bootbridge-v0.1.0-pre.4`（规则 `H3C-BOOTBRIDGE-NAND-OEM-20261022-R6`）正在由测试人员上机测试，尚未取得整机验收结论。**
 > 改写启动程序有变砖风险。没有串口或编程器等独立恢复手段、也没有自己样机写前备份的用户，请等待测试结论。
 
 ## 获取
@@ -11,7 +11,7 @@ BootBridge 用于在原厂系统上首次安装本仓库的 U-Boot：用 H3C 官
 | 方式 | 地址 | 说明 |
 |---|---|---|
 | 网页版 | <https://flyfish-go.github.io/H3C-NX30-Uboot/> | 在浏览器内生成，任何文件都不会上传 |
-| Windows 版 | [Release `bootbridge-v0.1.0-pre.3`](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/bootbridge-v0.1.0-pre.3) | x64 / x86 压缩包；EXE 必须和 `BootBridge.rules.dat` 放在同一文件夹 |
+| Windows 版 | [Release `bootbridge-v0.1.0-pre.4`](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/bootbridge-v0.1.0-pre.4) | x64 / x86 压缩包；EXE 必须和 `BootBridge.rules.dat` 放在同一文件夹 |
 | 离线网页包 | 同一 Release 的 `BootBridge-Web-0.1.0.zip` | 解压后双击 `index.html` |
 
 下载后请用 Release 中的 `SHA256SUMS` 核对文件。
@@ -57,7 +57,7 @@ BootBridge 用于在原厂系统上首次安装本仓库的 U-Boot：用 H3C 官
 | `web/` | 网页版源码、站点生成脚本与测试 |
 | `design/desktop-offline-ui/` | 桌面版与网页版共用的界面文案 |
 | `nx30-oem-bridge/` | 桥接包内运行的安装程序源码与测试 |
-| `rules/H3C-BOOTBRIDGE-NAND-OEM-20261022-R5/` | 本版规则的生成头文件、清单与摘要（规则数据 DAT 作为 Release 附件提供） |
+| `rules/H3C-BOOTBRIDGE-NAND-OEM-20261022-R6/` | 本版规则的生成头文件、清单与摘要（规则数据 DAT 作为 Release 附件提供） |
 
 构建方法见 [`desktop/README.md`](desktop/README.md) 与 [`web/README.md`](web/README.md)。构建与测试需要你自己下载的官方固件，仓库不包含任何 H3C 官方固件。
 

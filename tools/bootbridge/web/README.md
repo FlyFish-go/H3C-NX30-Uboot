@@ -1,7 +1,7 @@
 # BootBridge 网页版（web/）
 
 在浏览器里完成桌面版的六步向导：选机型 → 拿到指定官方固件 → 升级 → **在本机浏览器里生成桥接包** → 刷入 → 维护页安装 U-Boot。
-规则与桌面版 R5 完全相同（同一份 `bb_offline_catalog_generated.h` + `BootBridge.rules.dat`），生成算法是 `desktop/src/bb_export.c` 中 `bb_export_plan_bin()` 的逐条移植，任何文件都不会上传。
+规则与桌面版 R6 完全相同（同一份 `bb_offline_catalog_generated.h` + `BootBridge.rules.dat`），生成算法是 `desktop/src/bb_export.c` 中 `bb_export_plan_bin()` 的逐条移植，任何文件都不会上传。
 
 ## 目录
 
@@ -26,8 +26,8 @@ E2E=1 bash tools/bootbridge/web/tests/run-tests.sh    # 另跑 Playwright 界面
 
 | 变量 | 内容 |
 |---|---|
-| `HEADER` | `bb_offline_catalog_generated.h`，见 `tools/bootbridge/rules/H3C-BOOTBRIDGE-NAND-OEM-20261022-R5/` |
-| `DAT` | `BootBridge.rules.dat`，从 `bootbridge-v0.1.0-pre.3` Release 下载 |
+| `HEADER` | `bb_offline_catalog_generated.h`，见 `tools/bootbridge/rules/H3C-BOOTBRIDGE-NAND-OEM-20261022-R6/` |
+| `DAT` | `BootBridge.rules.dat`，从 `bootbridge-v0.1.0-pre.4` Release 下载 |
 | `INPUTS` | 官方固件目录（自行从 H3C 下载，文件名形如 `NX30-original.bin`） |
 | `OUT` | 站点输出目录（默认 `web/dist/site`） |
 | `REPO_URL` | 站点里显示的仓库地址 |
@@ -54,7 +54,7 @@ python3 -m http.server -d web/dist/site 8000     # 打开 http://localhost:8000
 - 目标：GitHub 账号 **FlyFish-go**，源码公开。站点产物是 `dist/site/` 的全部内容（静态文件，可直接用 GitHub Pages）。
 - 数据文件约 11.5 MB × 4，均低于 GitHub 单文件限制；需要用 git 推送（不能用只支持文本的 API 逐个上传）。
 - `SHA256SUMS` 和 ZIP 的 SHA-256 一起写进 Release 说明，方便用户核对。
-- 规则发布号目前是 `H3C-BOOTBRIDGE-NAND-OEM-20261022-R5`。
+- 规则发布号目前是 `H3C-BOOTBRIDGE-NAND-OEM-20261022-R6`。
 
 ## 网络与隐私
 
