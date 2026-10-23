@@ -207,36 +207,53 @@ bii_code bii_check_public_candidate(const char *board,const char *source_product
         candidate_sha256,env,env_bytes,cmdline,out,0);
 }
 
-/* The supplied RC R013L01/C stock ENV has no machid. Do not change the
- * candidate's missing-field policy: substitute only the live C route of the
- * running stock kernel. The OEM loader picks that FIT config from the board
- * itself, so the route is a property of the PCB, not of the product brand:
- * every source whose matrix row admits class C (checked by the caller's
- * source_context) may use it. Neither an absent route nor an A/B/D route
- * grants this platform assertion.
+/* Stock OEM U-Boot never saves machid to APPSBLENV on any board class; it
+ * injects it at runtime (observed on A/B/C/D dumps). Do not change the
+ * candidate's missing-field policy: substitute only the live route of the
+ * running stock kernel. The OEM loader picks that FIT config from the board's
+ * CDT machid, so the route is a property of the PCB, not of the product
+ * brand: every source whose matrix row admits the class (checked by the
+ * caller's source_context) may use it. B and D share machid 08040000 and
+ * route MP02.1; this proof does not separate them and does not need to.
  *
  * This proof only stands in for a MISSING ENV machid; it never admits a
  * candidate by itself. policies[] stays the sole authority on which digests
  * are admissible, so the predicate is restricted to records that table
- * already admits for class C at machid 08040101. Enumerating the table rather
+ * already admits for the class at its machid. Enumerating the table rather
  * than naming one digest keeps a release from shipping a provider whose own
  * payload the runtime path then refuses as BII_ENV_MACHID. */
-static unsigned policy_admits_c_candidate(const char *candidate)
+static const struct {
+    const char *board, *machid;
+    const uint8_t *route;
+    size_t route_bytes;
+} board_routes[] = {
+#define ROUTE(s) (const uint8_t *)(s), sizeof(s)
+    {"A", "08040001", ROUTE("qcom,ipq5018-mp03.1\0qcom,ipq5018")},
+    {"B", "08040000", ROUTE("qcom,ipq5018-mp02.1\0qcom,ipq5018")},
+    {"C", "08040101", ROUTE("qcom,ipq5018-mp03.1-c2\0qcom,ipq5018")},
+    {"D", "08040000", ROUTE("qcom,ipq5018-mp02.1\0qcom,ipq5018")},
+#undef ROUTE
+};
+
+static unsigned policy_admits_candidate(const char *board,const char *machid,const char *candidate)
 {
     for(size_t i=0;i<sizeof(policies)/sizeof(policies[0]);i++)
-        if(eq("C",policies[i].board)&&eq("08040101",policies[i].machid)&&
+        if(eq(board,policies[i].board)&&eq(machid,policies[i].machid)&&
            eq(candidate,policies[i].candidate))return 1;
     return 0;
 }
 
-static unsigned c_runtime_platform(const char *board,const char *machid,
+static unsigned runtime_platform(const char *board,const char *machid,
         const char *candidate,const uint8_t *compatible,size_t bytes)
 {
-    static const uint8_t exact_route[]="qcom,ipq5018-mp03.1-c2\0qcom,ipq5018";
     char normalized[16];
-    return eq(board,"C")&&policy_admits_c_candidate(candidate)&&
-        !parse_machid(machid,normalized)&&eq(normalized,"08040101")&&
-        compatible&&bytes==sizeof(exact_route)&&!memcmp(compatible,exact_route,sizeof(exact_route));
+    if(!compatible||parse_machid(machid,normalized))return 0;
+    for(size_t i=0;i<sizeof(board_routes)/sizeof(board_routes[0]);i++)
+        if(eq(board,board_routes[i].board)&&eq(normalized,board_routes[i].machid))
+            return policy_admits_candidate(board,normalized,candidate)&&
+                bytes==board_routes[i].route_bytes&&
+                !memcmp(compatible,board_routes[i].route,bytes);
+    return 0;
 }
 
 bii_code bii_check_public_candidate_runtime(const char *board,const char *source_product,
@@ -248,7 +265,7 @@ bii_code bii_check_public_candidate_runtime(const char *board,const char *source
 {
     return check_public_candidate(board,source_product,official_source_sha256,machid,
         candidate_sha256,env,env_bytes,cmdline,out,
-        c_runtime_platform(board,machid,candidate_sha256,compatible,compatible_bytes));
+        runtime_platform(board,machid,candidate_sha256,compatible,compatible_bytes));
 }
 
 int bii_return_env_product_allowed(const char *official_source_sha256,
