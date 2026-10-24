@@ -86,7 +86,7 @@ static int host_layout_reads, host_layout_invalidates, host_slot_invalidates;
 static int host_window_open, host_window_opens, host_window_closes;
 static u32 host_saved_flags;
 static u64 host_touched_min, host_touched_max;
-static int host_erase_count, host_write_count, host_read_count, host_fail_readback;
+static int host_erase_count, host_write_count, host_read_count, host_fail_readback, host_ff_page_writes;
 static u64 host_write_min, host_write_max, host_erase_min, host_erase_max;
 static u8 host_sha_buf[SHA256_SUM_LEN];
 static int get_unaligned_be32(const void *x) { const u8 *p=x; return ((unsigned)p[0]<<24)|((unsigned)p[1]<<16)|((unsigned)p[2]<<8)|p[3]; }
@@ -104,7 +104,8 @@ static struct httpd_form_value *httpd_request_find_value(struct httpd_request *r
 static void httpd_register_uri_handler(struct httpd_instance *i,const char *p,host_uri_cb cb,void *arg){(void)i;(void)arg;strlcpy(host_uris[host_uri_count].path,p,sizeof(host_uris[host_uri_count].path));host_uris[host_uri_count++].cb=cb;}
 static int nand_block_isbad(struct mtd_info *m,u64 off){(void)m;(void)off;return 0;}
 static int mtd_erase(struct mtd_info *m,struct erase_info *e){if(!host_window_open||!(m->flags&MTD_WRITEABLE)||e->addr<host_erase_min||e->addr+e->len>host_erase_max)return -EROFS;memset(host_flash+e->addr,0xff,e->len);if(e->addr<host_touched_min)host_touched_min=e->addr;if(e->addr+e->len>host_touched_max)host_touched_max=e->addr+e->len;host_erase_count++;return 0;}
-static int mtd_write(struct mtd_info *m,u64 off,size_t n,size_t *done,const u8 *p){if(!host_window_open||!(m->flags&MTD_WRITEABLE)||off<host_write_min||off+n>host_write_max)return -EROFS;memcpy(host_flash+off,p,n);if(off<host_touched_min)host_touched_min=off;if(off+n>host_touched_max)host_touched_max=off+n;*done=n;host_write_count++;return 0;}
+static void *memchr_inv(const void *s,int c,size_t n){const u8 *p=s;size_t i;for(i=0;i<n;i++)if(p[i]!=(u8)c)return (void *)(p+i);return NULL;}
+static int mtd_write(struct mtd_info *m,u64 off,size_t n,size_t *done,const u8 *p){size_t i;if(!host_window_open||!(m->flags&MTD_WRITEABLE)||off<host_write_min||off+n>host_write_max)return -EROFS;for(i=0;i+m->writesize<=n;i+=m->writesize)if(!memchr_inv(p+i,0xff,m->writesize))host_ff_page_writes++;memcpy(host_flash+off,p,n);if(off<host_touched_min)host_touched_min=off;if(off+n>host_touched_max)host_touched_max=off+n;*done=n;host_write_count++;return 0;}
 static int mtd_read(struct mtd_info *m,u64 off,size_t n,size_t *done,u8 *p){(void)m;if(off+n>host_flash_size)return -EINVAL;memcpy(p,host_flash+off,n);*done=n;host_read_count++;if(host_fail_readback&&host_read_count==host_fail_readback)p[0]^=1;return 0;}
 static int rt3_fw_write_window_open(struct mtd_info *m,u64 off,u64 size){unsigned i;int found=0;if(host_window_open||m!=&nand_info[0])return -EROFS;rt3_layout_invalidate_cache();if(rt3_layout_read(&host_layout))return -EROFS;for(i=0;i<host_layout.count;i++)if((!strcmp(host_layout.parts[i].name,"rootfs")||!strcmp(host_layout.parts[i].name,"rootfs_1"))&&host_layout.parts[i].offset==off&&host_layout.parts[i].size==size)found++;if(found!=1)return -EROFS;host_saved_flags=m->flags;host_window_open=1;host_window_opens++;m->flags|=MTD_WRITEABLE;host_erase_min=host_write_min=off;host_erase_max=host_write_max=off+size;return 0;}
 static void rt3_fw_write_window_close(void){if(host_window_open){nand_info[0].flags=host_saved_flags;host_window_open=0;host_window_closes++;}}
@@ -122,7 +123,7 @@ void host_reset(int mode) {
     nand_info[0].size=host_flash_size;nand_info[0].writesize=2048;nand_info[0].erasesize=131072;nand_info[0].type=MTD_NANDFLASH;nand_info[0].flags=0x80;
     if(!host_flash)host_flash=malloc(host_flash_size);
     host_uri_count=0;host_layout_reads=host_layout_invalidates=host_slot_invalidates=0;
-    host_window_open=host_window_opens=host_window_closes=0;host_saved_flags=0;host_touched_min=~(u64)0;host_touched_max=0;host_erase_count=host_write_count=host_read_count=host_fail_readback=0;
+    host_window_open=host_window_opens=host_window_closes=0;host_saved_flags=0;host_touched_min=~(u64)0;host_touched_max=0;host_erase_count=host_write_count=host_read_count=host_fail_readback=host_ff_page_writes=0;
     memset(&fw_pending,0,sizeof(fw_pending));
     firmware_rt3000_b_register_uri_handlers(&host_inst);
 }
@@ -139,6 +140,7 @@ void host_clear_target(const char *name){const struct rt3_partition *p=NULL;rt3_
 unsigned int host_reserve_margin_get(void){return fw_reserve_margin(&nand_info[0]);}
 unsigned int host_erase_count_get(void){return host_erase_count;}
 unsigned int host_write_count_get(void){return host_write_count;}
+unsigned int host_ff_page_writes_get(void){return host_ff_page_writes;}
 unsigned int host_read_count_get(void){return host_read_count;}
 unsigned int host_window_closes_get(void){return host_window_closes;}
 unsigned int host_slot_invalidates_get(void){return host_slot_invalidates;}
@@ -393,14 +395,17 @@ def run():
         result=json.loads(body)
         assert code==200 and result["verified"] is True and result["auto_reboot"] is False
         assert result["boot_select_changed"] is False and result["env_changed"] is False and result["ptable_changed"] is False
-        assert lib.host_erase_count_get()==320 and lib.host_write_count_get()==len(ubi)//131072
+        # All-0xff pages stay erased; every other page is written once.
+        data_pages=sum(1 for o in range(0,len(ubi),2048) if ubi[o:o+2048]!=b"\xff"*2048)
+        assert lib.host_erase_count_get()==320 and lib.host_write_count_get()==data_pages
+        assert lib.host_ff_page_writes_get()==0
         assert lib.host_window_closes_get()==1 and lib.host_window_is_open()==0 and lib.host_mtd_flags_get()==0x80
         assert lib.host_slot_invalidates_get()==1
         lib.host_touched_min_get.restype=ctypes.c_uint64; lib.host_touched_max_get.restype=ctypes.c_uint64
         assert lib.host_touched_min_get()==0x3100000
         assert lib.host_touched_max_get()==0x3100000+40*1024*1024
         evidence["mock_commit"] = {"http_status": code, "result": result,
-            "erase_blocks": int(lib.host_erase_count_get()), "written_pebs": int(lib.host_write_count_get()),
+            "erase_blocks": int(lib.host_erase_count_get()), "written_pages": int(lib.host_write_count_get()),
             "read_calls": int(lib.host_read_count_get()), "touched_min": int(lib.host_touched_min_get()),
             "touched_max": int(lib.host_touched_max_get()), "mtd_flags_restored": int(lib.host_mtd_flags_get()),
             "window_closed": not bool(lib.host_window_is_open()), "slot_cache_invalidations": int(lib.host_slot_invalidates_get())}
@@ -422,7 +427,7 @@ def run():
             "mtd_flags_restored": int(lib.host_mtd_flags_get()),
             "slot_cache_invalidations": int(lib.host_slot_invalidates_get()),
             "erase_blocks_before_failure": int(lib.host_erase_count_get()),
-            "written_pebs_before_failure": int(lib.host_write_count_get())}
+            "written_pages_before_failure": int(lib.host_write_count_get())}
         assert lib.host_window_closes_get()==1 and lib.host_window_is_open()==0
         assert lib.host_mtd_flags_get()==0x80
         assert lib.host_slot_invalidates_get()==1

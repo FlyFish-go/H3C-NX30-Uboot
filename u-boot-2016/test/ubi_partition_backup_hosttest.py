@@ -150,7 +150,11 @@ def validate_and_commit(helper, lib, fixture, target_name, expected_digest):
     assert target_hash == expected_digest, (target_name, target_hash, expected_digest)
     assert outside_after == outside_before, (target_name, outside_before, outside_after)
     assert lib.host_erase_count_get() == 320
-    assert lib.host_write_count_get() == 320
+    # All-0xff pages stay erased; every other page is written once.
+    data_pages = sum(1 for o in range(0, len(fixture), 2048)
+                     if fixture[o:o + 2048] != b"\xff" * 2048)
+    assert lib.host_write_count_get() == data_pages
+    assert lib.host_ff_page_writes_get() == 0
     assert lib.host_window_opens_get() == 1 and lib.host_window_closes_get() == 1
     assert lib.host_window_is_open() == 0 and lib.host_mtd_flags_get() == 0x80
     replay, _, _ = dispatch(helper, lib, "/firmware/write", 2,
@@ -158,7 +162,7 @@ def validate_and_commit(helper, lib, fixture, target_name, expected_digest):
     assert replay == 409 and lib.host_erase_count_get() == 320
     return {"validate_http": validate_code, "commit_http": commit_code,
             "target": target_name, "target_offset": target_offset,
-            "image_pebs": 320, "written_pebs": int(lib.host_write_count_get()),
+            "image_pebs": 320, "written_pages": int(lib.host_write_count_get()),
             "erased_pebs": int(lib.host_erase_count_get()),
             "target_sha256": target_hash, "fixture_sha256": expected_digest,
             "outside_sha256_before": outside_before, "outside_sha256_after": outside_after,
