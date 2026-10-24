@@ -131,6 +131,43 @@ static void print_greeting_message(void)
 	printf("\nPress Ctrl+C to exit\n\n");
 }
 
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_A
+/*
+ * HW-A: the WAN GE PHY links about 1.5 s before the QCA8337 LAN ports finish
+ * autonegotiation after the switch reset, and eth_init() takes the first
+ * device with link, so with both cables plugged the page ended up on WAN.
+ * Start from LAN (eth1) and give it a grace period before rotating to WAN.
+ */
+#define FAILSAFE_LAN_GRACE_MS	6000
+
+static void failsafe_select_lan(void)
+{
+	if (eth_get_dev_by_name("eth1"))
+		setenv("ethact", "eth1");
+}
+
+static int failsafe_eth_init(void)
+{
+	struct eth_device *dev = eth_get_dev();
+	ulong ts = get_timer(0);
+
+	while (dev && !strcmp(dev->name, "eth1") &&
+	       get_timer(ts) < FAILSAFE_LAN_GRACE_MS) {
+		if (dev->init(dev, gd->bd) >= 0) {
+			dev->state = ETH_STATE_ACTIVE;
+			return 0;
+		}
+		if (ctrlc())
+			return -EINTR;
+		mdelay(1000);
+	}
+
+	return eth_init();
+}
+#else
+#define failsafe_eth_init()	eth_init()
+#endif
+
 static int failsafe_loop(void)
 {
 	int ret;
@@ -143,6 +180,9 @@ static int failsafe_loop(void)
 #endif
 
 #ifdef CONFIG_H3C_IPQ5018_COMMON
+#ifdef CONFIG_TARGET_IPQ5018_H3C_HW_A
+	failsafe_select_lan();
+#endif
 	/* Select the requested device before net_init copies its MAC to ARP. */
 	eth_set_current();
 #endif
@@ -150,7 +190,11 @@ static int failsafe_loop(void)
 	if (eth_is_on_demand_init()) {
 		eth_halt();
 		eth_set_current();
-		ret = eth_init();
+		ret = failsafe_eth_init();
+		if (ret == -EINTR) {
+			eth_halt();
+			return ret;
+		}
 		while (ret < 0) {
 			ulong ts = get_timer(0);
 			do {
@@ -166,6 +210,10 @@ static int failsafe_loop(void)
 			eth_halt();
 			return ret;
 		}
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+		/* eth_init() may have rotated to the other port: use its MAC. */
+		net_init();
+#endif
 	} else {
 		eth_init_state_only();
 	}
