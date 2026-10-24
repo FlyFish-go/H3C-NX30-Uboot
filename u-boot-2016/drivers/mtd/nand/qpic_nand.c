@@ -843,11 +843,12 @@ int rt3_fw_write_window_allows(struct mtd_info *mtd, u64 offset, u64 size)
 					size, 0, 0);
 }
 
-/* HW-C may update only the two exact BOOTCONFIG rows. */
+/* HW-A/C/D may update only the two exact BOOTCONFIG rows. */
 int rt3_bootconfig_write_window_open(struct mtd_info *mtd, const char *name,
                                      u64 offset, u64 size)
 {
-#if !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+#if !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT) || \
+      defined(CONFIG_H3C_HW_A_PRODUCTION_PORT))
 	(void)mtd; (void)name; (void)offset; (void)size;
 	return -EROFS;
 #else

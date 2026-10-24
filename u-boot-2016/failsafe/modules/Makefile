@@ -28,7 +28,7 @@ obj-$(CONFIG_H3C_IPQ5018_COMMON) += slots_rt3000_b.o
 ifneq ($(filter y,$(CONFIG_H3C_HW_D_RAM_AUTOECC) $(CONFIG_H3C_NAND_ECC_COMPAT)),)
 obj-y += nor_nand_autoecc.o nor_nand_autoecc_core.o
 endif
-ifneq ($(filter y,$(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) $(CONFIG_TARGET_IPQ5018_H3C_HW_C) $(CONFIG_H3C_HW_D_PRODUCTION_PORT)),)
+ifneq ($(filter y,$(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) $(CONFIG_TARGET_IPQ5018_H3C_HW_A) $(CONFIG_TARGET_IPQ5018_H3C_HW_C) $(CONFIG_H3C_HW_D_PRODUCTION_PORT)),)
 obj-y += boot_default_rt3000_b.o boot_default_rt3000_b_core.o
 endif
 obj-y += upgrade.o

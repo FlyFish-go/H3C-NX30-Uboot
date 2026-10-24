@@ -99,7 +99,7 @@ register_uri_handlers_func_t register_uri_handlers_funcs[] = {
 	slots_rt3000_b_register_uri_handlers,
 	rt3_metadata_register_uri_handlers,
 #endif
-#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
 	boot_default_rt3000_b_register_uri_handlers,
 #endif
 	syslog_register_uri_handlers,

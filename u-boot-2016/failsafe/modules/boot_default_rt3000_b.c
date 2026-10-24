@@ -79,7 +79,8 @@ static int extent_read(const struct bc_extent *tmpl, struct bc_extent *out)
  u32 off = 0, size = 0;
  if (!tmpl || !out || getpart_offset_size((char *)tmpl->name, &off, &size) ||
      size != BC_SIZE || off % BC_ERASE || off > BC_CHIP || size > BC_CHIP - off
-#if (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
+#if (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || \
+    defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY)
      || (!strcmp(tmpl->name, "0:BOOTCONFIG") && off != 0x100000)
      || (!strcmp(tmpl->name, "0:BOOTCONFIG1") && off != 0x140000)
 #endif
@@ -215,7 +216,7 @@ static int write_one(struct mtd_info *m, const struct bc_extent *tmpl,
   if (r) return r;
  }
  if (!page || !check) return -ENOMEM;
- #if (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+ #if (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT)
  r = rt3_bootconfig_write_window_open(m, tmpl->name, e->off, e->size);
 #else
  r = rt3_named_nand_write_window_open(m, tmpl->name, e->off, e->size);
@@ -364,7 +365,7 @@ static void default_handler(enum httpd_uri_handler_status status,
            active, bootcmd_compatible() && !partial_update_lock ? "true" : "false",
            partial_update_lock ? "true" : "false",
            partial_update_lock ? "partial_update" : (!bootcmd_compatible() ? "custom_bootcmd" : ""));
-#elif (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
+#elif (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT)
   snprintf(reply, sizeof(reply), "{\"status\":\"ok\",\"default\":\"%s\",\"can_change\":%s,\"locked\":%s,\"reason\":\"%s\",\"auto_web\":false,\"default_applies_to\":\"bootipq\"}",
            active, bootcmd_compatible() && !partial_update_lock ? "true" : "false",
            partial_update_lock ? "true" : "false",
