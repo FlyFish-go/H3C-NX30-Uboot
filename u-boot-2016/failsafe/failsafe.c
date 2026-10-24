@@ -18,6 +18,7 @@
 #include <net/httpd.h>
 #include <failsafe/failsafe.h>
 #include <ipq_api.h>
+#include <u-boot/crc.h>
 #ifdef CONFIG_DHCPD
 #include <net/dhcpd.h>
 #endif /* CONFIG_DHCPD */
@@ -280,6 +281,22 @@ static int failsafe_loop(void)
 	return 0;
 }
 
+/*
+ * Upload and commit tokens come from rand(), which is never seeded and so
+ * repeated the same values on every boot. Mix the timer (boot jitter plus
+ * how long RESET was held) with the board MAC.
+ */
+static void failsafe_seed_rand(void)
+{
+	struct eth_device *dev = eth_get_dev_by_index(0);
+	u64 ticks = get_ticks();
+	u32 seed = (u32)ticks ^ (u32)(ticks >> 32);
+
+	if (dev)
+		seed ^= crc32(0, dev->enetaddr, sizeof(dev->enetaddr));
+	srand(seed);
+}
+
 int start_web_failsafe(void)
 {
 	struct httpd_instance *inst;
@@ -295,6 +312,7 @@ int start_web_failsafe(void)
 		return -1;
 	}
 
+	failsafe_seed_rand();
 	print_greeting_message();
 	handle_start_led_state();
 
