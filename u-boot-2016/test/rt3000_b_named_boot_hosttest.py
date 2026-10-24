@@ -44,7 +44,7 @@ int main(void) {
  C(sfi->rootfs.offset==0x900000 && sfi->rootfs.size==0x2800000);
  C(!strcmp(envkey,"fsbootargs") && strstr(envvalue,"ubi.mtd=rootfs "));
  a[1]="rootfs_1";C(rt3000b_prepare_boot_slot(2,a)==0);
- C(sfi->rootfs.offset==0x3100000 && strstr(envvalue,"ubi.mtd=rootfs_1 "));
+ C(sfi->rootfs.offset==0x3100000 && strstr(envvalue,"ubi.mtd=rootfs "));
  a[1]="mtd15";C(rt3000b_prepare_boot_slot(2,a)==CMD_RET_USAGE);
  a[1]="mtd16";C(rt3000b_prepare_boot_slot(2,a)==CMD_RET_USAGE);
  a[1]="mtd17";C(rt3000b_prepare_boot_slot(2,a)==CMD_RET_USAGE);
@@ -58,14 +58,13 @@ int main(void) {
  fixture(0);sfi->flash_type=11;selector_value=1;
  C(rt3000b_prepare_boot_slot(1,automatic)==0);
  C(selector_calls==2 && sfi->rootfs.offset==0x3100000);
- C(strstr(envvalue,"ubi.mtd=rootfs_1 ")!=NULL);
+ C(strstr(envvalue,"ubi.mtd=rootfs ")!=NULL);
 
  /* Selector identifies physical slot even when SMEM logical names are swapped. */
  for (selector_value=0;selector_value<=1;selector_value++) {
-  const char *logical = selector_value ? "rootfs" : "rootfs_1";
-  const char *expected_args = selector_value ?
-   "ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs" :
-   "ubi.mtd=rootfs_1 root=mtd:ubi_rootfs rootfstype=squashfs";
+  /* The kernel FDT view names whichever extent boots "rootfs". */
+  const char *expected_args =
+   "ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs";
   uint64_t physical = selector_value ? 0x3100000 : 0x900000;
   fixture(0);sfi->flash_type=11;
   {
@@ -77,7 +76,6 @@ int main(void) {
   C(rt3000b_prepare_boot_slot(1,automatic)==0);
   C(sfi->rootfs.offset==physical && sfi->rootfs.size==0x2800000);
   C(!strcmp(envvalue,expected_args));
-  C(strstr(envvalue,logical) != NULL);
  }
 
  /* Explicit names remain logical aliases when their physical rows are swapped. */
@@ -91,7 +89,7 @@ int main(void) {
  a[1]="rootfs";C(rt3000b_prepare_boot_slot(2,a)==0);
  C(sfi->rootfs.offset==0x3100000 && strstr(envvalue,"ubi.mtd=rootfs ")!=NULL);
  a[1]="rootfs_1";C(rt3000b_prepare_boot_slot(2,a)==0);
- C(sfi->rootfs.offset==0x900000 && strstr(envvalue,"ubi.mtd=rootfs_1 ")!=NULL);
+ C(sfi->rootfs.offset==0x900000 && strstr(envvalue,"ubi.mtd=rootfs ")!=NULL);
  C(selector_calls==4);
 
  /* Invalid or unavailable selectors fail closed before changing the target. */

@@ -77,16 +77,13 @@ static qca_mmc *host = &mmc_host;
 #if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_WEB))
 #include <h3c_board_profile.h>
 #define RT3_BOOT_BOARD_LABEL H3C_BOARD_LABEL
-/* Named selection is resolved against the validated complete SMEM table. */
+/* Named selection is resolved against the validated complete SMEM table.
+ * The kernel FDT partition view names the booted extent "rootfs" whichever
+ * SMEM row it came from (qca_smem_part_to_mtdparts), so both use one name.
+ */
 #define RT3000B_ROOTFS_BOOTARGS \
 	"ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs"
-#ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
-#define RT3000B_ROOTFS1_BOOTARGS \
-	"ubi.mtd=rootfs_1 root=mtd:ubi_rootfs rootfstype=squashfs"
-#else
-#define RT3000B_ROOTFS1_BOOTARGS \
-	"ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs"
-#endif
+#define RT3000B_ROOTFS1_BOOTARGS RT3000B_ROOTFS_BOOTARGS
 
 /* Map the requested SMEM partition in RAM; do not write BC or ENV. */
 static int rt3000b_prepare_boot_slot(int argc, char *const argv[])
@@ -594,6 +591,22 @@ static int h3c_normalize_nand_bootargs(char *cmd_line)
 }
 #endif
 
+/* Append the booted physical rootfs offset; Linux names partitions from it. */
+static int h3c_append_boot_slot(char *cmd_line, size_t size)
+{
+	size_t used = strlen(cmd_line);
+	int added;
+
+	if (!sfi->rootfs.size)
+		return 0;
+	added = snprintf(cmd_line + used, size - used, "%sh3c.boot_slot=0x%llx",
+			 used ? " " : "",
+			 (unsigned long long)sfi->rootfs.offset);
+	if (added < 0 || added >= (int)(size - used))
+		return CMD_RET_FAILURE;
+	return 0;
+}
+
 static int update_bootargs(void *addr, int config_noffset, int verified_oem)
 {
 	char *fit_bootargs;
@@ -664,6 +677,10 @@ static int update_bootargs(void *addr, int config_noffset, int verified_oem)
             return CMD_RET_FAILURE;
         }
 #endif
+		if (h3c_append_boot_slot(cmd_line, CONFIG_SYS_CBSIZE)) {
+			free(cmd_line);
+			return CMD_RET_FAILURE;
+		}
 		ret = setenv("bootargs", cmd_line);
 		free(cmd_line);
 		return ret ? CMD_RET_FAILURE : CMD_RET_SUCCESS;
@@ -737,6 +754,8 @@ static int update_bootargs(void *addr, int config_noffset, int verified_oem)
   free(normalized);
  }
 #endif
+	if (ret == CMD_RET_SUCCESS)
+		ret = h3c_append_boot_slot(cmd_line, CONFIG_SYS_CBSIZE);
 	if (ret == CMD_RET_FAILURE) {
 		printf("Env size exceed ...\n");
 	} else {

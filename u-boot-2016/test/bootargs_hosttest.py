@@ -23,6 +23,7 @@ HARNESS = r"""
 static char old_args[128] = "old-base=1";
 static char fs_args[128] = "root=/dev/test";
 static int fail_setenv, setenv_calls;
+static struct { struct { unsigned long long offset, size; } rootfs; } boot_flash, *sfi = &boot_flash;
 static const void *fit_args;
 static int fit_args_len;
 static char *host_getenv(const char *key) {
@@ -72,6 +73,19 @@ int main(void) {
     fail_setenv = 0; setenv_calls = 0;
     if (update_bootargs(NULL, 0, 0) != CMD_RET_FAILURE || setenv_calls != 0 ||
         strcmp(old_args, original)) abort();
+
+    /* A selected rootfs extent is reported to Linux by physical offset. */
+    strcpy(old_args, original); strcpy(fs_args, "root=/dev/test");
+    sfi->rootfs.offset = 0x3100000; sfi->rootfs.size = 0x2800000;
+    setenv_calls = 0;
+    if (update_bootargs(NULL, 0, 0) != CMD_RET_SUCCESS || setenv_calls != 1 ||
+        strcmp(old_args, "old-base=1 root=/dev/test rootwait h3c.boot_slot=0x3100000")) abort();
+
+    /* No room for the slot argument fails without touching the environment. */
+    strcpy(old_args, original); strcpy(fs_args, "root=/dev/test-long-name-xx");
+    setenv_calls = 0;
+    if (update_bootargs(NULL, 0, 0) != CMD_RET_FAILURE || setenv_calls != 0 ||
+        strcmp(old_args, original)) abort();
     puts("BOOTARGS_HOSTTEST_PASS");
     return 0;
 }
@@ -79,7 +93,7 @@ int main(void) {
 
 
 def extract_function(source):
-    start = source.index("static int update_bootargs(")
+    start = source.index("/* Append the booted physical rootfs offset")
     end = source.index("/*\n * Set the root device", start)
     return source[start:end]
 

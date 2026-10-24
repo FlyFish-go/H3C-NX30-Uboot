@@ -20,6 +20,7 @@ PRE = r"""
 static char base[1024], root[1024];
 static const char *fit;
 static int failure, writes, missing_base;
+static struct { struct { unsigned long long offset, size; } rootfs; } boot_flash, *sfi = &boot_flash;
 static char *host_getenv(const char *k) {
  if (!strcmp(k,"bootargs")) return missing_base ? NULL : base;
  if (!strcmp(k,"fsbootargs")) return root[0] ? root : NULL;
@@ -106,7 +107,7 @@ def main():
  filters=s[s.index('static int h3c_hw_c_root_token('):s.index('#ifdef CONFIG_H3C_NAND_ECC_COMPAT\nstatic int h3c_normalize_nand_bootargs')]
  # Include the production region's opening conditional to balance its endif.
  filters='#if defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_WEB)\n'+filters
- update=s[s.index('static int update_bootargs('):s.index('/*\n * Set the root device',s.index('static int update_bootargs('))]
+ update=s[s.index('/* Append the booted physical rootfs offset'):s.index('/*\n * Set the root device',s.index('static int update_bootargs('))]
  a.output_dir.mkdir(parents=True,exist_ok=True)
  with tempfile.TemporaryDirectory(prefix='cnss-policy-') as d:
   c=Path(d)/'test.c';c.write_text('\n'.join([PRE,classifier,filters,update,MAIN]))
