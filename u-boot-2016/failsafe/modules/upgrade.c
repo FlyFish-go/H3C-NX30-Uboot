@@ -98,30 +98,18 @@ static int metadata_upload_target(struct httpd_request *request,
 				 enum rt3_md_target *target,
 				 int *explicit_target)
 {
-	struct httpd_form_value *value = NULL;
 	unsigned int i, count = 0;
+	(void)type;
 	if (!request || !target || !explicit_target) return -EINVAL;
 	for (i = 0; i < request->form.count; i++) {
 		if (request->form.values[i].name &&
-		    !strcmp(request->form.values[i].name, "cdt_target")) {
-			value = &request->form.values[i];
+		    !strcmp(request->form.values[i].name, "cdt_target"))
 			count++;
-		}
 	}
-	if (count > 1) return -EINVAL;
 	*target = RT3_MD_TARGET_DEFAULT;
 	*explicit_target = 0;
-	if (!count) {
-#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B)
-		return 0;
-#else
-		return type == WEBFAILSAFE_UPGRADE_TYPE_CDT ? -EINVAL : 0;
-#endif
-	}
-	if (type != WEBFAILSAFE_UPGRADE_TYPE_CDT || !value || !value->data ||
-	    rt3_metadata_target_parse(value->data, value->size, target)) return -EINVAL;
-	*explicit_target = 1;
-	return 0;
+	/* CDT always writes both copies; a per-copy cdt_target is refused. */
+	return count ? -EINVAL : 0;
 }
 #endif
 

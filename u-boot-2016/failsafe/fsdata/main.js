@@ -1573,7 +1573,6 @@ class FileUploadComponent {
 
         this.selectedFile = null;
         this.commitToken = null;
-        this.commitCdtTarget = null;
         this.commitAttempted = false;
         this.elements = {};
         this.isUploading = false;
@@ -1604,13 +1603,7 @@ class FileUploadComponent {
                         <div id="upload-container" class="upload-wrapper">
                             <div class="upload-card">
                                 ${pageName === 'cdt' ? `<div class="card-hint-section">
-                                    <label for="cdtTarget">${APP_STATE.lang === 'zh-cn' ? '写入目标' : 'Write target'}</label>
-                                    <select id="cdtTarget" class="input">
-                                        <option value="">${APP_STATE.lang === 'zh-cn' ? '请选择 CDT 分区' : 'Select a CDT partition'}</option>
-                                        <option value="0:CDT">CDT</option>
-                                        <option value="0:CDT_1">CDT_1</option>
-                                    </select>
-                                    <p>${APP_STATE.lang === 'zh-cn' ? '仅更新所选的一份；请使用与本机硬件和内存配置匹配的 CDT。' : 'Only the selected copy is updated. Use a CDT matching this device and RAM configuration.'}</p>
+                                    <p>${APP_STATE.lang === 'zh-cn' ? 'CDT 与 CDT_1 两份写入同一镜像；请使用与本机硬件和内存配置匹配的 CDT。' : 'CDT and CDT_1 both receive the same image. Use a CDT matching this device and RAM configuration.'}</p>
                                 </div>` : ''}
                                 <div class="upload-area" id="uploadArea">
                                     <!-- 文件选择区域（正常状态） -->
@@ -1761,8 +1754,7 @@ class FileUploadComponent {
             resultSuccessInfo: document.getElementById('result-success-info'),
             errorInfo: document.getElementById('error-info'),
             continueBtn: document.getElementById('continueBtn'),
-            updateRebootBtn: document.getElementById('updateRebootBtn'),
-            cdtTarget: document.getElementById('cdtTarget')
+            updateRebootBtn: document.getElementById('updateRebootBtn')
         };
     }
 
@@ -1770,13 +1762,6 @@ class FileUploadComponent {
      * 绑定事件
      */
     bindEvents() {
-        if (this.elements.cdtTarget) {
-            this.elements.cdtTarget.addEventListener('change', () => {
-                this.commitToken = null;
-                this.commitCdtTarget = null;
-                this.commitAttempted = false;
-            });
-        }
         // 拖拽区域点击
         if (this.elements.dropZone) {
             this.elements.dropZone.addEventListener('click', () => this.openFileSelector());
@@ -2035,16 +2020,8 @@ class FileUploadComponent {
         this.updateProgress(0);
 
         const uploadFile = this.selectedFile;
-        const cdtTarget = this.options.pageName === 'cdt' && this.elements.cdtTarget ? this.elements.cdtTarget.value : null;
-        if (this.options.pageName === 'cdt' && !['0:CDT', '0:CDT_1'].includes(cdtTarget)) {
-            this.isUploading = false;
-            this.showError('upload', { type: 'invalid_target', message: APP_STATE.lang === 'zh-cn' ? '请先选择 CDT 或 CDT_1。' : 'Select CDT or CDT_1 first.' });
-            return;
-        }
-        this.commitCdtTarget = null;
         const formData = new FormData();
         formData.append(this.options.formDataKey, uploadFile);
-        if (cdtTarget) formData.append('cdt_target', cdtTarget);
 
         const xhr = new XMLHttpRequest();
 
@@ -2058,7 +2035,7 @@ class FileUploadComponent {
         xhr.onreadystatechange = () => {
             if (xhr.readyState === 4) {
                 if (xhr.status === 200) {
-                    if (this.selectedFile !== uploadFile || (cdtTarget && this.elements.cdtTarget.value !== cdtTarget)) {
+                    if (this.selectedFile !== uploadFile) {
                         this.commitToken = null;
                         this.showError('upload', { type: 'invalid_response', message: 'Selected file changed during upload.' });
                         return;
@@ -2074,13 +2051,13 @@ class FileUploadComponent {
                     switch (response.status) {
                         case 'success':
                             this.commitToken = null;
-                            const expectedTargets = { uboot: "0:APPSBL + 0:APPSBL_1", art: "0:ART", cdt: cdtTarget, ptable: "0:MIBIB" };
+                            const expectedTargets = { uboot: "0:APPSBL + 0:APPSBL_1", art: "0:ART", cdt: "0:CDT + 0:CDT_1", ptable: "0:MIBIB" };
                             if (expectedTargets[this.options.pageName] && response.info &&
                                     [].concat(expectedTargets[this.options.pageName]).includes(response.info.target) &&
                                     typeof response.info.commit_token === "string" &&
                                     /^[0-9a-f]{64}$/.test(response.info.commit_token))
                                 this.commitToken = response.info.commit_token;
-                            if (this.commitToken) { this.commitAttempted = false; this.commitCdtTarget = cdtTarget; }
+                            if (this.commitToken) this.commitAttempted = false;
                             this.showSuccess('upload', response.info);
                             break;
                         case 'fail':
@@ -2114,7 +2091,6 @@ class FileUploadComponent {
         const isInitramfsPage = pageName === 'initramfs';
         const family = typeof APP_STATE !== 'undefined' && APP_STATE.sysinfo && APP_STATE.sysinfo.board && APP_STATE.sysinfo.board.family;
         if (['HW-A', 'HW-B', 'HW-C', 'HW-D'].includes(family) && ['uboot', 'art', 'cdt', 'ptable'].includes(pageName) && !this.commitToken) return;
-        if (pageName === 'cdt' && (!this.elements.cdtTarget || this.elements.cdtTarget.value !== this.commitCdtTarget)) return;
 
         if (isMibibPage) {
             window.location.href = '/';
@@ -2137,7 +2113,6 @@ class FileUploadComponent {
         const commitMetadata = !!commitToken && ["uboot", "art", "cdt", "ptable"].includes(pageName);
         if (commitMetadata) {
             formData.append('commit_token', commitToken);
-            if (pageName === 'cdt') formData.append('cdt_target', this.commitCdtTarget);
             this.commitToken = null;
             this.commitAttempted = true;
         }

@@ -8,7 +8,8 @@
 ulong httpd_upload_buffer_base(void) { return 0x41000000UL; }
 static int build_id_result,bootconfig_appsbl=-1,reboot_lock;
 int h3c_build_id_check(const uint8_t*p,size_t n){(void)p;(void)n;return build_id_result;}
-int get_bootconfig(const char*n){return strcmp(n,"0:APPSBL")?-1:bootconfig_appsbl;}
+static int bootconfig_cdt;
+int get_bootconfig(const char*n){if(!strcmp(n,"0:CDT"))return bootconfig_cdt;return strcmp(n,"0:APPSBL")?-1:bootconfig_appsbl;}
 int rt3_layout_resolve_raw(const void*t,size_t n,struct rt3_layout*l){(void)t;(void)n;l->mode=RT3_LAYOUT_DUAL;l->fingerprint=0;return 0;}
 void rt3_flash_require_reboot(void){reboot_lock=1;}
 int rt3_flash_reboot_required(void){return reboot_lock;}
@@ -70,6 +71,8 @@ int main(int argc,char**argv){
  reset_faults();CHECK(rt3_metadata_validate(RT3_MD_ART,upload,0x100000,tok,dig)==0);read_mismatch=1;ret=rt3_metadata_write(RT3_MD_ART,tok,&r);CHECK(ret!=0&&close_count==1);
  reset_layout();reset_faults();make_cdt(upload);CHECK(rt3_metadata_validate(RT3_MD_CDT,upload,0x40000,tok,dig)==0);fail_offset=0x440000;ret=rt3_metadata_write(RT3_MD_CDT,tok,&r);CHECK(ret!=0&&erase_count==1&&erase_log[0]==0x440000&&close_count==1);CHECK(flash[0x400000]==0x5a);
  reset_layout();memset(flash+0x400000,0x5a,0x80000);reset_faults();CHECK(rt3_metadata_validate(RT3_MD_CDT,upload,0x40000,tok,dig)==0);CHECK(rt3_metadata_write(RT3_MD_CDT,tok,&r)==0);CHECK(erase_log[0]==0x440000&&erase_log[2]==0x400000);CHECK(!memcmp(flash+0x440000,upload,0x40000)&&!memcmp(flash+0x400000,upload,0x40000));
+ /* SBL loads CDT_1 (selector 1): CDT is written first, CDT_1 last. */
+ reset_layout();memset(flash+0x400000,0x5a,0x80000);reset_faults();bootconfig_cdt=1;CHECK(rt3_metadata_validate(RT3_MD_CDT,upload,0x40000,tok,dig)==0);CHECK(rt3_metadata_write(RT3_MD_CDT,tok,&r)==0);CHECK(erase_log[0]==0x400000&&erase_log[2]==0x440000);CHECK(!memcmp(flash+0x440000,upload,0x40000)&&!memcmp(flash+0x400000,upload,0x40000));bootconfig_cdt=0;
  reset_layout();cdt_offset=0x440000;cdt1_offset=0x400000;reset_faults();CHECK(rt3_metadata_validate(RT3_MD_CDT,upload,0x40000,tok,dig)==0);layout_fingerprint++;ret=rt3_metadata_write(RT3_MD_CDT,tok,&r);CHECK(ret==-EXDEV&&strstr(r.data,"partition_layout_mismatch"));CHECK(io_zero());
  reset_layout();cdt_offset=0x440000;cdt1_offset=0x400000;memset(flash+0x400000,0x5a,0x80000);reset_faults();CHECK(rt3_metadata_validate(RT3_MD_CDT,upload,0x40000,tok,dig)==0);CHECK(rt3_metadata_pending_target(RT3_MD_CDT,&off,&size,&off2,&size2)==0&&off==0x440000&&off2==0x400000&&size==0x40000&&size2==0x40000);CHECK(rt3_metadata_write(RT3_MD_CDT,tok,&r)==0);CHECK(erase_count==4&&erase_log[0]==0x400000&&erase_log[2]==0x440000);CHECK(!memcmp(flash+0x440000,upload,0x40000)&&!memcmp(flash+0x400000,upload,0x40000));
  reset_layout();cdt_offset=0x440000;cdt1_offset=0x400000;memset(flash+0x400000,0x5a,0x80000);reset_faults();CHECK(rt3_metadata_validate(RT3_MD_CDT,upload,0x40000,tok,dig)==0);fail_offset=0x440000;ret=rt3_metadata_write(RT3_MD_CDT,tok,&r);CHECK(ret!=0&&erase_count==3&&erase_log[0]==0x400000&&erase_log[2]==0x440000);CHECK(flash[0x440000]==0x5a);

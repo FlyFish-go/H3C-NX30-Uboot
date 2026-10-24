@@ -167,13 +167,9 @@ static int resolve_target(enum rt3_md_kind kind,enum rt3_md_target requested,
  if(layout_targets(kind,l,&primary_target,&secondary_target))return -EXDEV;
  memset(second,0,sizeof(*second));
  if(kind==RT3_MD_CDT){
-  if(requested==RT3_MD_TARGET_PRIMARY){*first=primary_target;return 0;}
-  if(requested==RT3_MD_TARGET_SECONDARY){*first=secondary_target;return 0;}
-#if !defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) && !defined(CONFIG_H3C_HW_A_RAM_READONLY) && \
-    !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) && !defined(CONFIG_H3C_HW_C_RAM_READONLY)
-  if(requested==RT3_MD_TARGET_DEFAULT){*first=primary_target;*second=secondary_target;return 0;}
-#endif
-  return -EINVAL;
+  /* Both CDT copies always get the same image, like APPSBL. */
+  if(requested!=RT3_MD_TARGET_DEFAULT)return -EINVAL;
+  *first=primary_target;*second=secondary_target;return 0;
  }
  if(requested!=RT3_MD_TARGET_DEFAULT&&requested!=RT3_MD_TARGET_PRIMARY)return -EINVAL;
  *first=primary_target;
@@ -520,13 +516,8 @@ static int metadata_write_internal(enum rt3_md_kind k,enum rt3_md_target request
  if(ret||l.fingerprint!=tx.layout_fingerprint){ret=-EXDEV;fail(r,"partition_layout_mismatch",e->name);goto done;}
  memset(&target,0,sizeof(target));memset(&second,0,sizeof(second));
  if(k==RT3_MD_CDT){
-  if(tx.target==RT3_MD_TARGET_PRIMARY)target=current_primary;
-  else if(tx.target==RT3_MD_TARGET_SECONDARY)target=current_secondary;
-#if !defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) && !defined(CONFIG_H3C_HW_A_RAM_READONLY) && \
-    !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) && !defined(CONFIG_H3C_HW_C_RAM_READONLY)
-  else if(tx.target==RT3_MD_TARGET_DEFAULT){target=current_primary;second=current_secondary;}
-#endif
-  else {ret=-EXDEV;fail(r,"partition_layout_mismatch",e->name);goto done;}
+  if(tx.target!=RT3_MD_TARGET_DEFAULT){ret=-EXDEV;fail(r,"partition_layout_mismatch",e->name);goto done;}
+  target=current_primary;second=current_secondary;
  }else{
   if(tx.target!=RT3_MD_TARGET_DEFAULT&&tx.target!=RT3_MD_TARGET_PRIMARY){ret=-EXDEV;fail(r,"partition_layout_mismatch",e->name);goto done;}
   target=current_primary;
@@ -545,9 +536,14 @@ static int metadata_write_internal(enum rt3_md_kind k,enum rt3_md_target request
   goto done;
  }
  if(k==RT3_MD_CDT&&second.size){
-  /* B legacy DEFAULT preserves secondary-before-primary paired writes. */
-  ret=write_extent(&second,tx.data,tx.size,tx.layout_fingerprint);
-  if(ret){fail(r,"metadata_write_or_readback_failed",second.name);goto done;}
+  /* Write the copy SBL is not loading from first; the selected one goes last. */
+  const struct md_extent*first_cdt=get_bootconfig("0:CDT")==1?&target:&second;
+  const struct md_extent*last_cdt=first_cdt==&target?&second:&target;
+  ret=write_extent(first_cdt,tx.data,tx.size,tx.layout_fingerprint);
+  if(ret){fail(r,"metadata_write_or_readback_failed",first_cdt->name);goto done;}
+  ret=write_extent(last_cdt,tx.data,tx.size,tx.layout_fingerprint);
+  if(ret)fail(r,"metadata_write_or_readback_failed",last_cdt->name);
+  goto done;
  }
  ret=write_extent(&target,tx.data,tx.size,tx.layout_fingerprint);
  if(ret)fail(r,"metadata_write_or_readback_failed",target.name);

@@ -1002,7 +1002,7 @@ int failsafe_validate_image(upgrade_type_t upgrade_type, const char *filename,
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE: md_kind=RT3_MD_MIBIB; md_target="0:MIBIB"; break;
 	case WEBFAILSAFE_UPGRADE_TYPE_ART: md_kind=RT3_MD_ART; md_target="0:ART"; break;
-	case WEBFAILSAFE_UPGRADE_TYPE_CDT: md_kind=RT3_MD_CDT; md_target=rt3_metadata_target_name(metadata_target); break;
+	case WEBFAILSAFE_UPGRADE_TYPE_CDT: md_kind=RT3_MD_CDT; md_target="0:CDT + 0:CDT_1"; break;
 #ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B
 	case WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS:
 		rt3_metadata_invalidate();
