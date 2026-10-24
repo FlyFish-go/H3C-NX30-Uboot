@@ -11,6 +11,9 @@
 #include <rt3000_b_layout.h>
 #include <rt3000_b_fw_write.h>
 #include <rt3000_b_metadata.h>
+#include <rt3000_mibib.h>
+#include <h3c_build_id.h>
+#include <bootconfig.h>
 #ifdef CONFIG_H3C_NAND_ECC_COMPAT
 #include <h3c_nand_ecc.h>
 #endif
@@ -20,11 +23,9 @@
 /* The /upload parser places a single form value within the first 64 KiB. */
 #define MD_RAM_PREFIX_MAX (64UL * 1024)
 #define MD_CHIP 0x08000000U
-#if !defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) && !defined(CONFIG_H3C_HW_A_RAM_READONLY) && \
-    !defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) && !defined(CONFIG_H3C_HW_C_RAM_READONLY) && \
-    !defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+/* Every board keeps our U-Boot in both APPSBL copies: SBL may load either,
+ * and OEM upgrades flip the BOOTCONFIG APPSBL selector. */
 #define RT3_MD_B_DUAL_APPSBL 1
-#endif
 struct md_extent{const char*name;u32 off,size;};
 struct md_pending{u8*data;u32 size,alloc_size;enum rt3_md_kind kind;enum rt3_md_target target;u32 target_off,target_size,second_off,second_size,layout_fingerprint;u8 hash[32],source_hash[32];char token[65];int valid;};
 static struct md_pending pending;
@@ -65,7 +66,8 @@ static const struct md_extent appsbl={"0:APPSBL",0x00500000,RT3_MD_APPSBL_SIZE};
 static const struct md_extent art={"0:ART",0x00780000,RT3_MD_ART_SIZE};
 static const struct md_extent cdt={"0:CDT",0x00400000,RT3_MD_CDT_SIZE};
 static const struct md_extent cdt1={"0:CDT_1",0x00440000,RT3_MD_CDT_SIZE};
-static const struct md_extent*primary(enum rt3_md_kind k){switch(k){case RT3_MD_UBOOT:return &appsbl;case RT3_MD_ART:return &art;case RT3_MD_CDT:return &cdt;default:return NULL;}}
+static const struct md_extent mibib={"0:MIBIB",RT3_MIBIB_OFFSET,RT3_MIBIB_SIZE};
+static const struct md_extent*primary(enum rt3_md_kind k){switch(k){case RT3_MD_UBOOT:return &appsbl;case RT3_MD_ART:return &art;case RT3_MD_CDT:return &cdt;case RT3_MD_MIBIB:return &mibib;default:return NULL;}}
 static void hash(const void*p,u32 n,u8 out[32]){sha256_csum_wd(p,n,out,CHUNKSZ_SHA256);}
 static void hex(const u8*p,char*out){static const char h[]="0123456789abcdef";int i;for(i=0;i<32;i++){out[2*i]=h[p[i]>>4];out[2*i+1]=h[p[i]&15];}out[64]=0;}
 static int layout_read(struct rt3_layout*l)
@@ -81,6 +83,17 @@ static int known_extent(const struct md_extent*e,u32 off,u32 size)
  if(!strcmp(e->name,"0:CDT")||!strcmp(e->name,"0:CDT_1"))
   return off==0x00400000||off==0x00440000;
  if(!strcmp(e->name,"0:ART"))return off==0x00780000;
+ if(!strcmp(e->name,"0:MIBIB"))return off==RT3_MIBIB_OFFSET;
+ return 0;
+}
+/* MIBIB structure, then the layout rules our U-Boot boots with: boot-chain
+ * rows SBL1..TRAINING unchanged and a supported dual or single rootfs map. */
+static int mibib_validate(const void*data,u32 n)
+{
+ struct rt3_layout l;
+ if(rt3_mibib_check(data,n,NULL))return -1;
+ if(rt3_layout_resolve_raw((const u8*)data+RT3_MIBIB_TABLE_PAGE(0),RT3_MIBIB_PAGE,&l)||
+    l.mode==RT3_LAYOUT_UNSUPPORTED)return -1;
  return 0;
 }
 static int layout_extent(const struct rt3_layout*l,const struct md_extent*e,struct md_extent*out)
@@ -101,13 +114,7 @@ static int layout_targets(enum rt3_md_kind k,struct rt3_layout*l,struct md_exten
  }else if(k==RT3_MD_UBOOT){
   sibling_template=(struct md_extent){"0:APPSBL_1",0,RT3_MD_APPSBL_SIZE};
   if(layout_extent(l,&sibling_template,&sibling)||sibling.size!=first->size||sibling.off==first->off)return -EXDEV;
-#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-  if(nx30_d_uboot_target_check(first->off,first->size))return -EXDEV;
-#endif
-#if !defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) && !defined(CONFIG_H3C_HW_A_RAM_READONLY) && \
-    !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) && !defined(CONFIG_H3C_HW_C_RAM_READONLY)
   *second=sibling;
-#endif
  }
  return 0;
 }
@@ -170,10 +177,7 @@ static int resolve_target(enum rt3_md_kind kind,enum rt3_md_target requested,
  }
  if(requested!=RT3_MD_TARGET_DEFAULT&&requested!=RT3_MD_TARGET_PRIMARY)return -EINVAL;
  *first=primary_target;
-#if !defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) && !defined(CONFIG_H3C_HW_A_RAM_READONLY) && \
-    !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) && !defined(CONFIG_H3C_HW_C_RAM_READONLY)
  if(kind==RT3_MD_UBOOT)*second=secondary_target;
-#endif
  return 0;
 }
 int rt3_metadata_validate_target(enum rt3_md_kind k,enum rt3_md_target requested,
@@ -186,6 +190,7 @@ int rt3_metadata_validate_target(enum rt3_md_kind k,enum rt3_md_target requested
  if(token)token[0]=0;
  if(digest_hex)digest_hex[0]=0;
  rt3_metadata_invalidate();
+ if(rt3_flash_reboot_required())return -EAGAIN;
  if(!e||!token||!digest_hex||!data_ok(data,n)||n>e->size)return -EINVAL;
  r=resolve_target(k,requested,&l,&target,&second);if(r)return r;
 #ifdef CONFIG_H3C_NAND_ECC_COMPAT
@@ -200,17 +205,11 @@ int rt3_metadata_validate_target(enum rt3_md_kind k,enum rt3_md_target requested
  hash(data,n,src_hash);
  if(k==RT3_MD_UBOOT){
   owned=malloc(e->size);if(!owned)return -ENOMEM;
-#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-  { struct nx30_d_firmware_info info;
-    r=nx30_d_uboot_validate(data,n,&info);
-    if(r){free(owned);return r;}
-    memcpy(owned,data,n);staged_size=n;
-  }
-#else
   if(rt3_md_prepare_elf(data,n,owned,e->size,&staged_size)){memset(owned,0,e->size);free(owned);return -EINVAL;}
-#endif
+  /* Same board, NAND profile and ECC as this build, or nothing is written. */
+  if(h3c_build_id_check(owned,staged_size)){memset(owned,0,e->size);free(owned);return -ENOEXEC;}
  }else{
-  if(rt3_md_validate_image(k,data,n))return -EINVAL;
+  if(k==RT3_MD_MIBIB?mibib_validate(data,n):rt3_md_validate_image(k,data,n))return -EINVAL;
   owned=malloc(n);if(!owned)return -ENOMEM;
   if(rt3_md_snapshot_copy(owned,data,n)){memset(owned,0,n);free(owned);return -EINVAL;}
  }
@@ -236,25 +235,18 @@ int rt3_metadata_pending_target(enum rt3_md_kind k,u32*off,u32*size,u32*second_o
 }
 const char *rt3_metadata_validation_error(int error)
 {
- switch(error){case -EXDEV:return "partition_layout_mismatch";case -ENOMEM:return "metadata_staging_unavailable";case -EPERM:return "install_ecc_unverified";default:return "invalid_metadata_image";}
+ switch(error){case -ENOEXEC:return "uboot_build_mismatch";case -EAGAIN:return "reboot_required";case -EXDEV:return "partition_layout_mismatch";case -ENOMEM:return "metadata_staging_unavailable";case -EPERM:return "install_ecc_unverified";default:return "invalid_metadata_image";}
 }
 const char *rt3_metadata_preview_name(enum rt3_md_kind kind,const void*data,u32 size)
 {
-#ifndef CONFIG_H3C_HW_D_PRODUCTION_PORT
  const char*name;
-#endif
  switch(kind){
  case RT3_MD_UBOOT:
-#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-  /* HW-D preview follows its separate nx30_d_uboot_validate MBN path. */
-  (void)data;(void)size;
-  return "NX30 HW-D service U-Boot MBN";
-#else
   name=rt3_md_uboot_image_name(data,size);
   return name?name:rt3_md_uboot_board_name();
-#endif
  case RT3_MD_ART:return "ART image (identity unverified)";
  case RT3_MD_CDT:return "CDT image";
+ case RT3_MD_MIBIB:return "MIBIB partition table";
  default:return NULL;
  }
 }
@@ -301,6 +293,49 @@ static int write_extent(const struct md_extent*e,const u8*d,u32 n,u32 fingerprin
  if(rt3_fw_write_window_close_status())r=-EIO;
 #endif
  }free(check);free(page);return r;
+}
+/* MIBIB is rewritten one erase block at a time: the older copy first, then
+ * the copy SBL now boots from, then the empty blocks, each read back before
+ * the next is erased, so a power cut always leaves one complete table. SMEM
+ * still holds the old table, so any erase locks flash writes until reboot. */
+static int mibib_write(const struct md_extent*e,const u8*d,u32 n,u32 fingerprint)
+{
+ struct mtd_info*m=&nand_info[CONFIG_NAND_FLASH_INFO_IDX];struct erase_info er;struct rt3_layout l;struct md_extent current;
+ u32 order[4]={0,1,2,3},age[RT3_MIBIB_COPIES],blk,off,i;u8*page=NULL,*check=NULL,*copy=NULL;size_t done;int r=0,opened=0,valid=0;
+ if(n!=RT3_MIBIB_SIZE||e->size!=RT3_MIBIB_SIZE)return -EINVAL;
+ if(layout_read(&l)||l.fingerprint!=fingerprint||layout_extent(&l,e,&current)||current.off!=e->off||current.size!=e->size)return -EXDEV;
+ if((r=mtd_ok(m,e))||(r=no_bad(m,e)))return r;
+ page=memalign(ARCH_DMA_MINALIGN,RT3_MD_PAGE_SIZE);check=memalign(ARCH_DMA_MINALIGN,RT3_MD_PAGE_SIZE);copy=malloc(RT3_MIBIB_BLOCK);
+ if(!page||!check||!copy){r=-ENOMEM;goto out;}
+ for(i=0;i<RT3_MIBIB_COPIES;i++){
+  for(off=0;off<RT3_MIBIB_BLOCK;off+=RT3_MD_PAGE_SIZE){
+   if(read_page(m,e->off+i*RT3_MIBIB_BLOCK+off,check))break;
+   memcpy(copy+off,check,RT3_MD_PAGE_SIZE);
+  }
+  if(off==RT3_MIBIB_BLOCK&&!rt3_mibib_block_age(copy,RT3_MIBIB_BLOCK,&age[i]))valid|=1<<i;
+ }
+ if(valid==3&&age[0]>age[1]){order[0]=1;order[1]=0;}
+ r=rt3_metadata_write_window_open(m,e->name,e->off,e->size);if(r)goto out;opened=1;
+ for(i=0;i<4;i++){
+  blk=e->off+order[i]*RT3_MIBIB_BLOCK;
+  memset(&er,0,sizeof(er));er.mtd=m;er.addr=blk;er.len=m->erasesize;
+  rt3_flash_require_reboot();
+  r=mtd_erase(m,&er);if(r)goto out;
+  for(off=0;off<RT3_MIBIB_BLOCK;off+=RT3_MD_PAGE_SIZE){
+   page_from(d,n,order[i]*RT3_MIBIB_BLOCK+off,page);
+   if(memchr_inv(page,0xff,RT3_MD_PAGE_SIZE)){done=0;r=mtd_write(m,blk+off,RT3_MD_PAGE_SIZE,&done,page);if(r||done!=RT3_MD_PAGE_SIZE){r=r?r:-EIO;goto out;}}
+  }
+  for(off=0;off<RT3_MIBIB_BLOCK;off+=RT3_MD_PAGE_SIZE){
+   page_from(d,n,order[i]*RT3_MIBIB_BLOCK+off,page);r=read_page(m,blk+off,check);
+   if(r||memcmp(page,check,RT3_MD_PAGE_SIZE)){r=r?r:-EIO;goto out;}
+  }
+ }
+ r=0;
+ out:if(opened){rt3_fw_write_window_close();
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+ if(rt3_fw_write_window_close_status())r=-EIO;
+#endif
+ }free(copy);free(check);free(page);return r;
 }
 #ifdef RT3_MD_B_DUAL_APPSBL
 static int read_extent(struct mtd_info*m,const struct md_extent*e,u8*out)
@@ -402,6 +437,7 @@ static int uboot_update(enum rt3_md_kind k,const struct md_pending*tx,
                         const struct md_extent*copy1_target)
 {
  struct mtd_info*m=&nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+ const struct md_extent*first_target,*last_target;const u8*first_backup,*last_backup;
  u8*original_primary=NULL,*original_copy1=NULL;int ret,mutated=0;u8 digest[32];
  if(uboot_partial_locked){fail(r,"uboot_update_locked_after_partial",primary_target->name);return -EIO;}
  if(!tx->data||!tx->size||rt3_md_validate_image(k,tx->data,tx->size)){
@@ -419,16 +455,24 @@ static int uboot_update(enum rt3_md_kind k,const struct md_pending*tx,
  free(uboot_backup_primary);free(uboot_backup_copy1);
  uboot_backup_primary=original_primary;uboot_backup_copy1=original_copy1;
  original_primary=NULL;original_copy1=NULL;
- ret=uboot_write_extent(copy1_target,primary_target,uboot_backup_copy1,
-                        uboot_backup_primary,0,tx->data,tx->size,tx->layout_fingerprint,&mutated);
+ /* Write the copy SBL is not loading from first; the selected one goes last. */
+ if(get_bootconfig("0:APPSBL")==1){
+  first_target=primary_target;first_backup=uboot_backup_primary;
+  last_target=copy1_target;last_backup=uboot_backup_copy1;
+ }else{
+  first_target=copy1_target;first_backup=uboot_backup_copy1;
+  last_target=primary_target;last_backup=uboot_backup_primary;
+ }
+ ret=uboot_write_extent(first_target,last_target,first_backup,
+                        last_backup,0,tx->data,tx->size,tx->layout_fingerprint,&mutated);
  if(ret){
-  if(mutated){uboot_partial_locked=1;fail(r,"uboot_update_partial",copy1_target->name);}
-  else fail(r,"uboot_update_failed",copy1_target->name);
+  if(mutated){uboot_partial_locked=1;fail(r,"uboot_update_partial",first_target->name);}
+  else fail(r,"uboot_update_failed",first_target->name);
   return ret;
  }
- ret=uboot_write_extent(primary_target,copy1_target,uboot_backup_primary,
+ ret=uboot_write_extent(last_target,first_target,last_backup,
                         tx->data,1,tx->data,tx->size,tx->layout_fingerprint,&mutated);
- if(ret){uboot_partial_locked=1;fail(r,"uboot_update_partial",primary_target->name);return ret;}
+ if(ret){uboot_partial_locked=1;fail(r,"uboot_update_partial",last_target->name);return ret;}
  ret=extent_matches_candidate(m,copy1_target,tx->data,tx->size);
  if(ret){uboot_partial_locked=1;fail(r,"uboot_update_partial",copy1_target->name);return ret;}
  ret=extent_matches_candidate(m,primary_target,tx->data,tx->size);
@@ -468,11 +512,9 @@ static int metadata_write_internal(enum rt3_md_kind k,enum rt3_md_target request
  }
  tx=pending;memset(&pending,0,sizeof(pending));
  if(!tx.data||!tx.size){ret=-EINVAL;goto invalid;}
-#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
- if(k==RT3_MD_UBOOT){struct nx30_d_firmware_info info;if(nx30_d_uboot_validate(tx.data,tx.size,&info)){ret=-EINVAL;goto invalid;}}
- else
-#endif
- if(rt3_md_validate_image(k,tx.data,tx.size)){ret=-EINVAL;goto invalid;}
+ if(k==RT3_MD_MIBIB?mibib_validate(tx.data,tx.size):
+    (rt3_md_validate_image(k,tx.data,tx.size)||
+     (k==RT3_MD_UBOOT&&h3c_build_id_check(tx.data,tx.size)))){ret=-EINVAL;goto invalid;}
  hash(tx.data,tx.size,d);if(!rt3_md_hash_matches(tx.hash,d,32)){ret=-EIO;goto invalid;}
  ret=layout_targets(k,&l,&current_primary,&current_secondary);
  if(ret||l.fingerprint!=tx.layout_fingerprint){ret=-EXDEV;fail(r,"partition_layout_mismatch",e->name);goto done;}
@@ -488,31 +530,19 @@ static int metadata_write_internal(enum rt3_md_kind k,enum rt3_md_target request
  }else{
   if(tx.target!=RT3_MD_TARGET_DEFAULT&&tx.target!=RT3_MD_TARGET_PRIMARY){ret=-EXDEV;fail(r,"partition_layout_mismatch",e->name);goto done;}
   target=current_primary;
-#if !defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) && !defined(CONFIG_H3C_HW_A_RAM_READONLY) && \
-    !(defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) && !defined(CONFIG_H3C_HW_C_RAM_READONLY)
   if(k==RT3_MD_UBOOT)second=current_secondary;
-#endif
  }
  if(target.off!=tx.target_off||target.size!=tx.target_size||
     second.off!=tx.second_off||second.size!=tx.second_size){
   ret=-EXDEV;fail(r,"partition_layout_mismatch",target.name);goto done;
  }
  if(k==RT3_MD_UBOOT){
-#ifdef RT3_MD_B_DUAL_APPSBL
   ret=uboot_update(k,&tx,r,&target,&second);goto done;
-#else
-#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-  { struct nx30_d_firmware_info info;struct nx30_d_result verified;
-    ret=nx30_d_uboot_target_check(target.off,target.size);
-    if(!ret)ret=nx30_d_uboot_validate(tx.data,tx.size,&info);
-    if(!ret)ret=nx30_d_uboot_write(tx.data,tx.size,info.generation,info.image_crc32,&verified);
-  }
-#else
-  ret=write_extent(&target,tx.data,tx.size,tx.layout_fingerprint);
-#endif
+ }
+ if(k==RT3_MD_MIBIB){
+  ret=mibib_write(&target,tx.data,tx.size,tx.layout_fingerprint);
   if(ret)fail(r,"metadata_write_or_readback_failed",target.name);
   goto done;
-#endif
  }
  if(k==RT3_MD_CDT&&second.size){
   /* B legacy DEFAULT preserves secondary-before-primary paired writes. */

@@ -768,6 +768,16 @@ static int nx30_nor_nand_bam_wait_status(unsigned long started)
 }
 #endif
 
+static int rt3_flash_reboot_lock;
+void rt3_flash_require_reboot(void)
+{
+	rt3_flash_reboot_lock = 1;
+}
+int rt3_flash_reboot_required(void)
+{
+	return rt3_flash_reboot_lock;
+}
+
 #if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT))
 /* Closed by default; only a guarded production transaction opens this aperture. */
 static struct {
@@ -783,6 +793,8 @@ int rt3_fw_write_window_open(struct mtd_info *mtd, u64 offset, u64 size)
 	struct rt3_layout layout;
 	unsigned int i, exact_targets = 0;
 	int exact_target = 0;
+	if (rt3_flash_reboot_lock)
+		return -EROFS;
 	if (rt3_fw_window.open || !mtd ||
 	    mtd != &nand_info[CONFIG_NAND_FLASH_INFO_IDX] ||
 	    !mtd->erasesize || !mtd->writesize || !size ||
@@ -854,6 +866,8 @@ int rt3_bootconfig_write_window_open(struct mtd_info *mtd, const char *name,
 #else
 	u32 start = 0, count = 0;
 	u64 expected;
+	if (rt3_flash_reboot_lock)
+		return -EROFS;
 	if (!name || rt3_fw_window.open || !mtd ||
 	    mtd != &nand_info[CONFIG_NAND_FLASH_INFO_IDX] ||
 	    mtd->type != MTD_NANDFLASH || mtd->size != (128ULL << 20) ||
@@ -891,10 +905,7 @@ int rt3_metadata_write_window_open(struct mtd_info *mtd, const char *name,
 				   u64 offset, u64 size)
 {
 	static const char * const allowed[] = {
-		"0:APPSBLENV", "0:APPSBL",
-#if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B)
-		"0:APPSBL_1",
-#endif
+		"0:MIBIB", "0:APPSBLENV", "0:APPSBL", "0:APPSBL_1",
 		"0:ART", "0:CDT", "0:CDT_1",
 	};
 	struct rt3_layout layout;
@@ -906,8 +917,8 @@ int rt3_metadata_write_window_open(struct mtd_info *mtd, const char *name,
 	extern loff_t board_env_offset;
 	extern loff_t board_env_size;
 
-	if (!name)
-		return -EINVAL;
+	if (!name || rt3_flash_reboot_lock)
+		return !name ? -EINVAL : -EROFS;
 	name_len = strnlen(name, RT3_LAYOUT_PARTITION_NAME_LEN);
 	if (!name_len || name_len >= RT3_LAYOUT_PARTITION_NAME_LEN ||
 	    rt3_fw_window.open || !mtd || !size ||
@@ -937,7 +948,9 @@ int rt3_metadata_write_window_open(struct mtd_info *mtd, const char *name,
 	if (offset != smem_offset || size != smem_size)
 		return -EROFS;
 	/* Exact RT3000-B SMEM extents are a backstop against a malformed table. */
-	if ((!strcmp(name, "0:CDT") &&
+	if ((!strcmp(name, "0:MIBIB") &&
+	     (offset != 0x80000 || size != 0x80000)) ||
+	    (!strcmp(name, "0:CDT") &&
 	     ((offset != 0x400000 && offset != 0x440000) || size != 0x40000)) ||
 	    (!strcmp(name, "0:CDT_1") &&
 	     ((offset != 0x400000 && offset != 0x440000) || size != 0x40000)) ||

@@ -16,5 +16,9 @@ int rt3_bootconfig_write_window_open(struct mtd_info *mtd, const char *name,
 				     u64 offset, u64 size);
 void rt3_fw_write_window_close(void);
 int rt3_fw_write_window_close_status(void);
+/* Once the partition table on flash changed, refuse every write window
+ * until reboot: SMEM still describes the old table. */
+void rt3_flash_require_reboot(void);
+int rt3_flash_reboot_required(void);
 int rt3_fw_write_window_allows(struct mtd_info *mtd, u64 offset, u64 size);
 #endif

@@ -18,7 +18,7 @@ typedef u64 rt3_md_u64;
 #ifdef RT3_METADATA_HOST_TEST_C
 int rt3_md_test_target_identity(const rt3_md_u8 *load, rt3_md_u32 size);
 #endif
-enum rt3_md_kind { RT3_MD_UBOOT=1, RT3_MD_ART=2, RT3_MD_CDT=3 };
+enum rt3_md_kind { RT3_MD_UBOOT=1, RT3_MD_ART=2, RT3_MD_CDT=3, RT3_MD_MIBIB=4 };
 #define RT3_MD_APPSBL_SIZE 0x00140000U
 #define RT3_MD_ART_SIZE 0x00100000U
 #define RT3_MD_CDT_SIZE 0x00040000U

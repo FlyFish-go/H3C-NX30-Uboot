@@ -10,7 +10,8 @@ cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Wno-unused-parameter \
   -iquote include -idirafter include \
   test/metadata_writer_stubs/metadata_writer_hosttest.c \
   failsafe/modules/metadata_rt3000_b.c \
-  failsafe/modules/rt3000_b_metadata_core.c lib/sha256.c -o "$tmp"
+  failsafe/modules/rt3000_b_metadata_core.c failsafe/modules/rt3000_mibib.c \
+  -DRT3_MIBIB_HOST_TEST lib/sha256.c -lz -o "$tmp"
 if [ "$#" -gt 1 ]; then
   "$tmp" "$fixture" "$2"
 else

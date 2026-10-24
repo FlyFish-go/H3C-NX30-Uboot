@@ -70,6 +70,7 @@ static int metadata_kind_for_upgrade(upgrade_type_t type, enum rt3_md_kind *kind
 	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT: *kind=RT3_MD_UBOOT; return 1;
 	case WEBFAILSAFE_UPGRADE_TYPE_ART: *kind=RT3_MD_ART; return 1;
 	case WEBFAILSAFE_UPGRADE_TYPE_CDT: *kind=RT3_MD_CDT; return 1;
+	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE: *kind=RT3_MD_MIBIB; return 1;
 	default: return 0;
 	}
 }

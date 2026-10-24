@@ -2074,7 +2074,7 @@ class FileUploadComponent {
                     switch (response.status) {
                         case 'success':
                             this.commitToken = null;
-                            const expectedTargets = { uboot: ["0:APPSBL", "0:APPSBL + 0:APPSBL_1"], art: "0:ART", cdt: cdtTarget };
+                            const expectedTargets = { uboot: "0:APPSBL + 0:APPSBL_1", art: "0:ART", cdt: cdtTarget, ptable: "0:MIBIB" };
                             if (expectedTargets[this.options.pageName] && response.info &&
                                     [].concat(expectedTargets[this.options.pageName]).includes(response.info.target) &&
                                     typeof response.info.commit_token === "string" &&
@@ -2113,7 +2113,7 @@ class FileUploadComponent {
         const isMibibPage = pageName === 'mibib';
         const isInitramfsPage = pageName === 'initramfs';
         const family = typeof APP_STATE !== 'undefined' && APP_STATE.sysinfo && APP_STATE.sysinfo.board && APP_STATE.sysinfo.board.family;
-        if (['HW-A', 'HW-B', 'HW-C', 'HW-D'].includes(family) && ['uboot', 'art', 'cdt'].includes(pageName) && !this.commitToken) return;
+        if (['HW-A', 'HW-B', 'HW-C', 'HW-D'].includes(family) && ['uboot', 'art', 'cdt', 'ptable'].includes(pageName) && !this.commitToken) return;
         if (pageName === 'cdt' && (!this.elements.cdtTarget || this.elements.cdtTarget.value !== this.commitCdtTarget)) return;
 
         if (isMibibPage) {
@@ -2134,7 +2134,7 @@ class FileUploadComponent {
         const formData = new FormData();
         formData.append('auto_reboot', autoRebootAfterSuccess ? 'true' : 'false');
         const commitToken = this.commitToken;
-        const commitMetadata = !!commitToken && ["uboot", "art", "cdt"].includes(pageName);
+        const commitMetadata = !!commitToken && ["uboot", "art", "cdt", "ptable"].includes(pageName);
         if (commitMetadata) {
             formData.append('commit_token', commitToken);
             if (pageName === 'cdt') formData.append('cdt_target', this.commitCdtTarget);

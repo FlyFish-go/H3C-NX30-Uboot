@@ -23,6 +23,9 @@
 #if defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(RT3_METADATA_HOST_TEST_C)
 #define RT3_METADATA_HW_C 1
 #endif
+#if defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)
+#define RT3_METADATA_HW_D 1
+#endif
 #define SDRAM_LOAD 0x4a920000U
 #define MBN_HASH_OFFSET 0x1000U
 #define MBN_HASH_SIZE 0xa8U
@@ -160,13 +163,17 @@ static void fdt_scan(const rt3_md_u8*b,rt3_md_u32 n,int*m,int*bad)
  }
 }
 static int gzip_header_ok(const rt3_md_u8*s,rt3_md_u32 n){rt3_md_u32 i=10;rt3_md_u8 f;if(n<18||s[0]!=0x1f||s[1]!=0x8b||s[2]!=8)return 0;f=s[3];if(f&0xe0)return 0;if(f&4){rt3_md_u32 z;if(i+2>n)return 0;z=(rt3_md_u32)s[i]|((rt3_md_u32)s[i+1]<<8);i+=2;if(z>n-i)return 0;i+=z;}if(f&8){while(i<n&&s[i])i++;if(i==n)return 0;i++;}if(f&16){while(i<n&&s[i])i++;if(i==n)return 0;i++;}if(f&2){if(i+2>n)return 0;i+=2;}return i<n-8;}
-static int embedded_fdt_identity(const rt3_md_u8*load,rt3_md_u32 size,const char*model,const char*compatible){rt3_md_u8*out;rt3_md_u32 i;int m=0,bad=0,target;(void)compatible;target=!strcmp(model,"H3C HW-A")?1:(!strcmp(model,"H3C HW-B")?2:4);fdt_scan(load,size,&m,&bad);out=malloc(RT3_MD_APPSBL_SIZE);if(!out)return 0;for(i=0;i+3<=size;i++)if(load[i]==0x1f&&load[i+1]==0x8b&&load[i+2]==8&&gzip_header_ok(load+i,size-i)){unsigned long z=size-i;if(!metadata_gunzip(out,RT3_MD_APPSBL_SIZE,(rt3_md_u8*)(load+i),&z)&&z<=RT3_MD_APPSBL_SIZE){fdt_scan(out,(rt3_md_u32)z,&m,&bad);memset(out,0,(rt3_md_u32)z);}}memset(out,0,RT3_MD_APPSBL_SIZE);free(out);return !bad&&m==target;}
+static int __attribute__((unused)) embedded_fdt_identity(const rt3_md_u8*load,rt3_md_u32 size,const char*model,const char*compatible){rt3_md_u8*out;rt3_md_u32 i;int m=0,bad=0,target;(void)compatible;target=!strcmp(model,"H3C HW-A")?1:(!strcmp(model,"H3C HW-B")?2:4);fdt_scan(load,size,&m,&bad);out=malloc(RT3_MD_APPSBL_SIZE);if(!out)return 0;for(i=0;i+3<=size;i++)if(load[i]==0x1f&&load[i+1]==0x8b&&load[i+2]==8&&gzip_header_ok(load+i,size-i)){unsigned long z=size-i;if(!metadata_gunzip(out,RT3_MD_APPSBL_SIZE,(rt3_md_u8*)(load+i),&z)&&z<=RT3_MD_APPSBL_SIZE){fdt_scan(out,(rt3_md_u32)z,&m,&bad);memset(out,0,(rt3_md_u32)z);}}memset(out,0,RT3_MD_APPSBL_SIZE);free(out);return !bad&&m==target;}
 static int target_identity(const rt3_md_u8 *load, rt3_md_u32 size)
 {
 #ifdef RT3_METADATA_HW_A
  return embedded_fdt_identity(load,size,"H3C HW-A","h3c,hw-a");
 #elif defined(RT3_METADATA_HW_C)
  return embedded_fdt_identity(load,size,"H3C HW-C","h3c,hw-c");
+#elif defined(RT3_METADATA_HW_D)
+ /* D's DTB model is not an H3C HW-x name; the build identity binds D. */
+ (void)load;(void)size;
+ return 1;
 #else
  return embedded_fdt_identity(load,size,"H3C HW-B","h3c,rt3000-b");
 #endif
@@ -267,7 +274,7 @@ static int __attribute__((unused)) is_known_oem_nx30_r012(const rt3_md_u8*d,rt3_
 }
 int rt3_md_validate_elf(const rt3_md_u8*d,rt3_md_u32 n)
 {
-#if defined(RT3_METADATA_HW_A) || defined(RT3_METADATA_HW_C)
+#if defined(RT3_METADATA_HW_A) || defined(RT3_METADATA_HW_C) || defined(RT3_METADATA_HW_D)
  return canonical_elf(d,n,1,0);
 #else
  if(!canonical_elf(d,n,1,0))return 0;
@@ -280,13 +287,15 @@ const char *rt3_md_uboot_board_name(void)
  return "H3C HW-A U-Boot ELF";
 #elif defined(RT3_METADATA_HW_C)
  return "H3C HW-C U-Boot ELF";
+#elif defined(RT3_METADATA_HW_D)
+ return "H3C HW-D U-Boot ELF";
 #else
  return "H3C HW-B U-Boot ELF";
 #endif
 }
 const char *rt3_md_uboot_image_name(const rt3_md_u8*d,rt3_md_u32 n)
 {
-#if !defined(RT3_METADATA_HW_A) && !defined(RT3_METADATA_HW_C)
+#if !defined(RT3_METADATA_HW_A) && !defined(RT3_METADATA_HW_C) && !defined(RT3_METADATA_HW_D)
  if(is_known_oem_nx30_r012(d,n))return "NX30 R012 OEM U-Boot (user-provided test image)";
 #endif
  if(!canonical_elf(d,n,1,0))return rt3_md_uboot_board_name();
@@ -300,7 +309,7 @@ int rt3_md_prepare_elf(const rt3_md_u8*src,rt3_md_u32 n,
  rt3_md_u8 digest[32];
  if(out_size)*out_size=0;
  if(!src||!dst||!out_size||n<EH||n>RT3_MD_APPSBL_SIZE)return -1;
-#if !defined(RT3_METADATA_HW_A) && !defined(RT3_METADATA_HW_C)
+#if !defined(RT3_METADATA_HW_A) && !defined(RT3_METADATA_HW_C) && !defined(RT3_METADATA_HW_D)
  if(is_known_oem_nx30_r012(src,n)){
   if(cap<n)return -1;
   memcpy(dst,src,n);*out_size=n;return 0;

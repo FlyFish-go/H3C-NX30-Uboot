@@ -730,26 +730,13 @@ int h3c_nand_ecc_write_allowed(struct mtd_info *mtd, u64 offset, u64 size)
 	if (appsbl < 0)
 		return 0;
 	if (appsbl) {
-		if (ecc_state.board_role == H3C_ECC_BOARD_AC &&
-		    (ecc_state.profile != H3C_NAND_ECC_PROFILE_W25N01GWZEIG ||
-		     ecc_state.io_mode != 4U || !platform_sbl1_compatible()))
-			return 0;
-		if (ecc_state.board_role == H3C_ECC_BOARD_B &&
-		    (ecc_state.profile != H3C_NAND_ECC_PROFILE_GD5F1GQ5REYIG ||
-		     ecc_state.io_mode != 8U || !platform_sbl1_compatible()))
-			return 0;
-		/* D APPSBL self-update is unavailable: there is no trusted source for
-		 * the actual preloader selection, APPSBL storage format AND this
-		 * device/candidate's installation qualification. Catalog rows, SBL
-		 * hashes and ENV/system agreement do not supply those facts. Do not
-		 * replace this lock with a model, hostname or ENV allowlist. Reads
-		 * and non-APPSBL transactions continue to use the IO-mode evidence.
-		 * This gate is called before QPIC opens a persistent write window. */
-		if (ecc_state.board_role == H3C_ECC_BOARD_D)
-			return 0;
-		if (ecc_state.board_role != H3C_ECC_BOARD_AC &&
-		    ecc_state.board_role != H3C_ECC_BOARD_B &&
-		    ecc_state.board_role != H3C_ECC_BOARD_D)
+		/* A U-Boot candidate is bound to this build's board, NAND profile
+		 * and ECC by the rescue page's build identity check; here require
+		 * the known SBL1 that loads APPSBL with this ECC layout. */
+		if ((ecc_state.board_role != H3C_ECC_BOARD_AC &&
+		     ecc_state.board_role != H3C_ECC_BOARD_B &&
+		     ecc_state.board_role != H3C_ECC_BOARD_D) ||
+		    !platform_sbl1_compatible())
 			return 0;
 	}
 	return 1;

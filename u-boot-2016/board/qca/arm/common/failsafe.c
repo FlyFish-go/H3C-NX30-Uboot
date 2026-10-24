@@ -998,12 +998,9 @@ int failsafe_validate_image(upgrade_type_t upgrade_type, const char *filename,
 	switch (upgrade_type) {
 	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT:
 		md_kind=RT3_MD_UBOOT;
-#if defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || (defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_D_PRODUCTION_PORT)) || defined(CONFIG_H3C_HW_C_RAM_READONLY)
-		md_target="0:APPSBL";
-#else
 		md_target="0:APPSBL + 0:APPSBL_1";
-#endif
 		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE: md_kind=RT3_MD_MIBIB; md_target="0:MIBIB"; break;
 	case WEBFAILSAFE_UPGRADE_TYPE_ART: md_kind=RT3_MD_ART; md_target="0:ART"; break;
 	case WEBFAILSAFE_UPGRADE_TYPE_CDT: md_kind=RT3_MD_CDT; md_target=rt3_metadata_target_name(metadata_target); break;
 #ifdef CONFIG_TARGET_IPQ5018_H3C_RT3000_B

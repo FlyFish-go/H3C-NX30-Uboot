@@ -6,6 +6,12 @@
 #include <rt3000_b_layout.h>
 #include <rt3000_b_fw_write.h>
 ulong httpd_upload_buffer_base(void) { return 0x41000000UL; }
+static int build_id_result,bootconfig_appsbl=-1,reboot_lock;
+int h3c_build_id_check(const uint8_t*p,size_t n){(void)p;(void)n;return build_id_result;}
+int get_bootconfig(const char*n){return strcmp(n,"0:APPSBL")?-1:bootconfig_appsbl;}
+int rt3_layout_resolve_raw(const void*t,size_t n,struct rt3_layout*l){(void)t;(void)n;l->mode=RT3_LAYOUT_DUAL;l->fingerprint=0;return 0;}
+void rt3_flash_require_reboot(void){reboot_lock=1;}
+int rt3_flash_reboot_required(void){return reboot_lock;}
 #define FLASH_SIZE 0x08000000U
 struct mtd_info nand_info[1];
 static unsigned char *flash;
@@ -73,6 +79,12 @@ int main(int argc,char**argv){
   unsigned int normalized_size=0;unsigned char*expected=malloc(RT3_MD_APPSBL_SIZE),*original0=malloc(RT3_MD_APPSBL_SIZE),*original1=malloc(RT3_MD_APPSBL_SIZE);
   CHECK(expected&&original0&&original1);CHECK(!rt3_md_prepare_elf(upload,(uint32_t)n,expected,RT3_MD_APPSBL_SIZE,&normalized_size));
   memcpy(original0,flash+0x500000,RT3_MD_APPSBL_SIZE);memcpy(original1,flash+0x640000,RT3_MD_APPSBL_SIZE);
+  /* A candidate built for another board, NAND profile or ECC is refused before staging. */
+  build_id_result=-EXDEV;reset_faults();ret=rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig);
+  CHECK(ret==-ENOEXEC&&!strcmp(rt3_metadata_validation_error(ret),"uboot_build_mismatch")&&io_zero());build_id_result=0;
+  /* After a partition table change nothing more is staged until reboot. */
+  reboot_lock=1;ret=rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig);
+  CHECK(ret==-EAGAIN&&!strcmp(rt3_metadata_validation_error(ret),"reboot_required"));reboot_lock=0;
   CHECK(rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig)==0);
   CHECK(rt3_metadata_pending_target(RT3_MD_UBOOT,&off,&size,&off2,&size2)==0&&off==0x500000&&off2==0x640000&&size==size2&&size==0x140000);
   memset(upload,0xaa,(size_t)n);CHECK(rt3_metadata_write(RT3_MD_UBOOT,tok,&r)==0);
@@ -88,6 +100,10 @@ int main(int argc,char**argv){
  reset_layout();appsbl_offset=0x640000;appsbl1_offset=0x500000;layout_fingerprint++;rt3_metadata_host_test_new_boot();nand_info[0].ecc_strength=4;memset(flash+0x500000,0x5a,0x140000);memset(flash+0x640000,0x6b,0x140000);reset_faults();
  CHECK(rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig)==0);CHECK(rt3_metadata_pending_target(RT3_MD_UBOOT,&off,&size,&off2,&size2)==0&&off==0x640000&&off2==0x500000);
  CHECK(rt3_metadata_write(RT3_MD_UBOOT,tok,&r)==0);CHECK(erase_log[0]==0x500000&&erase_log[10]==0x640000);CHECK(extent_matches(0x500000,0x140000,upload,(size_t)n)&&extent_matches(0x640000,0x140000,upload,(size_t)n));nand_info[0].ecc_strength=8;
+ /* BOOTCONFIG selects APPSBL_1: SBL loads it, so 0:APPSBL is written first. */
+ rt3_metadata_host_test_new_boot();reset_layout();memset(flash+0x500000,0x5a,0x280000);reset_faults();bootconfig_appsbl=1;
+ CHECK(rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig)==0);CHECK(rt3_metadata_write(RT3_MD_UBOOT,tok,&r)==0);
+ CHECK(erase_count==20&&erase_log[0]==0x500000&&erase_log[10]==0x640000);CHECK(extent_matches(0x500000,0x140000,upload,(size_t)n)&&extent_matches(0x640000,0x140000,upload,(size_t)n));bootconfig_appsbl=-1;
  rt3_metadata_host_test_new_boot();reset_layout();reset_faults();CHECK(rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig)==0);appsbl1_offset=0x500000;ret=rt3_metadata_write(RT3_MD_UBOOT,tok,&r);CHECK(ret==-EXDEV&&erase_count==0);
  rt3_metadata_host_test_new_boot();reset_layout();reset_faults();CHECK(rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig)==0);badblock=1;badblock_offset=0x640000;ret=rt3_metadata_write(RT3_MD_UBOOT,tok,&r);CHECK(ret!=0&&erase_count==0&&open_count==0);
  rt3_metadata_host_test_new_boot();reset_layout();reset_faults();CHECK(rt3_metadata_validate(RT3_MD_UBOOT,upload,(uint32_t)n,tok,dig)==0);read_fail_offset=0x640000;ret=rt3_metadata_write(RT3_MD_UBOOT,tok,&r);CHECK(ret!=0&&erase_count==0);

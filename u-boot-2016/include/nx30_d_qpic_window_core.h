@@ -27,6 +27,8 @@ static inline int nx30_d_qpic_extent_allowed(nx30_d_core_u64 offset,
         || (offset==0x00780000ULL && size==0x00100000ULL)
         || (offset==0x00400000ULL && size==0x00040000ULL)
         || (offset==0x00440000ULL && size==0x00040000ULL)
+        || (offset==0x00500000ULL && size==0x00140000ULL)
+        || (offset==0x00080000ULL && size==0x00080000ULL)
 #endif
         ;
 }

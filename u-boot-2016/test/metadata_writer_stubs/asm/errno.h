@@ -1,4 +1,7 @@
 #define EINVAL 22
+#define EPERM 1
+#define EAGAIN 11
+#define ENOEXEC 8
 #define ERANGE 34
 #define EFBIG 27
 #define ENOMEM 12
