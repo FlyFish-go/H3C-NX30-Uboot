@@ -379,11 +379,18 @@
       return '<li><span class="n">' + (i + 1) + '</span><span class="tx"><b>' + it[0] + '</b><span>' + tx + '</span>' + (vars.extra && vars.extra[i] || '') + '</span></li>';
     }).join('') + '</ol>';
   }
+  // pre.6 on mp02.1 boards: install is ambiguous between B and D and OEM return may be refused. Only NX30 firmware
+  // (D-only) is unaffected; the same file also serves RX3000, which runs on any class.
+  function holdWarn(g) {
+    if (!g) return '';
+    var l = L(), nx = g.id === 'NX30', m = nx ? 'RX3000' : mname(g);
+    return '<div class="callout amber" data-k="holdwarn">' + ic('alert') + '<span>' + fmt(l.holdWarn, { m: esc(m) }) + (nx ? ' ' + l.holdNx : '') + '</span></div>';
+  }
   function head(n, t, lead) { var l = L(); return '<div class="eyebrow">' + fmt(l.stepOf, { n: n }) + '</div><h1>' + t + '</h1><p class="lead">' + lead + '</p>'; }
 
   function step1() {
     var l = L();
-    return head(1, l.s1t, l.s1l) + '<div class="mgrid" role="radiogroup">' + CAT.guide.map(function (g) {
+    return head(1, l.s1t, l.s1l) + holdWarn(G()) + '<div class="mgrid" role="radiogroup">' + CAT.guide.map(function (g) {
       var sel = S.model === g.id;
       return '<button class="mcard' + (sel ? ' sel' : '') + '" data-model="' + esc(g.id) + '" role="radio" aria-checked="' + sel + '"><span class="ic">' + ic('router') + '</span><span class="tx"><b>' + esc(g.primary) + (g.alias ? '<em class="alias">' + esc(g.alias) + '</em>' : '') + '</b><span>' + fmt(l.needVer, { v: esc(g.version) }) + '</span></span><span class="radio"></span></button>';
     }).join('') + '</div><div class="fine">' + ic('info') + '<span>' + l.s1fine + '</span></div>';
@@ -503,7 +510,7 @@
           '<div class="row-end"><button class="btn primary lg" data-act="gen">' + l.gen + '</button><div class="fine">' + ic('shield') + '<span>' + l.genFine + '</span></div></div>';
       }
     }
-    return head(4, l.s4t, l.s4l) + body;
+    return head(4, l.s4t, l.s4l) + holdWarn(f.st === 'matched' ? guideById(f.model) : G()) + body;
   }
 
   function step5() {
