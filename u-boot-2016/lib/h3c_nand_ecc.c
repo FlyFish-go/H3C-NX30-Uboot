@@ -331,9 +331,8 @@ static int h3c_nand_ecc_probe_fixed_system(unsigned int *mode)
 {
 	u8 ec[2048], vid[2048];
 	u32 vid_offset, data_offset;
-	unsigned int i, valid = 0, current = platform_get_mode();
+	unsigned int i, valid = 0, unreadable = 0, current = platform_get_mode();
 	unsigned int mib_count;
-	int ret;
 
 	if (!mode || !h3c_nand_catalog_runtime_read_qualified(ecc_state.catalog_profile, current) ||
 	    !ecc_state.catalog_profile ||
@@ -343,9 +342,12 @@ static int h3c_nand_ecc_probe_fixed_system(unsigned int *mode)
 	for (i = 0; i < mib_count; i++) {
 		u64 base = (u64)i * (1U << 20);
 
-		ret = h3c_nand_ecc_read_page(base, ec);
-		if (ret)
-			return ret;
+		/* A power cut can leave a torn UBI header that UBI repairs once
+		 * Linux runs; skip it instead of refusing to boot. */
+		if (h3c_nand_ecc_read_page(base, ec)) {
+			unreadable++;
+			continue;
+		}
 		if (!nx30_nor_autoecc_validate_ec_header(ec, &vid_offset,
 							 &data_offset))
 			continue;
@@ -353,14 +355,16 @@ static int h3c_nand_ecc_probe_fixed_system(unsigned int *mode)
 		    (vid_offset & (ecc_state.catalog_profile->page_bytes - 1U)) ||
 		    base + vid_offset >= ecc_state.catalog_profile->capacity_bytes)
 			continue;
-		ret = h3c_nand_ecc_read_page(base + vid_offset, vid);
-		if (ret)
-			return ret;
+		if (h3c_nand_ecc_read_page(base + vid_offset, vid)) {
+			unreadable++;
+			continue;
+		}
 		if (nx30_nor_autoecc_validate_vid_header(vid))
 			valid++;
 		(void)data_offset;
 	}
-	if (valid < 2U)
+	/* A wrong ECC mode fails nearly every programmed page instead. */
+	if (valid < 2U || unreadable >= valid)
 		return -ENODATA;
 	*mode = current;
 	return 0;
