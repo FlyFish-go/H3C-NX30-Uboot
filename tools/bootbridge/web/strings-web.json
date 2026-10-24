@@ -90,7 +90,9 @@
     "s6recT": "以后要进入 U-Boot 恢复页：",
     "s6rec": "系统启动失败时，路由器会自动进入恢复页；也可以先断电，按住 Reset 键再通电，保持几秒后松开。电脑网卡保持「自动获取 IP」即可拿到 192.168.10.x 地址，然后在浏览器打开 192.168.10.1。",
     "rulesLatest": "规则集 {rs} · 已是最新",
-    "by": "作者"
+    "by": "作者",
+    "holdWarn": "<b>{m} 暂停使用。</b>已收到反馈：在 mp02.1 主板（本项目的 HW-B、HW-D）上刷入本版桥接包后，安装向导无法区分 HW-B 和 HW-D 而拒绝安装；如果「返回原厂系统」也被拒绝，设备会停在桥接系统里，不能当路由器使用，桥接系统也没有别的退出办法。刷机前无法判断自己的主板类别，修复版本发布前请不要给 {m} 生成或刷入桥接包。已经刷入的用户：设备启动区没有被写入，请不要再尝试其他刷机方式，下载诊断文件后加 QQ 群 1131957442 或在 GitHub Issues 联系维护者，备份包请勿公开上传。",
+    "holdNx": "NX30 不受影响，可以继续使用。"
   },
   "en": {
     "edition": "Web",
@@ -182,6 +184,8 @@
     "s6recT": "Entering U-Boot recovery later:",
     "s6rec": "If the system fails to boot, the router opens the recovery page automatically. You can also power it off, hold Reset while powering on, and release after a few seconds. Leave the network adapter on automatic (DHCP) to get a 192.168.10.x address, then open 192.168.10.1 in your browser.",
     "rulesLatest": "Rule set {rs} · Up to date",
-    "by": "by"
+    "by": "by",
+    "holdWarn": "<b>{m} is on hold.</b> Reports show that on mp02.1 boards (this project's HW-B and HW-D), the installer cannot tell HW-B from HW-D after this bridge is flashed and refuses to install. If “Return to stock” is refused too, the router stays in the bridge system, cannot work as a router, and the bridge offers no other way out. You cannot tell your board class before flashing, so until a fixed release is out, do not build or flash a bridge for {m}. If you already flashed it: nothing was written to the boot area. Do not try other flashing methods; download the diagnostics file and contact the maintainer in QQ group 1131957442 or on GitHub Issues. Do not post your backup publicly.",
+    "holdNx": "NX30 is not affected and can continue."
   }
 }
