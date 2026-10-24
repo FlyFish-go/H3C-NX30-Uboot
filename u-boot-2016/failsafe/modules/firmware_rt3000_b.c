@@ -670,14 +670,29 @@ static int fw_io_write(void *ctx, u64 offset, const u8 *buf,
 		       u32 size, u32 *written)
 {
 	struct fw_mtd_io *io = ctx;
-	size_t done = 0;
+	u32 page = io->mtd->writesize, off;
+	size_t done;
 	int ret;
-	if (!io->write_buf || size > io->mtd->erasesize)
+	*written = 0;
+	if (!io->write_buf || size > io->mtd->erasesize || !page || size % page)
 		return -EINVAL;
 	memcpy(io->write_buf, buf, size);
-	ret = mtd_write(io->mtd, offset, size, &done, io->write_buf);
-	*written = done;
-	return ret;
+	/*
+	 * Leave all-0xff pages erased. Programming them stores ECC for an empty
+	 * page, and Linux UBI later writes over such pages in "free" PEBs,
+	 * leaving pages whose ECC can never be corrected.
+	 */
+	for (off = 0; off < size; off += page) {
+		if (memchr_inv(io->write_buf + off, 0xff, page)) {
+			done = 0;
+			ret = mtd_write(io->mtd, offset + off, page, &done,
+					io->write_buf + off);
+			if (ret || done != page)
+				return ret ? ret : -EIO;
+		}
+		*written += page;
+	}
+	return 0;
 }
 
 static int fw_io_read(void *ctx, u64 offset, u8 *buf, u32 size, u32 *read)
