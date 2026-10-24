@@ -54,7 +54,7 @@ typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32; typedef uint64_t
 #define UBI_FM_DATA_VOLUME_ID (RT3_UBI_LAYOUT_ID + 2)
 #define UBI_VOL_NAME_MAX 127
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-struct rt3_ubi_summary { u32 image_pebs; u32 reserved_pebs; };
+struct rt3_ubi_summary { u32 image_pebs; u32 reserved_pebs; int oem_volumes; };
 static u32 get_unaligned_be32(const void *v) { const u8 *p=v; return ((u32)p[0]<<24)|((u32)p[1]<<16)|((u32)p[2]<<8)|p[3]; }
 static u16 get_unaligned_be16(const void *v) { const u8 *p=v; return ((u16)p[0]<<8)|p[1]; }
 static u16 fw_get_unaligned_le16(const u8 *p) { return p[0] | ((u16)p[1] << 8); }

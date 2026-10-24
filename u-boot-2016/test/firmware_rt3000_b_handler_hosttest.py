@@ -216,6 +216,27 @@ def dispatch(lib, path, method, fields=(), stage_upload=True):
     return code.value, out.value.decode(errors="replace"), buffers
 
 
+def without_oem_volumes(ubi):
+    """Rename the OEM-only wifi_fw/bt_fw volumes so the image reads as a third-party system."""
+    import struct, zlib
+    out = bytearray(ubi)
+    for peb in range(0, len(out), 0x20000):
+        if out[peb:peb+4] != b"UBI#":
+            continue
+        vid = peb + struct.unpack(">I", out[peb+16:peb+20])[0]
+        data = peb + struct.unpack(">I", out[peb+20:peb+24])[0]
+        if out[vid:vid+4] != b"UBI!" or struct.unpack(">I", out[vid+8:vid+12])[0] != 0x7fffefff:
+            continue
+        for r in range(128):
+            rec = data + r * 172
+            for old, new in ((b"wifi_fw\0", b"wifi_qs\0"), (b"bt_fw\0", b"bt_qs\0")):
+                if out[rec+16:rec+16+len(old)] == old:
+                    out[rec+16:rec+16+len(new)] = new
+                    crc = zlib.crc32(bytes(out[rec:rec+168])) ^ 0xffffffff
+                    out[rec+168:rec+172] = struct.pack(">I", crc)
+    assert out != bytearray(ubi)
+    return bytes(out)
+
 def token_from(response):
     value = json.loads(response)
     return value["token"]
@@ -346,8 +367,13 @@ def run():
         assert len(obj["partitions"])==1 and obj["partitions"][0]["name"]=="rootfs"
         assert dispatch(lib,"/firmware/validate",2,
                         [("firmware",bytes(ubi)),("target","rootfs_1"),("mode","single")])[0] == 409
+        # OEM firmware (wifi_fw/bt_fw volumes) is refused in the single layout.
+        code, body, _ = dispatch(lib,"/firmware/validate",2,
+                                 [("firmware",bytes(ubi)),("target","rootfs"),("mode","single")])
+        assert code==422 and json.loads(body)["error"]=="oem_firmware_needs_dual_layout"
+        third_party = without_oem_volumes(ubi)
         code, body, keep = dispatch(lib,"/firmware/validate",2,
-                                    [("firmware",bytes(ubi)),("target","rootfs"),("mode","single")])
+                                    [("firmware",third_party),("target","rootfs"),("mode","single")])
         assert code==200
         single_token=token_from(body)
         assert dispatch(lib,"/firmware/validate",2,

@@ -51,6 +51,7 @@ struct rt3_fw_pending {
 struct rt3_ubi_summary {
 	u32 image_pebs;
 	u32 reserved_pebs;
+	int oem_volumes;	/* wifi_fw or bt_fw: an H3C OEM system */
 };
 struct rt3_fw_oem {
 	const struct rt3_oem_fw *catalog;
@@ -215,6 +216,7 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 	u32 image_seq = 0;
 	int image_seq_set = 0;
 	int have_kernel = 0, have_rootfs = 0, rootfs_data = 0, kernel_data = 0;
+	int oem_volumes = 0;
 	u32 kernel_needed_lebs = 0, rootfs_needed_lebs = 0;
 	u32 kernel_id = 0xffffffffU, rootfs_id = 0xffffffffU;
 
@@ -314,6 +316,8 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 		}
 		if (!strcmp(volume_name[i], "kernel")) { have_kernel++; kernel_id = i; }
 		if (!strcmp(volume_name[i], "ubi_rootfs")) { have_rootfs++; rootfs_id = i; }
+		if (!strcmp(volume_name[i], "wifi_fw") || !strcmp(volume_name[i], "bt_fw"))
+			oem_volumes = 1;
 		if (reserved > RT3_FW_MAX_PEB_COUNT - total_reserved)
 			return -EOVERFLOW;
 		total_reserved += reserved;
@@ -404,6 +408,7 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 			return -EINVAL;
 	summary->image_pebs = pebs;
 	summary->reserved_pebs = total_reserved;
+	summary->oem_volumes = oem_volumes;
 	return 0;
 }
 
@@ -602,6 +607,13 @@ static void fw_validate_handler(enum httpd_uri_handler_status status,
 	if (ret || extracted.ubi_size > part->size ||
 	    fw_validate_ubi(extracted.ubi, extracted.ubi_size, &summary)) {
 		fw_reply_json(response, 422, "{\"status\":\"fail\",\"error\":\"unsupported package or invalid UBI image\"}");
+		return;
+	}
+	/* The big single rootfs is for third-party systems; OEM firmware was
+	 * never verified there. Restore the dual MIBIB to run it again. */
+	if (layout.mode == RT3_LAYOUT_SINGLE &&
+	    (extracted.catalog || summary.oem_volumes)) {
+		fw_reply_json(response, 422, "{\"status\":\"fail\",\"error\":\"oem_firmware_needs_dual_layout\"}");
 		return;
 	}
 	reserve_margin = fw_reserve_margin(mtd);

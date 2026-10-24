@@ -1377,7 +1377,8 @@ const messageBuilder = (() => {
             uboot_update_preflight_failed: "metadata.error.uboot_preflight",
             uboot_update_failed: "metadata.error.uboot_failed",
             uboot_update_partial: "metadata.error.uboot_partial",
-            uboot_update_locked_after_partial: "metadata.error.uboot_locked"
+            uboot_update_locked_after_partial: "metadata.error.uboot_locked",
+            single_layout_needs_rootfs_selector_0: "metadata.error.single_needs_slot1"
         };
         const metadataErrorKey = info && metadataCommitErrors[info.type];
         if (metadataErrorKey) {
@@ -1558,6 +1559,83 @@ class UnifiedUploadManager {
 }
 
 // ==============================
+// MIBIB 预设：原厂双系统 / 大分区
+// ==============================
+
+// The OEM table shared by every RT3000-family unit (both copies, ages 0/1,
+// sha256 0b403b917823b515...). Rows: name, offset, size, then the user-table
+// size and spare in KiB. The big layout merges rootfs and rootfs_1 into one
+// 80 MiB rootfs at 0x900000; every other row stays the same.
+const RT3_MIBIB_ROWS = [
+    ['0:SBL1', 0x0, 0x80000, 0x100, 0x100],
+    ['0:MIBIB', 0x80000, 0x80000, 0x100, 0x100],
+    ['0:BOOTCONFIG', 0x100000, 0x40000, 0x80, 0x80],
+    ['0:BOOTCONFIG1', 0x140000, 0x40000, 0x80, 0x80],
+    ['0:QSEE', 0x180000, 0x100000, 0x200, 0x200],
+    ['0:QSEE_1', 0x280000, 0x100000, 0x200, 0x200],
+    ['0:DEVCFG', 0x380000, 0x40000, 0x80, 0x80],
+    ['0:DEVCFG_1', 0x3c0000, 0x40000, 0x80, 0x80],
+    ['0:CDT', 0x400000, 0x40000, 0x80, 0x80],
+    ['0:CDT_1', 0x440000, 0x40000, 0x80, 0x80],
+    ['0:APPSBLENV', 0x480000, 0x80000, 0x100, 0x100],
+    ['0:APPSBL', 0x500000, 0x140000, 0x400, 0x100],
+    ['0:APPSBL_1', 0x640000, 0x140000, 0x400, 0x100],
+    ['0:ART', 0x780000, 0x100000, 0x200, 0x200],
+    ['0:TRAINING', 0x880000, 0x80000, 0x100, 0x100],
+    ['rootfs', 0x900000, 0x2800000, 0x9f00, 0x100],
+    ['rootfs_1', 0x3100000, 0x2800000, 0x9f00, 0x100],
+    ['pdt_data', 0x5900000, 0x600000, 0x1400, 0x400],
+    ['pdt_data_1', 0x5f00000, 0x600000, 0x1400, 0x400],
+    ['exp', 0x6500000, 0x100000, 0x200, 0x200],
+    ['plugin', 0x6600000, 0x1700000, 0x5800, 0x400]
+];
+
+function rt3BuildMibib(single) {
+    const BLOCK = 0x20000, PAGE = 0x800;
+    const rows = RT3_MIBIB_ROWS
+        .filter(r => !(single && r[0] === 'rootfs_1'))
+        .map(r => (single && r[0] === 'rootfs') ? ['rootfs', 0x900000, 0x5000000, 0x13f00, 0x100] : r);
+    const img = new Uint8Array(4 * BLOCK).fill(0xff);
+    const dv = new DataView(img.buffer);
+    const table = (at, magic1, magic2, attr, user) => {
+        dv.setUint32(at, magic1, true);
+        dv.setUint32(at + 4, magic2, true);
+        dv.setUint32(at + 8, 4, true);
+        dv.setUint32(at + 12, rows.length, true);
+        img.fill(0, at + 16, at + 16 + 32 * 28);
+        rows.forEach((r, i) => {
+            const e = at + 16 + i * 28;
+            for (let k = 0; k < r[0].length; k++) img[e + k] = r[0].charCodeAt(k);
+            dv.setUint32(e + 16, user ? r[3] : r[1] / BLOCK, true);
+            dv.setUint32(e + 20, user ? r[4] : r[2] / BLOCK, true);
+            img.set(attr, e + 24);
+        });
+    };
+    for (let copy = 0; copy < 2; copy++) {
+        const b = copy * BLOCK;
+        dv.setUint32(b, 0xfe569fac, true);
+        dv.setUint32(b + 4, 0xcd7f127a, true);
+        dv.setUint32(b + 8, 4, true);
+        dv.setUint32(b + 12, copy, true);
+        table(b + PAGE, 0x55ee73aa, 0xe35ebddb, [0xff, 0xff, 0x00, 0x00], false);
+        table(b + 2 * PAGE, 0xaa7d1b9a, 0x1f7d48bc, [0xff, 0xff, 0x00, 0xff], true);
+        // CRC-32, MSB first, poly 04C11DB7, init 0, over pages 0..2.
+        let crc = 0;
+        for (let i = b; i < b + 3 * PAGE; i++) {
+            crc = (crc ^ (img[i] << 24)) >>> 0;
+            for (let k = 0; k < 8; k++)
+                crc = (crc & 0x80000000 ? (crc << 1) ^ 0x04c11db7 : crc << 1) >>> 0;
+        }
+        const end = b + 3 * PAGE;
+        dv.setUint32(end, 0x9d41bea1, true);
+        dv.setUint32(end + 4, 0xf1ded2ea, true);
+        dv.setUint32(end + 8, 1, true);
+        dv.setUint32(end + 12, crc, true);
+    }
+    return img;
+}
+
+// ==============================
 // 文件上传组件类
 // ==============================
 
@@ -1602,6 +1680,13 @@ class FileUploadComponent {
 
                         <div id="upload-container" class="upload-wrapper">
                             <div class="upload-card">
+                                ${pageName === 'ptable' ? `<div class="card-hint-section">
+                                    <p id="mibibLayoutNow"></p>
+                                    <p>${APP_STATE.lang === 'zh-cn' ? '可直接生成分区表，无需自备文件：' : 'Generate a partition table here instead of choosing a file:'}</p>
+                                    <button type="button" class="button" id="mibibPresetDual">${APP_STATE.lang === 'zh-cn' ? '原厂双系统' : 'OEM dual system'}</button>
+                                    <button type="button" class="button" id="mibibPresetSingle">${APP_STATE.lang === 'zh-cn' ? '大分区（单 rootfs 80 MiB）' : 'Big partition (one 80 MiB rootfs)'}</button>
+                                    <p>${APP_STATE.lang === 'zh-cn' ? '切换后，rootfs 区域里现有的系统都会失效：请先在“闪存备份”中导出 rootfs / rootfs_1。切换到大分区前，默认启动槽必须是物理第1区（0x900000）。大分区只接受第三方系统，原厂固件请切回原厂双系统分区表后再写。写入分区表后须重启，然后再写入系统。' : 'Switching invalidates every system in the rootfs area: export rootfs / rootfs_1 from Flash Backup first. Before switching to the big partition the default boot slot must be physical slot 1 (0x900000). The big partition accepts third-party systems only; restore the OEM dual table to write OEM firmware. Reboot after writing the table, then write a system.'}</p>
+                                </div>` : ''}
                                 ${pageName === 'cdt' ? `<div class="card-hint-section">
                                     <p>${APP_STATE.lang === 'zh-cn' ? 'CDT 与 CDT_1 两份写入同一镜像；请使用与本机硬件和内存配置匹配的 CDT。' : 'CDT and CDT_1 both receive the same image. Use a CDT matching this device and RAM configuration.'}</p>
                                 </div>` : ''}
@@ -1762,6 +1847,7 @@ class FileUploadComponent {
      * 绑定事件
      */
     bindEvents() {
+        if (this.options.pageName === 'ptable') this.bindMibibPresets();
         // 拖拽区域点击
         if (this.elements.dropZone) {
             this.elements.dropZone.addEventListener('click', () => this.openFileSelector());
@@ -1839,6 +1925,27 @@ class FileUploadComponent {
         if (this.elements.fileInput && !this.isUploading) {
             this.elements.fileInput.click();
         }
+    }
+
+    bindMibibPresets() {
+        const zh = APP_STATE.lang === 'zh-cn';
+        const now = document.getElementById('mibibLayoutNow');
+        if (now && typeof fetch === 'function') {
+            fetch('/firmware/layout').then(r => r.json()).then(layout => {
+                const names = { dual: zh ? '原厂双系统' : 'OEM dual system', single: zh ? '大分区' : 'big partition' };
+                now.textContent = (zh ? '当前分区表：' : 'Current table: ') + (names[layout.mode] || layout.mode || '?');
+            }).catch(() => {});
+        }
+        const presets = { mibibPresetDual: [false, 'mibib-oem-dual.bin'], mibibPresetSingle: [true, 'mibib-big-rootfs.bin'] };
+        Object.keys(presets).forEach(id => {
+            const button = document.getElementById(id);
+            if (!button) return;
+            button.addEventListener('click', () => {
+                if (this.isUploading) return;
+                const [single, name] = presets[id];
+                this.handleFileSelect(new File([rt3BuildMibib(single)], name, { type: 'application/octet-stream' }));
+            });
+        });
     }
 
     /**
@@ -7984,6 +8091,7 @@ const I18N = (() => {
             "metadata.error.staging_failed": "The owned staging area could not be validated. Inspect the device before another attempt.",
             "metadata.error.uboot_partial": "A U-Boot copy could not be written or verified. Download both original backups before power-off. Further U-Boot updates are locked until restart.",
             "metadata.error.uboot_locked": "A previous U-Boot update is partial. Download the original backups and inspect both copies before restart.",
+            "metadata.error.single_needs_slot1": "The big partition boots only from physical slot 1 (0x900000). Set it as the default boot slot first, then validate again.",
             "metadata.error.uboot_preflight": "U-Boot preflight failed. Neither copy was erased. Check the partition layout, NAND and available memory.",
             "metadata.error.uboot_failed": "U-Boot update stopped before erase. Inspect the device and validate the image again.",
             "metadata.backup.primary": "Download original APPSBL",
@@ -8353,6 +8461,7 @@ const I18N = (() => {
             "metadata.error.staging_failed": "\u7cfb\u7edf\u65e0\u6cd5\u9a8c\u8bc1\u4e13\u7528\u7f13\u5b58\u533a\uff0c\u8bf7\u68c0\u67e5\u8bbe\u5907\u540e\u518d\u51b3\u5b9a\u662f\u5426\u518d\u6b21\u64cd\u4f5c\u3002",
             "metadata.error.uboot_partial": "U-Boot \u526f\u672c\u5199\u5165\u6216\u6821\u9a8c\u5931\u8d25\u3002\u8bf7\u5728\u65ad\u7535\u524d\u4e0b\u8f7d\u4e24\u4efd\u539f\u59cb\u5907\u4efd\uff0c\u672c\u6b21\u542f\u52a8\u5df2\u9501\u5b9a\u540e\u7eed U-Boot \u66f4\u65b0\u3002",
             "metadata.error.uboot_locked": "\u4e0a\u6b21 U-Boot \u66f4\u65b0\u672a\u5b8c\u6574\u5b8c\u6210\u3002\u8bf7\u4e0b\u8f7d\u539f\u59cb\u5907\u4efd\u5e76\u68c0\u67e5\u4e24\u4efd\u526f\u672c\uff0c\u518d\u51b3\u5b9a\u662f\u5426\u91cd\u542f\u3002",
+            "metadata.error.single_needs_slot1": "大分区只能从物理第1区（0x900000）启动。请先把默认启动槽设为物理第1区，再重新验证。",
             "metadata.error.uboot_preflight": "U-Boot 写入前检查失败，两份副本均未擦除。请检查分区布局、NAND 和可用内存。",
             "metadata.error.uboot_failed": "U-Boot 更新在擦除前停止。请检查设备并重新验证文件。",
             "metadata.backup.primary": "\u4e0b\u8f7d\u539f APPSBL \u5907\u4efd",
@@ -8599,8 +8708,8 @@ const firmwareModeManager = (() => {
         const raw = result && typeof result.error === 'string' ? result.error.slice(0, 180) : '';
         const alias = {'layout, mode, or target mismatch':'wrong_firmware_target','layout changed since validation':'layout_changed','unsupported package or invalid UBI image':'invalid_ubi_image','UBI capacity leaves insufficient layout and wear-level reserve':'insufficient_ubi_capacity','image exceeds selected extent':'image_too_large','write or full readback failed':'readback_failed','staged image no longer validates':'invalid_ubi_image','invalid token':'invalid_token','unknown or consumed token':'invalid_token','token, staged bytes, target, or layout changed':'upload_id_mismatch','staged upload range invalid':'upload_id_mismatch','staged upload changed':'upload_id_mismatch','target and mode required':'wrong_firmware_target','token, target, and mode required':'upload_id_mismatch','exactly one firmware field required':'firmware_field_invalid','invalid or oversized firmware field':'firmware_field_invalid'};
         const key = code || alias[raw] || raw;
-        const en = {wrong_firmware_target:'Layout, mode, or target mismatch. Read the layout again.',layout_changed:'Layout changed; read it again and revalidate.',unsupported_firmware_format:'Unsupported format; choose a recognized H3C OEM package or complete UBI system image.',invalid_ubi_image:'Package is unsupported or the complete UBI system image is invalid.',insufficient_ubi_capacity:'UBI image leaves insufficient system-layout and wear-level reserve.',image_too_large:'File exceeds selected partition capacity.',upload_id_mismatch:'Validation token does not match uploaded file.',invalid_token:'Validation token is invalid or expired. Upload and validate again.',firmware_field_invalid:'Firmware file is empty, invalid, oversized, or duplicated.',write_not_verified:'Write or full readback failed. Inspect the device; do not retry automatically.',readback_failed:'Full readback failed. Inspect the device; do not retry automatically.'};
-        const zh = {wrong_firmware_target:'当前分区布局、模式或目标不匹配，请重新读取布局。',layout_changed:'验证后活动分区布局已变化，请重新读取并重新验证。',unsupported_firmware_format:'文件格式不支持；请选择已识别的 H3C OEM 包或完整 UBI 系统镜像。',invalid_ubi_image:'固件包不支持，或完整 UBI 系统镜像结构无效、不完整。',insufficient_ubi_capacity:'UBI 镜像无法为系统布局和磨损均衡保留足够空间。',image_too_large:'文件超过所选分区容量。',upload_id_mismatch:'验证令牌与上传文件不匹配。',invalid_token:'验证令牌无效或已过期，请重新上传并验证。',firmware_field_invalid:'固件文件为空、无效、过大或重复上传。',write_not_verified:'写入或完整读回校验未通过。请检查设备，不要自动重试。',readback_failed:'完整读回校验未通过。请检查设备，不要自动重试。'};
+        const en = {wrong_firmware_target:'Layout, mode, or target mismatch. Read the layout again.',layout_changed:'Layout changed; read it again and revalidate.',unsupported_firmware_format:'Unsupported format; choose a recognized H3C OEM package or complete UBI system image.',invalid_ubi_image:'Package is unsupported or the complete UBI system image is invalid.',insufficient_ubi_capacity:'UBI image leaves insufficient system-layout and wear-level reserve.',image_too_large:'File exceeds selected partition capacity.',upload_id_mismatch:'Validation token does not match uploaded file.',invalid_token:'Validation token is invalid or expired. Upload and validate again.',firmware_field_invalid:'Firmware file is empty, invalid, oversized, or duplicated.',write_not_verified:'Write or full readback failed. Inspect the device; do not retry automatically.',readback_failed:'Full readback failed. Inspect the device; do not retry automatically.',oem_firmware_needs_dual_layout:'The big partition accepts third-party systems only. Restore the OEM dual partition table to write OEM firmware.'};
+        const zh = {wrong_firmware_target:'当前分区布局、模式或目标不匹配，请重新读取布局。',layout_changed:'验证后活动分区布局已变化，请重新读取并重新验证。',unsupported_firmware_format:'文件格式不支持；请选择已识别的 H3C OEM 包或完整 UBI 系统镜像。',invalid_ubi_image:'固件包不支持，或完整 UBI 系统镜像结构无效、不完整。',insufficient_ubi_capacity:'UBI 镜像无法为系统布局和磨损均衡保留足够空间。',image_too_large:'文件超过所选分区容量。',upload_id_mismatch:'验证令牌与上传文件不匹配。',invalid_token:'验证令牌无效或已过期，请重新上传并验证。',firmware_field_invalid:'固件文件为空、无效、过大或重复上传。',write_not_verified:'写入或完整读回校验未通过。请检查设备，不要自动重试。',readback_failed:'完整读回校验未通过。请检查设备，不要自动重试。',oem_firmware_needs_dual_layout:'大分区只接受第三方系统。要写原厂固件，请先切回原厂双系统分区表。'};
         const message = isZh() ? zh[key] : en[key];
         if (message) return message;
         if (raw) return isZh() ? '操作失败：' + raw : 'Operation failed: ' + raw;

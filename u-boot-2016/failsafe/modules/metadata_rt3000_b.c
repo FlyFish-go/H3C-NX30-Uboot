@@ -87,13 +87,16 @@ static int known_extent(const struct md_extent*e,u32 off,u32 size)
  return 0;
 }
 /* MIBIB structure, then the layout rules our U-Boot boots with: boot-chain
- * rows SBL1..TRAINING unchanged and a supported dual or single rootfs map. */
+ * rows SBL1..TRAINING unchanged and a supported dual or single rootfs map.
+ * A single rootfs only boots with BOOTCONFIG rootfs selector 0, so refuse
+ * the switch until the default slot is the physical one at 0x900000. */
 static int mibib_validate(const void*data,u32 n)
 {
  struct rt3_layout l;
- if(rt3_mibib_check(data,n,NULL))return -1;
+ if(rt3_mibib_check(data,n,NULL))return -EINVAL;
  if(rt3_layout_resolve_raw((const u8*)data+RT3_MIBIB_TABLE_PAGE(0),RT3_MIBIB_PAGE,&l)||
-    l.mode==RT3_LAYOUT_UNSUPPORTED)return -1;
+    l.mode==RT3_LAYOUT_UNSUPPORTED)return -EINVAL;
+ if(l.mode==RT3_LAYOUT_SINGLE&&get_bootconfig("rootfs")!=0)return -EBUSY;
  return 0;
 }
 static int layout_extent(const struct rt3_layout*l,const struct md_extent*e,struct md_extent*out)
@@ -205,7 +208,8 @@ int rt3_metadata_validate_target(enum rt3_md_kind k,enum rt3_md_target requested
   /* Same board, NAND profile and ECC as this build, or nothing is written. */
   if(h3c_build_id_check(owned,staged_size)){memset(owned,0,e->size);free(owned);return -ENOEXEC;}
  }else{
-  if(k==RT3_MD_MIBIB?mibib_validate(data,n):rt3_md_validate_image(k,data,n))return -EINVAL;
+  if(k==RT3_MD_MIBIB){r=mibib_validate(data,n);if(r)return r;}
+  else if(rt3_md_validate_image(k,data,n))return -EINVAL;
   owned=malloc(n);if(!owned)return -ENOMEM;
   if(rt3_md_snapshot_copy(owned,data,n)){memset(owned,0,n);free(owned);return -EINVAL;}
  }
@@ -231,7 +235,7 @@ int rt3_metadata_pending_target(enum rt3_md_kind k,u32*off,u32*size,u32*second_o
 }
 const char *rt3_metadata_validation_error(int error)
 {
- switch(error){case -ENOEXEC:return "uboot_build_mismatch";case -EAGAIN:return "reboot_required";case -EXDEV:return "partition_layout_mismatch";case -ENOMEM:return "metadata_staging_unavailable";case -EPERM:return "install_ecc_unverified";default:return "invalid_metadata_image";}
+ switch(error){case -ENOEXEC:return "uboot_build_mismatch";case -EAGAIN:return "reboot_required";case -EXDEV:return "partition_layout_mismatch";case -ENOMEM:return "metadata_staging_unavailable";case -EPERM:return "install_ecc_unverified";case -EBUSY:return "single_layout_needs_rootfs_selector_0";default:return "invalid_metadata_image";}
 }
 const char *rt3_metadata_preview_name(enum rt3_md_kind kind,const void*data,u32 size)
 {

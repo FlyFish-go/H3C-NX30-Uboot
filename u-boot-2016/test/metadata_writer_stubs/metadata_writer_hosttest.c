@@ -9,7 +9,8 @@ ulong httpd_upload_buffer_base(void) { return 0x41000000UL; }
 static int build_id_result,bootconfig_appsbl=-1,reboot_lock;
 int h3c_build_id_check(const uint8_t*p,size_t n){(void)p;(void)n;return build_id_result;}
 static int bootconfig_cdt;
-int get_bootconfig(const char*n){if(!strcmp(n,"0:CDT"))return bootconfig_cdt;return strcmp(n,"0:APPSBL")?-1:bootconfig_appsbl;}
+static int bootconfig_rootfs;
+int get_bootconfig(const char*n){if(!strcmp(n,"0:CDT"))return bootconfig_cdt;if(!strcmp(n,"rootfs"))return bootconfig_rootfs;return strcmp(n,"0:APPSBL")?-1:bootconfig_appsbl;}
 int rt3_layout_resolve_raw(const void*t,size_t n,struct rt3_layout*l){(void)t;(void)n;l->mode=RT3_LAYOUT_DUAL;l->fingerprint=0;return 0;}
 void rt3_flash_require_reboot(void){reboot_lock=1;}
 int rt3_flash_reboot_required(void){return reboot_lock;}
