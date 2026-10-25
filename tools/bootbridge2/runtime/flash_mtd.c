@@ -144,7 +144,7 @@ int bb_mtd_open(int idx, int writable, struct bb_flash *f)
 	snprintf(path, sizeof(path), "/sys/class/mtd/mtd%d/name", idx);
 	if (sys_read(path, name, sizeof(name)) || sys_u32(idx, "offset", &f->offset))
 		return -ENOENT;
-	snprintf(f->name, sizeof(f->name), "%s", name);
+	snprintf(f->name, sizeof(f->name), "%.*s", (int)sizeof(f->name) - 1, name);
 	c = malloc(sizeof(*c));
 	if (!c)
 		return -ENOMEM;

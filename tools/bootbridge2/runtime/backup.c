@@ -210,3 +210,25 @@ int bb_backup_write(FILE *out, const struct bb_backup_entry *e, unsigned n,
 	r->entries = n + 1;
 	return 0;
 }
+
+int bb_backup_verify(FILE *in, const struct bb_backup_result *r)
+{
+	struct bb_sha256 s;
+	uint8_t buf[8192], digest[32];
+	char hex[65];
+	uint64_t total = 0;
+	size_t n;
+
+	if (fseek(in, 0, SEEK_SET))
+		return -EIO;
+	bb_sha256_init(&s);
+	while ((n = fread(buf, 1, sizeof(buf), in)) != 0) {
+		total += n;
+		bb_sha256_update(&s, buf, n);
+	}
+	if (ferror(in) || total != r->bytes)
+		return -EIO;
+	bb_sha256_final(&s, digest);
+	bb_sha256_hex(digest, hex);
+	return strcmp(hex, r->sha256) ? -EIO : 0;
+}

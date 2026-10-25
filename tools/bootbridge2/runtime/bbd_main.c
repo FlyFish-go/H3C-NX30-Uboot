@@ -17,6 +17,7 @@
 #include "flash_mtd.h"
 #include "install.h"
 #include "pack.h"
+#include "operation_lock.h"
 #include "sha256.h"
 
 #include <arpa/inet.h>
@@ -37,7 +38,6 @@
 #include <unistd.h>
 
 #define BACKUP_PATH "/tmp/bridge/backup.zip"
-#define BUSY_FLAG "/tmp/bridge/busy"	/* bb-keyd ignores the key while it exists */
 #define PACK_MAX (8u << 20)
 
 static const char *www = "/www";
@@ -196,6 +196,9 @@ static void load_pack(void)
 	int idx = -1, fd;
 
 	S.pack_status = BB_PACK_NONE;
+	S.have_rules = 0;
+	bb_rules_free(&S.rules);
+	memset(&S.pack, 0, sizeof(S.pack));
 	free(S.pack_buf);
 	S.pack_buf = NULL;
 	for (int i = 0; i < 64 && idx < 0; i++) {
@@ -266,7 +269,7 @@ static void ensure_pack(void)
 
 		load_pack();
 		pack_attempts++;
-		snprintf(where, sizeof(where), "%s, attempt %u at +%lds", S.pack_where, pack_attempts,
+		snprintf(where, sizeof(where), "%.120s, attempt %u at +%lds", S.pack_where, pack_attempts,
 			 (long)(time(NULL) - boot_time));
 		snprintf(S.pack_where, sizeof(S.pack_where), "%s", where);
 		if (S.pack_status == BB_PACK_OK || S.pack_status == BB_PACK_NONE ||
@@ -382,6 +385,16 @@ static void state_json(struct buf *b)
 	bb_ret_plan_free(&rp);
 }
 
+static int backup_valid(void)
+{
+	FILE *f = fopen(BACKUP_PATH, "rb");
+	int ok = f && !bb_backup_verify(f, &S.backup);
+
+	if (f)
+		fclose(f);
+	return ok;
+}
+
 static void do_backup(void)
 {
 	static const char *const startup[] = {
@@ -431,6 +444,11 @@ static void do_backup(void)
 		set_result("backup", "io", "备份失败（读取或空间不足）");
 		goto close;
 	}
+	if (!backup_valid()) {
+		unlink(BACKUP_PATH);
+		set_result("backup", "verify", "备份文件读回校验失败，请重新生成备份");
+		goto close;
+	}
 	S.backup_ready = 1;
 	set_result("backup", "ok", S.backup.unreadable_blocks ?
 		   "备份完成，但有读不出的块已用 0xFF 代替，详见 manifest.json" : "备份完成");
@@ -463,8 +481,9 @@ static void do_install(void)
 	uint8_t *mbn = NULL;
 	size_t len = 0;
 
-	if (!S.backup_ready) {
-		set_result("install", "no_backup", "请先完成备份");
+	if (!S.backup_ready || !backup_valid()) {
+		S.backup_ready = 0;
+		set_result("install", "no_backup", "请先生成并校验完整备份");
 		return;
 	}
 	refresh();	/* decide again on what the flash says now */
@@ -569,33 +588,47 @@ static void handle(int fd)
 		serve_file(fd, "style.css", "text/css; charset=utf-8", NULL);
 	} else if (!strcmp(path, "/backup.zip") && !post) {
 		serve_backup(fd);
-	} else if (!strcmp(path, "/api/pack.bin") && !post && S.pack_buf) {
-		/* the rule pack as read from flash, for diagnosing pack errors */
-		uint32_t rl, ll;
-
-		memcpy(&rl, S.pack_buf + 8, 4);
-		memcpy(&ll, S.pack_buf + 12, 4);
-		respond(fd, 200, "application/octet-stream", NULL, S.pack_buf, BB_PACK_HEADER + rl + ll);
 	} else if (!strncmp(path, "/api/", 5)) {
 		const char *api = path + 5, *extra = NULL;
 
 		if (post && (!strcmp(api, "backup") || !strcmp(api, "install") || !strcmp(api, "return"))) {
-			int busy;
+			int lock = bb_operation_lock();
 
-			mkdir("/tmp/bridge", 0700);
-			busy = open(BUSY_FLAG, O_CREAT | O_WRONLY | O_CLOEXEC, 0600);
+			if (lock < 0) {
+				set_result(api, "busy", "另一项操作正在进行，或无法获取操作锁，请稍后重试");
+				state_json(&b);
+				respond(fd, 409, "application/json; charset=utf-8", NULL, b.p, b.len);
+				free(b.p);
+				return;
+			}
 			if (!strcmp(api, "backup"))
 				do_backup();
 			else if (!strcmp(api, "install"))
 				do_install();
 			else
 				do_return();
-			if (busy >= 0)
-				close(busy);
-			unlink(BUSY_FLAG);
+			close(lock);
 		}
-		else if (post && !strcmp(api, "reboot"))
+		else if (post && !strcmp(api, "reboot")) {
+			int lock = bb_operation_lock();
+
+			if (lock < 0) {
+				set_result(api, "busy", "另一项操作正在进行，暂时不能重启");
+				state_json(&b);
+				respond(fd, 409, "application/json; charset=utf-8", NULL, b.p, b.len);
+				free(b.p);
+				return;
+			}
 			set_result("reboot", "ok", "正在重启");
+			state_json(&b);
+			respond(fd, 200, "application/json; charset=utf-8", NULL, b.p, b.len);
+			free(b.p);
+			sync();
+			sleep(1);
+			reboot(RB_AUTOBOOT);
+			close(lock);
+			return;
+		}
 		else if (!post && !strcmp(api, "diagnostics"))
 			extra = "Content-Disposition: attachment; filename=\"bootbridge-diagnostics.json\"\r\n";
 		else if (post || strcmp(api, "state")) {
@@ -605,12 +638,6 @@ static void handle(int fd)
 		}
 		state_json(&b);
 		respond(fd, 200, "application/json; charset=utf-8", extra, b.p, b.len);
-		if (post && !strcmp(api, "reboot")) {
-			close(fd);
-			sync();
-			sleep(1);
-			reboot(RB_AUTOBOOT);
-		}
 	} else {
 		respond(fd, 404, "text/plain", NULL, "not found\n", 10);
 	}

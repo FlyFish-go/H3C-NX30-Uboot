@@ -2,36 +2,31 @@
 /* bb-keyd: hold the WPS/Mesh key for 3 seconds to return to the OEM system.
  *
  * Every official H3C device tree (all products, all boot routes) declares the
- * WPS/Mesh key as gpio-keys GPIO38 / KEY_WPS_BUTTON, so this works without
- * knowing the board. The key is ignored while bbd is writing flash
- * (/tmp/bridge/busy exists). The return itself is bb-oem-return, which runs
- * every check again; only on success does the device reboot. */
-#include <dirent.h>
+ * WPS/Mesh key as gpio-keys GPIO38 / KEY_WPS_BUTTON. OEM gpio-button-hotplug
+ * publishes it as BUTTON=wps on the kernel uevent socket. This works without
+ * knowing the board. bb-oem-return takes the same operation lock as bbd,
+ * so a busy device refuses the key action atomically. It runs every check
+ * again; only on success does the device reboot. */
+#include "button_event.h"
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/input.h>
+#include <linux/netlink.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/reboot.h>
-#include <sys/stat.h>
-#include <sys/sysmacros.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
-#define HOLD_MS 3000
-#define MAX_DEV 8
-#define BUSY_FLAG "/tmp/bridge/busy"
 #define RETURN_TOOL "/usr/sbin/bb-oem-return"
 
-static long now_ms(void)
+static int64_t now_ms(void)
 {
 	struct timespec t;
 
 	clock_gettime(CLOCK_MONOTONIC, &t);
-	return t.tv_sec * 1000L + t.tv_nsec / 1000000;
+	return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 
 static void say(const char *msg)
@@ -44,53 +39,11 @@ static void say(const char *msg)
 	}
 }
 
-/* /dev is a tiny tmpfs without input nodes: create them from sysfs. */
-static int open_inputs(struct pollfd *fds)
-{
-	DIR *d = opendir("/sys/class/input");
-	struct dirent *e;
-	int n = 0;
-
-	mkdir("/tmp/bridge", 0755);
-	if (!d)
-		return 0;
-	while ((e = readdir(d)) && n < MAX_DEV) {
-		char path[128], node[64];
-		unsigned maj, min;
-		FILE *f;
-
-		if (strncmp(e->d_name, "event", 5))
-			continue;
-		snprintf(path, sizeof(path), "/sys/class/input/%s/dev", e->d_name);
-		f = fopen(path, "r");
-		if (!f)
-			continue;
-		if (fscanf(f, "%u:%u", &maj, &min) != 2) {
-			fclose(f);
-			continue;
-		}
-		fclose(f);
-		snprintf(node, sizeof(node), "/tmp/bridge/%s", e->d_name);
-		unlink(node);
-		if (mknod(node, S_IFCHR | 0600, makedev(maj, min)))
-			continue;
-		fds[n].fd = open(node, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
-		if (fds[n].fd >= 0)
-			fds[n++].events = POLLIN;
-	}
-	closedir(d);
-	return n;
-}
-
 static void do_return(void)
 {
 	pid_t pid;
 	int status;
 
-	if (access(BUSY_FLAG, F_OK) == 0) {
-		say("flash operation in progress, key ignored");
-		return;
-	}
 	say("WPS key held, returning to the OEM system");
 	pid = fork();
 	if (pid == 0) {
@@ -98,7 +51,7 @@ static void do_return(void)
 
 		if (null >= 0)
 			dup2(null, 1);
-		execl(RETURN_TOOL, RETURN_TOOL, "commit", (char *)NULL);
+		execl(RETURN_TOOL, RETURN_TOOL, "commit-reboot", (char *)NULL);
 		_exit(127);
 	}
 	if (pid < 0 || waitpid(pid, &status, 0) != pid || !WIFEXITED(status) ||
@@ -106,46 +59,59 @@ static void do_return(void)
 		say("return to OEM failed or refused; see the page for details");
 		return;
 	}
-	say("BOOTCONFIG now selects the OEM system, rebooting");
-	sync();
-	sleep(1);
-	reboot(RB_AUTOBOOT);
+	/* commit-reboot only returns successfully if reboot is already underway. */
 }
 
 int main(void)
 {
-	struct pollfd fds[MAX_DEV];
-	long pressed_at = -1;
-	int n, fired = 0;
+	struct sockaddr_nl addr = { .nl_family = AF_NETLINK, .nl_groups = 1 };
+	struct bb_button_hold hold = { .pressed_at = -1 };
+	int fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+			NETLINK_KOBJECT_UEVENT);
+	struct pollfd pollfd = { .fd = fd, .events = POLLIN };
 
-	while ((n = open_inputs(fds)) == 0)
-		sleep(5);	/* gpio-keys may probe after us */
+	if (fd < 0 || bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
+		say("cannot listen for kernel button events");
+		return 1;
+	}
+	say("listening for kernel WPS/Mesh button events");
 	for (;;) {
-		int timeout = pressed_at < 0 ? -1 : (int)(pressed_at + HOLD_MS - now_ms());
+		int timeout = -1, trigger = 0;
 
-		if (pressed_at >= 0 && timeout <= 0) {
-			if (!fired)
-				do_return();
-			fired = 1;
-			timeout = -1;
+		if (hold.pressed_at >= 0 && !hold.fired) {
+			int64_t remaining = hold.pressed_at + 3000 - now_ms();
+
+			timeout = remaining > 0 ? (int)remaining : 0;
 		}
-		if (poll(fds, n, timeout) < 0 && errno != EINTR)
+		if (poll(&pollfd, 1, timeout) < 0) {
+			if (errno == EINTR) continue;
 			return 1;
-		for (int i = 0; i < n; i++) {
-			struct input_event ev;
-
-			if (!(fds[i].revents & POLLIN))
-				continue;
-			while (read(fds[i].fd, &ev, sizeof(ev)) == sizeof(ev)) {
-				if (ev.type != EV_KEY || ev.code != KEY_WPS_BUTTON)
-					continue;
-				if (ev.value == 1 && pressed_at < 0) {
-					pressed_at = now_ms();
-					fired = 0;
-				} else if (ev.value == 0) {
-					pressed_at = -1;
-				}
-			}
 		}
+		if (pollfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+			say("button event stream interrupted");
+			return 1;
+		}
+		while (pollfd.revents & POLLIN) {
+			char buf[4096];
+			struct sockaddr_nl from = {0};
+			struct iovec iov = { .iov_base = buf, .iov_len = sizeof(buf) };
+			struct msghdr msg = { .msg_name = &from, .msg_namelen = sizeof(from),
+					     .msg_iov = &iov, .msg_iovlen = 1 };
+			ssize_t n = recvmsg(fd, &msg, MSG_DONTWAIT);
+			enum bb_button_event ev;
+
+			if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+			if (n < 0 && errno == EINTR) continue;
+			if (n < 0 || (msg.msg_flags & MSG_TRUNC)) {
+				hold.pressed_at = -1; /* Lost events cannot prove a hold. */
+				break;
+			}
+			if (from.nl_pid != 0) continue; /* accept only kernel events */
+			ev = bb_button_parse(buf, n);
+			if (ev == BB_BUTTON_PRESS) say("WPS/Mesh key pressed");
+			trigger |= bb_button_step(&hold, ev, now_ms());
+		}
+		trigger |= bb_button_step(&hold, BB_BUTTON_NONE, now_ms());
+		if (trigger) do_return();
 	}
 }

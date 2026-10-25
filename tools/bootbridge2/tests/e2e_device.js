@@ -5,6 +5,7 @@
 'use strict';
 const { chromium } = require('playwright');
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 
 const [BASE, SHOTS] = process.argv.slice(2);
@@ -17,7 +18,9 @@ const ok = (name, cond, extra) => {
 fs.mkdirSync(SHOTS, { recursive: true });
 
 (async () => {
-  const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+  const launch = process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {};
+  if (process.env.BB_BROWSER_PROXY) launch.proxy = { server: process.env.BB_BROWSER_PROXY };
+  const browser = await chromium.launch(launch);
   const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 }, locale: 'zh-CN' });
   const page = await ctx.newPage();
   const problems = [];
@@ -45,8 +48,15 @@ fs.mkdirSync(SHOTS, { recursive: true });
   }
   ok('backup link shown', await page.isVisible('#backup-link'));
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('#backup-link')]);
+  const backup = fs.readFileSync(await dl.path());
   ok('backup downloads', dl.suggestedFilename() === 'bootbridge-recovery-backup.zip' &&
-     fs.statSync(await dl.path()).size > 40 << 20, dl.suggestedFilename());
+     backup.length > (40 << 20), dl.suggestedFilename());
+  const backupState = await page.evaluate(() => fetch('/api/state').then(r => r.json()));
+  const verified = backupState.backup.ready && backup.length === backupState.backup.bytes &&
+    crypto.createHash('sha256').update(backup).digest('hex') === backupState.backup.sha256;
+  ok('download matches verified backup size and SHA-256', verified);
+  if (!verified) throw new Error('Backup verification failed; installation was not attempted');
+  await dl.saveAs(path.join(SHOTS, 'bootbridge-recovery-backup.zip'));
   await page.screenshot({ path: path.join(SHOTS, 'device-2.png'), fullPage: true });
   ok('install offered', (await text('#main-button')) === '安装 U-Boot', await text('#main-button'));
 
@@ -57,6 +67,12 @@ fs.mkdirSync(SHOTS, { recursive: true });
       !document.getElementById('notice').hidden, null, { timeout: 180000 });
     await page.screenshot({ path: path.join(SHOTS, 'device-3.png'), fullPage: true });
     ok('install finished', (await text('#main-button')) === '重启', await text('#message'));
+    if (process.env.BB_EXPECTED_APPSBL_SHA256) {
+      const state = await page.evaluate(() => fetch('/api/state').then(r => r.json()));
+      ok('both APPSBL copies match pinned candidate',
+        state.facts.appsbl_sha256.length === 2 &&
+        state.facts.appsbl_sha256.every(h => h === process.env.BB_EXPECTED_APPSBL_SHA256));
+    }
   }
   ok('no console errors', problems.length === 0, problems.join(' | '));
   await browser.close();

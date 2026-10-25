@@ -26,3 +26,18 @@ BootBridge 的重写版本。旧版在 `tools/bootbridge/`，本目录稳定前�
 make test        # 需要 BB_FIXTURES 指向私有的真实分区样本，见 tests/test_oem_return.c
 make arm ARM_CC=arm-openwrt-linux-gcc
 ```
+
+## 当前开发验收
+
+- 规则包使用 BBPK v1：规则文本与 LZMA 候选归档，SHA-256 校验；无签名。
+- mp02.1 用 ART 中的 FEM 标志区分 B/D；未知组合拒绝安装。
+- WPS/Mesh 使用原厂 gpio-button-hotplug 内核事件；长按 3 秒由独立 bb-keyd 调用 `bb-oem-return commit-reboot`。
+- HTTP 备份、安装、返回、重启与独立返回工具共用内核文件锁；锁忙时拒绝操作，进程退出自动释放。
+- 安装前完整读回备份 ZIP 并校验大小、SHA-256；写入 APPSBL 前要求有效 BOOTCONFIG 的 APPSBL 选择位明确且一致。
+- 两份 APPSBL 均按擦除块读回校验，最后切换系统启动选择位。备用 APPSBL 写入失败时保留当前副本。
+- 调试用原始分区与规则包下载接口不随本版保留；设备事实仍可通过诊断下载获取。
+
+主机测试需要外部 `BB_FIXTURES`、`BB_RULES`、`BB_PACK`；`make test` 也覆盖跨进程锁竞争和备份损坏。
+网页测试入口为 `web/tests/e2e.js`，逐个校验四种官方固件的浏览器输出。
+设备页面测试为 `tests/e2e_device.js`；仅在明确授权的台架上使用 `--install`，它会实际写入 U-Boot。
+实机通过范围以对应私有验收报告为准，不由主机测试数推断。

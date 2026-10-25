@@ -53,11 +53,18 @@ void bb_ret_plan(const struct bb_ret_inputs *in, struct bb_ret_plan *plan)
 		return;
 	}
 
+	/* Reject incompatible geometry before copying one record into the other. */
+	plan->code = BB_RET_BC_IO;
+	if (!in->bc[0] || !in->bc[1] ||
+	    in->bc[0]->erase_size != in->bc[1]->erase_size)
+		return;
 	for (int c = 0; c < 2; c++) {
 		const struct bb_flash *f = in->bc[c];
 
 		plan->code = BB_RET_BC_IO;
-		if (!f || f->is_bad(f->ctx, 0))
+		if (!f->page_size || f->erase_size < BB_BC_RECORD_BYTES ||
+		    f->erase_size > f->size || f->erase_size % f->page_size ||
+		    f->is_bad(f->ctx, 0))
 			return;
 		plan->code = BB_RET_NO_MEM;
 		plan->image[c] = malloc(f->erase_size);
@@ -85,6 +92,9 @@ void bb_ret_plan(const struct bb_ret_inputs *in, struct bb_ret_plan *plan)
 		plan->code = BB_RET_ALREADY;
 		return;
 	}
+	/* Wrapping to zero would leave the new record older than the old one. */
+	if (age == UINT32_MAX)
+		return;
 	plan->new_age = age + 1;
 	for (int c = 0; c < 2; c++) {
 		int src = plan->valid[c] ? c : !c;
@@ -161,7 +171,7 @@ const char *bb_ret_code_text(enum bb_ret_code c)
 	case BB_RET_BAD_SLOTS: return "找不到两个系统槽，或无法确定当前运行的槽";
 	case BB_RET_OEM_SLOT: return "原厂系统槽已损坏，不能返回";
 	case BB_RET_BC_IO: return "启动配置分区读取失败或是坏块";
-	case BB_RET_BC_INVALID: return "两份启动配置都无法解析";
+	case BB_RET_BC_INVALID: return "启动配置无法解析，或版本计数已耗尽";
 	case BB_RET_CHANGED: return "启动配置在检查之后发生了变化，请重新检查";
 	case BB_RET_WRITE_BC1: return "备份启动配置写入失败，主启动配置未改动，当前仍会启动桥接系统";
 	case BB_RET_WRITE_BC0: return "主启动配置写入失败；备份启动配置已指向原厂系统，重启后应由备份引导";

@@ -26,29 +26,32 @@ int bb_flash_rewrite_block(const struct bb_flash *f, uint32_t block_off,
 	uint8_t *back;
 	int ret;
 
-	if (block_off % f->erase_size || block_off >= f->size)
+	if (!f || !data || !f->erase_size || !f->page_size ||
+	    f->erase_size % f->page_size || f->erase_size > f->size ||
+	    block_off % f->erase_size || block_off > f->size - f->erase_size)
 		return -EINVAL;
 	ret = f->is_bad(f->ctx, block_off);
 	if (ret)
 		return ret < 0 ? ret : -EIO;
+	/* Reserve read-back memory before erasing any existing data. */
+	back = malloc(f->erase_size);
+	if (!back)
+		return -ENOMEM;
 	ret = f->erase(f->ctx, block_off);
 	if (ret)
-		return ret;
-	/* Programming an all-0xff page stores ECC for "empty" data; a later
-	 * write to that page would then fail ECC. Leave such pages erased. */
+		goto out;
+	/* Leave empty pages erased: programming all 0xff stores unwanted ECC. */
 	for (uint32_t p = 0; p < f->erase_size; p += f->page_size) {
 		if (all_ff(data + p, f->page_size))
 			continue;
 		ret = f->write_page(f->ctx, block_off + p, data + p);
 		if (ret)
-			return ret;
+			goto out;
 	}
-	back = malloc(f->erase_size);
-	if (!back)
-		return -ENOMEM;
 	ret = f->read(f->ctx, block_off, back, f->erase_size);
 	if (!ret && memcmp(back, data, f->erase_size))
 		ret = -EIO;
+out:
 	free(back);
 	return ret;
 }

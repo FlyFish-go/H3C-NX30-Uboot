@@ -308,6 +308,23 @@ static void test_refusals_and_faults(const uint8_t *oem)
 		rig_free(&r);
 	}
 
+	/* Rebuilding an invalid copy must reject mismatched erase sizes first. */
+	rig_init(&r, synthetic_bc(1, 1), synthetic_bc(1, 1), oem, SLOT_LO);
+	r.bc[0]->data[0] ^= 1;
+	r.bc[0]->f.erase_size *= 2;
+	bb_ret_plan(&r.in, &p);
+	CHECK(p.code == BB_RET_BC_IO && !r.bc[0]->erases && !r.bc[1]->erases,
+	      "unequal BOOTCONFIG geometry refuses before copying/writing");
+	bb_ret_plan_free(&p);
+	rig_free(&r);
+
+	/* Do not wrap the age counter back to zero. */
+	rig_init(&r, synthetic_bc(UINT32_MAX, 1), synthetic_bc(UINT32_MAX, 1), oem, SLOT_LO);
+	bb_ret_plan(&r.in, &p);
+	CHECK(p.code == BB_RET_BC_INVALID, "age overflow refused");
+	bb_ret_plan_free(&p);
+	rig_free(&r);
+
 	/* Both copies unparseable. */
 	{
 		uint8_t *bc0 = synthetic_bc(1, 1), *bc1 = synthetic_bc(1, 1);

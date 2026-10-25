@@ -22,6 +22,7 @@ enum bb_inst_code {
 	BB_INST_WRITE_SECOND,	/* active copy failed after the inactive one succeeded */
 	BB_INST_RETURN_FAILED,	/* U-Boot installed, but BOOTCONFIG could not be switched */
 	BB_INST_NO_MEM,
+	BB_INST_BOOTCONFIG,	/* active APPSBL cannot be determined safely */
 };
 
 struct bb_inst_inputs {

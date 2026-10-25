@@ -30,4 +30,7 @@ struct bb_backup_result {
 int bb_backup_write(FILE *out, const struct bb_backup_entry *e, unsigned n,
 		    struct bb_backup_result *r);
 
+/* Re-read the completed ZIP and verify both its size and SHA-256. */
+int bb_backup_verify(FILE *in, const struct bb_backup_result *r);
+
 #endif

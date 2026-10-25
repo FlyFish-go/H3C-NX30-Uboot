@@ -10,7 +10,11 @@
 
   async function api(path, post) {
     const r = await fetch(path, post ? { method: "POST", headers: { "X-BootBridge": "1" } } : {});
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (!r.ok) {
+      const state = await r.json().catch(() => null);
+      if (state && state.schema === "bb-state-v1") return state;
+      throw new Error("HTTP " + r.status);
+    }
     return r.json();
   }
 
@@ -144,7 +148,14 @@
 
   async function reboot() {
     busy = true;
-    try { await api("/api/reboot", true); } catch (e) { /* the device is going down */ }
+    try {
+      const reply = await api("/api/reboot", true);
+      if (!reply.last || reply.last.code !== "ok") {
+        busy = false;
+        render(reply);
+        return;
+      }
+    } catch (e) { /* the reboot response may be interrupted */ }
     $("title").textContent = "正在重启";
     $("message").textContent = "约 1 分钟后路由器进入原厂系统。此页面不会再更新。";
     $("main-button").disabled = true;

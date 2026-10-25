@@ -32,10 +32,25 @@ $(OUT)/test_install: $(CORE) tests/flash_mem.c tests/test_install.c $(HDRS)
 	@mkdir -p $(OUT)
 	$(CC) $(CFLAGS) $(SAN) -o $@ $(filter %.c,$^)
 
-test: $(OUT)/test_oem_return $(OUT)/test_facts_rules $(OUT)/test_install
+$(OUT)/test_operation_lock: tests/test_operation_lock.c runtime/operation_lock.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) $(SAN) -o $@ $<
+
+$(OUT)/test_backup: runtime/backup.c runtime/sha256.c runtime/flash.c tests/flash_mem.c tests/test_backup.c $(HDRS)
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) $(SAN) -o $@ $(filter %.c,$^)
+
+$(OUT)/test_button: tests/test_button.c runtime/button_event.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) $(SAN) -o $@ $<
+
+test: $(OUT)/test_oem_return $(OUT)/test_facts_rules $(OUT)/test_install $(OUT)/test_operation_lock $(OUT)/test_backup $(OUT)/test_button
 	$(OUT)/test_oem_return
 	$(OUT)/test_facts_rules
 	$(OUT)/test_install
+	$(OUT)/test_operation_lock
+	$(OUT)/test_backup
+	$(OUT)/test_button
 
 $(OUT)/arm/%: runtime/%_main.c $(CORE) $(LINUX_SRC) $(HDRS)
 	@mkdir -p $(OUT)/arm
@@ -50,7 +65,7 @@ $(OUT)/arm/bb_dhcp: runtime/boot/bb_dhcp.c
 	@mkdir -p $(OUT)/arm
 	$(ARM_CC) $(ARM_CFLAGS) -std=c99 -Wall -Wextra -Werror -o $@ $<
 
-$(OUT)/arm/bb_keyd: runtime/bb_keyd_main.c
+$(OUT)/arm/bb_keyd: runtime/bb_keyd_main.c runtime/button_event.h
 	@mkdir -p $(OUT)/arm
 	$(ARM_CC) $(ARM_CFLAGS) -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -o $@ $<
 

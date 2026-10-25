@@ -46,7 +46,8 @@ RUNTIME = HERE.parent / "runtime" / "boot"
 # drivers for the LAN port. Everything is copied byte-identical.
 OEM_FILES = ["bin/busybox", "sbin/kmodloader", "lib/firmware/qca-nss0-retail.bin",
              "lib/modules/4.4.60/qca-ssdk.ko", "lib/modules/4.4.60/qca-nss-dp.ko",
-             "lib/modules/4.4.60/qca-nss-drv.ko"]
+             "lib/modules/4.4.60/qca-nss-drv.ko", "lib/modules/4.4.60/input-core.ko",
+             "lib/modules/4.4.60/button-hotplug.ko", "lib/modules/4.4.60/gpio-button-hotplug.ko"]
 OEM_LIBS = ["libc.so", "ld-musl-arm.so.1", "libgcc_s.so.1", "libubox.so", "librpc.so"]
 APPLETS = ["sh", "ash", "cat", "mkdir", "mknod", "mount", "ifconfig", "brctl", "ip", "sleep",
            "readlink", "grep", "awk", "route", "ls", "dmesg", "reboot"]

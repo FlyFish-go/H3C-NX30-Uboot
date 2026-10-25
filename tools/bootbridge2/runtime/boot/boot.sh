@@ -13,6 +13,9 @@ insmod /lib/modules/4.4.60/qca-ssdk.ko
 insmod /lib/modules/4.4.60/qca-nss-dp.ko
 require readable /lib/firmware/qca-nss0.bin (builder link to qca-nss0-retail.bin)
 insmod /lib/modules/4.4.60/qca-nss-drv.ko
+insmod /lib/modules/4.4.60/input-core.ko
+insmod /lib/modules/4.4.60/button-hotplug.ko
+insmod /lib/modules/4.4.60/gpio-button-hotplug.ko
 ifconfig lo 127.0.0.1 up
 ifconfig eth0 down
 ifconfig eth1 192.168.10.1 netmask 255.255.255.0 up
@@ -61,6 +64,19 @@ for module in qca-ssdk qca-nss-dp qca-nss-drv; do
 			echo "bridge-boot: could not load $module" >&2
 			exit 1
 		}
+	fi
+done
+
+# Match the official firmware's gpio-keys driver and uevent delivery path.
+for module in input-core button-hotplug gpio-button-hotplug; do
+	case "$module" in
+		input-core) sysname=input_core ;;
+		button-hotplug) sysname=button_hotplug ;;
+		gpio-button-hotplug) sysname=gpio_button_hotplug ;;
+	esac
+	if [ ! -d "/sys/module/$sysname" ]; then
+		/usr/sbin/insmod "/lib/modules/4.4.60/$module.ko" ||
+			echo "bridge-boot: button driver $module failed; use the web return button" >&2
 	fi
 done
 

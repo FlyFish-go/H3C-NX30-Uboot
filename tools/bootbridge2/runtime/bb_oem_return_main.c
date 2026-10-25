@@ -10,8 +10,10 @@
  * Exit status: 0 ready/already/done, 1 refused, 2 write failure, 3 usage. */
 #include "flash_mtd.h"
 #include "oem_return.h"
+#include "operation_lock.h"
 
 #include <stdio.h>
+#include <sys/reboot.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -72,17 +74,23 @@ int main(int argc, char **argv)
 	struct bb_flash bc[2], slots[2];
 	struct bb_ret_inputs in = {0};
 	struct bb_ret_plan plan;
-	int commit, rc;
+	int commit, rc, lock = -1;
 
-	if ((argc != 2 && argc != 4) || (strcmp(argv[1], "check") && strcmp(argv[1], "commit"))) {
-		fprintf(stderr, "usage: %s check|commit [slot_a slot_b]\n", argv[0]);
+	if ((argc != 2 && argc != 4) || (strcmp(argv[1], "check") && strcmp(argv[1], "commit") &&
+	     strcmp(argv[1], "commit-reboot"))) {
+		fprintf(stderr, "usage: %s check|commit|commit-reboot [slot_a slot_b]\n", argv[0]);
 		return 3;
 	}
 	if (argc == 4) {
 		slot_names[0] = argv[2];
 		slot_names[1] = argv[3];
 	}
-	commit = !strcmp(argv[1], "commit");
+	commit = strcmp(argv[1], "check") != 0;
+	if (commit && (lock = bb_operation_lock()) < 0) {
+		puts("{\"schema\":\"bb-oem-return-v1\",\"code\":\"busy\","
+		     "\"message\":\"另一项操作正在进行，或无法获取操作锁\"}");
+		return 1;
+	}
 
 	memset(&plan, 0, sizeof(plan));
 	plan.code = BB_RET_BAD_SLOTS;
@@ -129,5 +137,15 @@ report:
 		if (in.slot[i])
 			slots[i].close(slots[i].ctx);
 	}
+	if (!rc && commit && !strcmp(argv[1], "commit-reboot")) {
+		sync();
+		sleep(1);
+		if (reboot(RB_AUTOBOOT)) {
+			perror("bb-oem-return: reboot");
+			rc = 2;
+		}
+	}
+	if (lock >= 0)
+		close(lock);
 	return rc;
 }

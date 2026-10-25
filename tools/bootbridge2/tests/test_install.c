@@ -209,6 +209,46 @@ int main(void)
 	rig_free(&r);
 	free(orig_active);
 
+	/* Conflicting APPSBL selectors: never guess an inactive copy. */
+	rig_init(&r);
+	*(uint32_t *)(r.bc[1]->data + 28 + 20 * 3) = 1;
+	bb_inst_plan(&r.in, cand, mbn, mbn_len, &plan);
+	CHECK(plan.code == BB_INST_BOOTCONFIG, "conflicting selectors: %s",
+	      bb_inst_code_str(plan.code));
+	CHECK(bb_inst_commit(&r.in, &plan) == BB_INST_BOOTCONFIG &&
+	      !r.appsbl[0]->erases && !r.appsbl[1]->erases,
+	      "conflict leaves both APPSBL copies untouched");
+	bb_inst_plan_free(&plan);
+	rig_free(&r);
+
+	/* Selector 1: fail writing the lower inactive copy, preserve upper active. */
+	rig_init(&r);
+	for (int i = 0; i < 2; i++)
+		*(uint32_t *)(r.bc[i]->data + 28 + 20 * 3) = 1;
+	bb_inst_plan(&r.in, cand, mbn, mbn_len, &plan);
+	CHECK(plan.code == BB_INST_READY && plan.first == 0 && plan.second == 1,
+	      "selector 1 reverses write order");
+	r.appsbl[0]->fail_erase_at = 1;
+	CHECK(bb_inst_commit(&r.in, &plan) == BB_INST_WRITE_FIRST && !r.appsbl[1]->erases,
+	      "upper active copy untouched after lower failure");
+	bb_inst_plan_free(&plan);
+	rig_free(&r);
+
+	/* Invalid and missing APPSBL selectors must not default to zero. */
+	for (int mode = 0; mode < 2; mode++) {
+		rig_init(&r);
+		for (int i = 0; i < 2; i++) {
+			if (mode)
+				r.bc[i]->data[12 + 20 * 3] = 'x';
+			else
+				*(uint32_t *)(r.bc[i]->data + 28 + 20 * 3) = 2;
+		}
+		bb_inst_plan(&r.in, cand, mbn, mbn_len, &plan);
+		CHECK(plan.code == BB_INST_BOOTCONFIG, "invalid/missing APPSBL selector mode %d", mode);
+		bb_inst_plan_free(&plan);
+		rig_free(&r);
+	}
+
 	/* Refusals. */
 	rig_init(&r);
 	mbn[1000] ^= 1;

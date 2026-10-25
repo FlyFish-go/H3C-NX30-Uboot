@@ -33,14 +33,20 @@ static int holds_image(const struct bb_flash *f, const uint8_t *image, uint32_t 
 /* Which APPSBL copy the boot chain uses: selector 0 is the lower one. */
 static int active_copy(const struct bb_inst_inputs *in, const struct bb_ret_plan *rp)
 {
-	uint32_t sel = 0;
+	int sel = -1;
 	int lower;
 
-	for (int c = 0; c < 2; c++)
-		if (rp->valid[c] && rp->bc[c].have_appsbl) {
-			sel = rp->bc[c].appsbl_selector;
-			break;
-		}
+	for (int c = 0; c < 2; c++) {
+		if (!rp->valid[c])
+			continue;
+		/* Do not guess which copy SBL selected when the records conflict. */
+		if (!rp->bc[c].have_appsbl || rp->bc[c].appsbl_selector > 1 ||
+		    (sel >= 0 && sel != (int)rp->bc[c].appsbl_selector))
+			return -1;
+		sel = rp->bc[c].appsbl_selector;
+	}
+	if (sel < 0)
+		return -1;
 	lower = in->appsbl[0]->offset < in->appsbl[1]->offset ? 0 : 1;
 	return sel == 0 ? lower : !lower;
 }
@@ -58,7 +64,9 @@ void bb_inst_plan(const struct bb_inst_inputs *in, const struct bb_candidate *c,
 
 	p->code = BB_INST_PARTITIONS;
 	if (!a || !b || a->size != b->size || a->size != c->part_bytes ||
-	    a->erase_size != b->erase_size || a->size % a->erase_size || a->offset == b->offset)
+	    !a->erase_size || !a->page_size || a->erase_size % a->page_size ||
+	    a->page_size != b->page_size || a->erase_size != b->erase_size ||
+	    a->size % a->erase_size || a->offset == b->offset)
 		return;
 
 	p->code = BB_INST_NO_MEM;
@@ -86,6 +94,9 @@ void bb_inst_plan(const struct bb_inst_inputs *in, const struct bb_candidate *c,
 		return;
 
 	active = active_copy(in, &p->ret);
+	p->code = BB_INST_BOOTCONFIG;
+	if (active < 0)
+		return;
 	p->first = !active;
 	p->second = active;
 	for (int i = 0; i < 2; i++)
@@ -139,6 +150,7 @@ const char *bb_inst_code_str(enum bb_inst_code c)
 	case BB_INST_WRITE_SECOND: return "write_second_failed";
 	case BB_INST_RETURN_FAILED: return "return_failed";
 	case BB_INST_NO_MEM: return "no_memory";
+	case BB_INST_BOOTCONFIG: return "appsbl_selector_ambiguous";
 	}
 	return "unknown";
 }
@@ -156,6 +168,7 @@ const char *bb_inst_code_text(enum bb_inst_code c)
 	case BB_INST_WRITE_SECOND: return "第二份 U-Boot 写入失败；第一份已写好。请不要断电，重试安装";
 	case BB_INST_RETURN_FAILED: return "U-Boot 已装好，但启动配置切换失败；请重试返回原厂";
 	case BB_INST_NO_MEM: return "内存不足";
+	case BB_INST_BOOTCONFIG: return "无法确定当前启动的 U-Boot 副本，已拒绝安装；仍可返回原厂系统";
 	}
 	return "未知错误";
 }
