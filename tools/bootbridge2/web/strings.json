@@ -1,0 +1,481 @@
+{
+  "_note": "Extracted from BootBridge-offline-prototype.html. {placeholders} are runtime values. HTML tags (<b>) mark emphasis only.",
+  "models": [
+    {
+      "id": "NX30",
+      "alias": "RX3000",
+      "ver": "V100R009P02",
+      "size": 31457280,
+      "sha": "3fa91c0e5d7b42a8c6e19f0b7d24e8a51c03b9d6e7f2a4c81b5d09e3f6a7c2d14",
+      "file": "NX30_V100R009P02.bin"
+    },
+    {
+      "id": "RT3000",
+      "ver": "V100R007P05",
+      "size": 30408704,
+      "sha": "c47e1a92b3d50f68e2a9c1d74b0f3e85a6d2c19b7e40f5a3d8c62b1e9f7a0c35",
+      "file": "RT3000_V100R007P05.bin"
+    },
+    {
+      "id": "RC3000",
+      "ver": "V100R005P11",
+      "size": 29884416,
+      "sha": "8b20d4f17a6c93e05b4d82a1f9c6e3b07d5a1c84e2f90b6d3a7c51e8f4b20d96",
+      "file": "RC3000_V100R005P11.bin"
+    },
+    {
+      "id": "RW3000",
+      "alias": "RW3010",
+      "ver": "V100R006P08",
+      "size": 30932992,
+      "sha": "e19b6d03f8a24c7b5e0d91a3c6f82b47d0e5a9c13b7f64e2a8d05c9b1f3e7a60",
+      "file": "RW3000_V100R006P08.bin"
+    }
+  ],
+  "zh": {
+    "edition": "桌面版",
+    "title": "BootBridge",
+    "steps": [
+      [
+        "选择机型",
+        "确认你的路由器"
+      ],
+      [
+        "下载官方固件",
+        "获取指定版本"
+      ],
+      [
+        "升级系统",
+        "刷入指定官方版本"
+      ],
+      [
+        "生成桥接包",
+        "由官方固件生成"
+      ],
+      [
+        "刷入桥接包",
+        "通过官方后台上传"
+      ],
+      [
+        "安装 U-Boot",
+        "在维护页完成"
+      ]
+    ],
+    "stepOf": "第 {n} 步 · 共 6 步",
+    "prev": "上一步",
+    "next": "下一步",
+    "finish": "完成",
+    "rulesOk": "离线规则已验证",
+    "rulesOff": "离线",
+    "rulesLatest": "已是最新",
+    "version": "版本 0.3.0",
+    "update": "有新版本",
+    "settings": "设置与关于",
+    "s1t": "选择你的路由器机型",
+    "s1l": "不同机型需要不同的官方固件版本。选好后，后面的下载链接和说明会自动对应。",
+    "needVer": "需要官方版本 {v}",
+    "s1fine": "生成桥接包时只按文件指纹自动识别，这里的选择只用于显示对应的下载和说明。",
+    "s2t": "下载指定的官方固件",
+    "s2l": "{m} 需要先升级到下面这个官方版本。可以直接下载，也可以把已下载的文件拖进来确认。",
+    "target": "指定官方固件",
+    "kVer": "版本",
+    "kSize": "文件大小",
+    "kSha": "SHA-256",
+    "kSrc": "官方下载页",
+    "openBrowser": "在浏览器打开",
+    "copyLink": "复制链接",
+    "directDl": "直接下载并校验",
+    "dropB": "把官方固件 BIN 拖到这里",
+    "dropS": "或 <u>点击选择文件</u>",
+    "dropN": "只读取文件，不会修改原件",
+    "hashing": "正在校验 SHA-256…",
+    "downloading": "正在下载官方固件…",
+    "cancel": "取消",
+    "dlSrc": "来自 H3C 官方服务器，完成后自动校验",
+    "okTitle": "已确认：这是 {m} 的指定固件 {v}",
+    "okSub": "文件完整，可以用它升级路由器，也会在第 4 步用来生成桥接包。",
+    "another": "换一个文件",
+    "sameAs": "大小和 SHA-256 与指定版本一致",
+    "copyDiag": "复制诊断信息",
+    "badTitle": "这个文件不在支持列表中",
+    "badSub": "可能是其他版本，或文件下载不完整。请在上方重新下载指定版本。",
+    "s3t": "把路由器升级到指定版本",
+    "s3l": "用刚才确认过的官方固件，在路由器自带的管理后台完成一次普通升级。",
+    "s3warn": "<b>必须先升级到 {v}。</b>否则刷入桥接包后，维护页会显示“暂不可安装”。",
+    "s3steps": [
+      [
+        "登录路由器管理后台",
+        "用浏览器打开路由器的管理地址并登录。"
+      ],
+      [
+        "进入固件升级页面",
+        "通常在「系统设置 → 固件升级」，不同机型菜单名称可能略有不同。"
+      ],
+      [
+        "上传官方固件并等待重启",
+        "选择第 2 步确认过的文件。升级期间不要断电或拔网线。"
+      ],
+      [
+        "确认当前版本",
+        "重启后在「系统状态」页查看，版本号应为 {v}。"
+      ]
+    ],
+    "s3check": "我已把路由器升级到 {v}",
+    "s3need": "勾选确认后继续",
+    "s4t": "生成桥接包",
+    "s4l": "用同一份官方固件生成桥接包。原件只读，不会被修改。",
+    "src": "官方固件",
+    "verified": "已核验",
+    "outFile": "保存到",
+    "change": "更改…",
+    "gen": "生成桥接固件",
+    "genFine": "不会覆盖已有文件；输出后会再完整核验一遍。",
+    "noFileT": "还没有确认官方固件",
+    "noFileP": "先在第 2 步拖入并确认官方固件，这里会自动带过来。",
+    "goStep2": "去第 2 步",
+    "generating": "正在生成桥接包…",
+    "verifying": "正在完整核验输出文件…",
+    "noClose": "处理中请不要关闭窗口",
+    "doneT": "桥接包已生成，完整核验通过",
+    "doneS": "下一步把它上传到路由器官方后台。",
+    "kOut": "输出文件",
+    "copyPath": "复制路径",
+    "noUpgrade": "安装完成后，请尽量不要再升级路由器系统。",
+    "s5t": "刷入桥接包",
+    "s5l": "和第 3 步一样，通过官方后台的固件升级入口上传，只是这次选择桥接包。",
+    "s5steps": [
+      [
+        "再次进入固件升级页面",
+        "登录路由器管理后台，打开「固件升级」。"
+      ],
+      [
+        "选择桥接包并上传",
+        "选择 {f}。"
+      ],
+      [
+        "等待路由器重启",
+        "期间不要断电。重启后路由器会进入 BootBridge 维护模式。"
+      ],
+      [
+        "用网线连接电脑",
+        "把电脑接到路由器 LAN 口，电脑会自动获取 192.168.10.x 地址。"
+      ]
+    ],
+    "s5info": "维护模式不提供上网功能，这是正常的。",
+    "s6t": "在维护页安装 U-Boot",
+    "s6l": "最后一步在浏览器里完成。工具这里只提供指引。",
+    "maint": "维护页地址",
+    "s6steps": [
+      [
+        "打开维护页",
+        "用浏览器访问下面的地址。"
+      ],
+      [
+        "先下载备份",
+        "备份包含设备敏感信息，请妥善保存，不要公开分享。"
+      ],
+      [
+        "检查通过后点击「安装」",
+        "等待完成提示，期间不要断电。"
+      ],
+      [
+        "需要恢复时",
+        "可以在维护页选择「返回原厂系统」。"
+      ]
+    ],
+    "s6backup": "<b>先备份，再安装。</b>备份是出问题时恢复的唯一依据。",
+    "faqQ": "维护页显示“暂不可安装”？",
+    "faqA": "最常见的原因是路由器没有先升级到 {v}。可以按下面的顺序处理：",
+    "faqSteps": [
+      "在维护页选择「返回原厂系统」",
+      "回到第 3 步，升级到指定版本",
+      "重新上传桥接包（第 5 步）"
+    ],
+    "copied": "已复制",
+    "opened": "已在浏览器打开",
+    "mLang": "语言",
+    "mTheme": "外观",
+    "themeAuto": "跟随系统",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "mUpdate": "更新",
+    "offlineUpd": "工具和规则不会联网自动更新。官方固件可在第 2 步直接下载，并按指定的 SHA-256 校验。",
+    "newVer": "新版本 0.4.0 可用",
+    "viewNotes": "更新内容",
+    "updNow": "立即更新",
+    "uTool": "工具版本",
+    "uRules": "离线规则",
+    "uFw": "官方固件下载",
+    "uAuto": "自动检查更新",
+    "uAutoS": "启动时检查，不会自动安装",
+    "uFwS": "在第 2 步直接下载并校验",
+    "check": "检查更新",
+    "latest": "已是最新",
+    "mDiag": "诊断",
+    "diagS": "出现问题时复制给开发者",
+    "mAbout": "关于",
+    "about": "BootBridge 桌面版 0.3.0 · 引擎 ABI v2\nGPL-2.0-or-later · 以普通用户权限运行",
+    "lang": "中文",
+    "autoSwitched": "已识别为 {m} 的官方固件，已自动切换机型。",
+    "notSupported": "暂未支持",
+    "readErrT": "无法读取这个文件",
+    "readErrS": "文件可能正在被占用，或已被移动。请关闭占用它的程序后重试。",
+    "pathErrT": "不支持这个位置的文件",
+    "pathErrS": "请把文件复制到本地磁盘的普通文件夹（例如「下载」）后再选择。",
+    "genFailT": "生成失败",
+    "retry": "重试",
+    "rulesBadT": "离线规则校验失败",
+    "rulesBadS": "请重新下载完整的 BootBridge 压缩包，并保持 BootBridge.rules.dat 与程序在同一文件夹。",
+    "noUrl": "也可以在 H3C 官网搜索「{m} {v}」手动下载。",
+    "saveTitle": "保存新桥接 BIN（不会覆盖已有文件）",
+    "oneFile": "一次只能选择一个文件",
+    "ambiguous": "此原件对应多个不同输出方案，离线目录未提供唯一合并包，已拒绝生成。",
+    "fetchNote": "这个版本没有公开下载链接。可以用路由器的 SN 向 H3C 官方查询下载地址，直接下载并校验。",
+    "fetchOpen": "联网获取",
+    "snLabel": "路由器 SN（机身底部标签，或管理后台「设备信息」）",
+    "snPrivacy": "SN 只发送给 H3C 官方服务器 magic.h3c.com，用于查询这台路由器的下载地址；BootBridge 不保存、不记录。",
+    "fetchGo": "查询并下载",
+    "fetchQuery": "正在向 H3C 官方查询下载地址…",
+    "fetchSave": "正在校验并保存…",
+    "fetchSaveTitle": "保存官方固件",
+    "needSn": "请输入正确的路由器 SN（6–30 位字母、数字或 -）",
+    "fetchFailT": "下载没有完成",
+    "fetchFailHint": "未完成的下载不会留下文件。可以重试，或手动下载后拖到下方。",
+    "eNet": "无法连接到 H3C 服务器。请检查网络或代理设置后重试。",
+    "eTls": "无法建立安全连接。Windows 7 需要先安装更新 KB3140245（启用 TLS 1.2）；也可以手动下载。",
+    "eTimeout": "连接超时，网络可能较慢或不稳定。请稍后重试。",
+    "eHttp": "服务器拒绝了请求（{f}）。下载地址可能已过期，请重试。",
+    "eRejected": "H3C 没有为这台路由器返回下载地址（retCode {f}）。请核对 SN 是否填写正确。",
+    "eOther": "H3C 现在提供的是 {f}，不是本向导审核过的 {v}，因此没有下载。请等待 BootBridge 更新。",
+    "eBad": "服务器的回复不符合预期格式，已停止。",
+    "eUrl": "服务器给出的下载地址不在允许的官方地址范围内，已停止。",
+    "eSize": "下载的大小与指定版本不一致，已丢弃。",
+    "eHash": "下载内容的 SHA-256 与指定版本不一致，已丢弃。",
+    "eFile": "无法写入保存位置。请换一个本地文件夹（例如「下载」）后重试。",
+    "fetchCancelled": "已取消下载",
+    "fetchDone": "已下载并校验：{f}"
+  },
+  "en": {
+    "edition": "Desktop",
+    "title": "BootBridge",
+    "steps": [
+      [
+        "Choose model",
+        "Confirm your router"
+      ],
+      [
+        "Get firmware",
+        "Required version"
+      ],
+      [
+        "Upgrade router",
+        "Install the official version"
+      ],
+      [
+        "Build bridge",
+        "From the official file"
+      ],
+      [
+        "Flash bridge",
+        "Upload via router admin"
+      ],
+      [
+        "Install U-Boot",
+        "On the maintenance page"
+      ]
+    ],
+    "stepOf": "Step {n} of 6",
+    "prev": "Back",
+    "next": "Next",
+    "finish": "Done",
+    "rulesOk": "Offline rules verified",
+    "rulesOff": "Offline",
+    "rulesLatest": "Up to date",
+    "version": "Version 0.3.0",
+    "update": "Update available",
+    "settings": "Settings & About",
+    "s1t": "Choose your router model",
+    "s1l": "Each model needs a specific official firmware version. Download links and instructions will follow your choice.",
+    "needVer": "Requires official {v}",
+    "s1fine": "The bridge is always matched by file fingerprint. This choice only changes which links and instructions you see.",
+    "s2t": "Download the required official firmware",
+    "s2l": "{m} must first be upgraded to the version below. Download it here, or drop a file you already have to check it.",
+    "target": "Required official firmware",
+    "kVer": "Version",
+    "kSize": "File size",
+    "kSha": "SHA-256",
+    "kSrc": "Official page",
+    "openBrowser": "Open in browser",
+    "copyLink": "Copy link",
+    "directDl": "Download and verify",
+    "dropB": "Drop the official firmware BIN here",
+    "dropS": "or <u>browse for a file</u>",
+    "dropN": "Read-only. The original file is never modified.",
+    "hashing": "Verifying SHA-256…",
+    "downloading": "Downloading official firmware…",
+    "cancel": "Cancel",
+    "dlSrc": "From H3C's official server, verified automatically",
+    "okTitle": "Confirmed: official {m} firmware {v}",
+    "okSub": "The file is intact. Use it to upgrade the router; it will also be used in step 4.",
+    "another": "Choose another file",
+    "sameAs": "Size and SHA-256 match the required version",
+    "copyDiag": "Copy diagnostics",
+    "badTitle": "This file is not supported",
+    "badSub": "It may be a different version or an incomplete download. Please download the required version above.",
+    "s3t": "Upgrade the router to the required version",
+    "s3l": "Use the verified official file to run a normal upgrade from the router's own admin page.",
+    "s3warn": "<b>Upgrade to {v} first.</b> Otherwise the maintenance page will show \"Not installable\" after flashing the bridge.",
+    "s3steps": [
+      [
+        "Sign in to the router admin page",
+        "Open the router's admin address in a browser and sign in."
+      ],
+      [
+        "Open the firmware upgrade page",
+        "Usually under System → Firmware Upgrade. Menu names vary by model."
+      ],
+      [
+        "Upload the official file and wait",
+        "Choose the file verified in step 2. Do not power off during the upgrade."
+      ],
+      [
+        "Check the current version",
+        "After reboot, the status page should show {v}."
+      ]
+    ],
+    "s3check": "My router is now on {v}",
+    "s3need": "Confirm to continue",
+    "s4t": "Build the bridge package",
+    "s4l": "Build the bridge from the same official file. The original stays read-only.",
+    "src": "Official file",
+    "verified": "Verified",
+    "outFile": "Save to",
+    "change": "Change…",
+    "gen": "Build bridge firmware",
+    "genFine": "Never overwrites existing files. The output is fully verified after writing.",
+    "noFileT": "No official firmware confirmed yet",
+    "noFileP": "Drop and confirm the official file in step 2. It will carry over here.",
+    "goStep2": "Go to step 2",
+    "generating": "Building bridge package…",
+    "verifying": "Verifying the output file…",
+    "noClose": "Please keep this window open",
+    "doneT": "Bridge package built and verified",
+    "doneS": "Next, upload it from the router's admin page.",
+    "kOut": "Output",
+    "copyPath": "Copy path",
+    "noUpgrade": "After installation, avoid upgrading the router system where possible.",
+    "s5t": "Flash the bridge package",
+    "s5l": "Same as step 3: use the firmware upgrade page, but choose the bridge package this time.",
+    "s5steps": [
+      [
+        "Open the firmware upgrade page again",
+        "Sign in to the router admin page and open Firmware Upgrade."
+      ],
+      [
+        "Choose the bridge package and upload",
+        "Choose {f}."
+      ],
+      [
+        "Wait for the reboot",
+        "Do not power off. The router restarts into BootBridge maintenance mode."
+      ],
+      [
+        "Connect with a cable",
+        "Plug the computer into a LAN port. It will receive a 192.168.10.x address."
+      ]
+    ],
+    "s5info": "Maintenance mode has no internet access. This is expected.",
+    "s6t": "Install U-Boot on the maintenance page",
+    "s6l": "The last step happens in your browser. This tool only guides you.",
+    "maint": "Maintenance page",
+    "s6steps": [
+      [
+        "Open the maintenance page",
+        "Visit the address below in your browser."
+      ],
+      [
+        "Download a backup first",
+        "The backup contains sensitive device data. Keep it private."
+      ],
+      [
+        "Click Install once all checks pass",
+        "Wait for completion. Do not power off."
+      ],
+      [
+        "If you need to restore",
+        "Choose 'Return to OEM system' on the maintenance page."
+      ]
+    ],
+    "s6backup": "<b>Back up before installing.</b> The backup is your only way to recover.",
+    "faqQ": "Maintenance page says \"Not installable\"?",
+    "faqA": "Most often the router was not upgraded to {v} first. Try this:",
+    "faqSteps": [
+      "Choose 'Return to OEM system' on the maintenance page",
+      "Go back to step 3 and upgrade to the required version",
+      "Upload the bridge package again (step 5)"
+    ],
+    "copied": "Copied",
+    "opened": "Opened in browser",
+    "mLang": "Language",
+    "mTheme": "Appearance",
+    "themeAuto": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "mUpdate": "Updates",
+    "offlineUpd": "The tool and its rules never update themselves online. Official firmware can be downloaded in step 2 and checked against the pinned SHA-256.",
+    "newVer": "Version 0.4.0 available",
+    "viewNotes": "What's new",
+    "updNow": "Update",
+    "uTool": "Tool version",
+    "uRules": "Offline rules",
+    "uFw": "Official firmware download",
+    "uAuto": "Check automatically",
+    "uAutoS": "Checks at startup, never installs on its own",
+    "uFwS": "Download and verify in step 2",
+    "check": "Check now",
+    "latest": "Up to date",
+    "mDiag": "Diagnostics",
+    "diagS": "Copy and send to the developer when something goes wrong",
+    "mAbout": "About",
+    "about": "BootBridge Desktop 0.3.0 · Engine ABI v2\nGPL-2.0-or-later · Runs with standard user rights",
+    "lang": "English",
+    "autoSwitched": "Recognized as official firmware for {m}. Model switched automatically.",
+    "notSupported": "Not supported yet",
+    "readErrT": "Can't read this file",
+    "readErrS": "The file may be in use or was moved. Close any program using it and try again.",
+    "pathErrT": "Files in this location aren't supported",
+    "pathErrS": "Copy the file to a regular local folder (such as Downloads) and choose it again.",
+    "genFailT": "Build failed",
+    "retry": "Try again",
+    "rulesBadT": "Offline rules failed verification",
+    "rulesBadS": "Re-download the complete BootBridge package and keep BootBridge.rules.dat in the same folder as the program.",
+    "noUrl": "You can also search for \"{m} {v}\" on the H3C website and download it manually.",
+    "saveTitle": "Save new bridge BIN (existing files are never overwritten)",
+    "oneFile": "Choose one file at a time",
+    "ambiguous": "This file maps to more than one output, and the offline catalog has no single combined package. Build refused.",
+    "fetchNote": "This version has no public download link. BootBridge can ask H3C for the official link using your router's SN, then download and verify it.",
+    "fetchOpen": "Get it online",
+    "snLabel": "Router SN (on the label under the router, or under Device info in the admin page)",
+    "snPrivacy": "The SN goes only to H3C's official server magic.h3c.com to look up this router's download link. BootBridge never stores or logs it.",
+    "fetchGo": "Look up and download",
+    "fetchQuery": "Asking H3C for the download link…",
+    "fetchSave": "Verifying and saving…",
+    "fetchSaveTitle": "Save official firmware",
+    "needSn": "Enter the router SN (6–30 letters, digits or -)",
+    "fetchFailT": "The download did not finish",
+    "fetchFailHint": "An unfinished download leaves no file behind. Try again, or download it manually and drop it below.",
+    "eNet": "Could not reach H3C's server. Check your network or proxy settings and try again.",
+    "eTls": "Could not set up a secure connection. Windows 7 needs update KB3140245 (TLS 1.2) first, or download it manually.",
+    "eTimeout": "The connection timed out; the network may be slow or unstable. Try again later.",
+    "eHttp": "The server refused the request ({f}). The link may have expired; try again.",
+    "eRejected": "H3C returned no download link for this router (retCode {f}). Check that the SN is correct.",
+    "eOther": "H3C now offers {f}, not {v} reviewed for this guide, so nothing was downloaded. Wait for a BootBridge update.",
+    "eBad": "The server's reply was not in the expected format, so BootBridge stopped.",
+    "eUrl": "The server gave a download address outside the allowed official host, so BootBridge stopped.",
+    "eSize": "The download size does not match the required version; it was discarded.",
+    "eHash": "The download's SHA-256 does not match the required version; it was discarded.",
+    "eFile": "Could not write to that location. Choose a local folder such as Downloads and try again.",
+    "fetchCancelled": "Download cancelled",
+    "fetchDone": "Downloaded and verified: {f}"
+  }
+}
