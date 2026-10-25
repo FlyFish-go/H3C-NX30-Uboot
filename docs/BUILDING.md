@@ -1,6 +1,6 @@
 # U-Boot 构建说明
 
-本页对应 `v0.1.0-pre.2`。仓库根目录的 `build-release.sh` 是 H3C 四类候选的构建入口，MBN 由 `release-tools/` 中独立实现的 Python 封装器生成，不需要高通的 `elftombn.py` / `mbn_tools.py`（未包含）。目录说明见[仓库结构](REPOSITORY-STRUCTURE.md)。
+本页对应 `v0.1.0-pre.3`。仓库根目录的 `build-release.sh` 是 H3C 四类候选的构建入口，MBN 由 `release-tools/` 中独立实现的 Python 封装器生成，不需要高通的 `elftombn.py` / `mbn_tools.py`（未包含）。目录说明见[仓库结构](REPOSITORY-STRUCTURE.md)。
 
 ## 准备环境
 
@@ -40,9 +40,13 @@ KCFLAGS="-ffile-prefix-map=$PWD/=/build/" \
 
 构建会输出 ELF、DTB、`appsbl.mbn`、`appsbl.partition.bin`、配置、来源记录和摘要清单。
 
+**RAM 救援版**：再加 `H3C_RAM_RESCUE=1`，同样的参数会构建出链接在 `0x49A20000`、启动后直接进入救援页的版本（`h3c-hw-<x>-ram-rescue.strip.elf`），只输出 ELF，不生成 MBN。它与同参数的 flash 版身份一致，供已安装的旧版 U-Boot 在网页终端用 `bootelf` 加载。
+
 ## 版本与字节一致性
 
-候选嵌入的来源修订号是 `b0383f96b3282b0aedbd9765464778a9cf596836`，即源码快照 SHA-256 的前 40 位，不是 git 提交号。快照的计算方法、去敏文件与构建适配见 [SOURCE-PROVENANCE.json](../release-metadata/uboot-v0.1.0-pre.2/SOURCE-PROVENANCE.json)。
+**pre.3**：候选嵌入的来源修订号是 git 提交号 `4d82fb64e0fa992c46301e31277bcf23f7fce3fb`。重建时需显式传入 `SOURCE_REVISION=<该提交号>`，`SOURCE_DATE_EPOCH` 保持默认；不传时构建入口会使用 pre.2 的旧标识，摘要不同。候选清单见 [pre.3 CANDIDATES.json](../release-metadata/uboot-v0.1.0-pre.3/CANDIDATES.json)。
+
+**pre.2**：候选嵌入的来源修订号是 `b0383f96b3282b0aedbd9765464778a9cf596836`，即源码快照 SHA-256 的前 40 位，不是 git 提交号。快照的计算方法、去敏文件与构建适配见 [SOURCE-PROVENANCE.json](../release-metadata/uboot-v0.1.0-pre.2/SOURCE-PROVENANCE.json)。
 
 6 个去敏文件**参与编译**。去敏把样机标识串换成中性标签 `BOOTBRIDGE-HW-D` 并统一宏名，因此用本仓库源码重建时得到的是中性版本；这与发布候选一致（候选中同样不含原样机串，已逐字节核对过 84 个候选、两个 EXE 与规则数据）。若用去敏前的私有源码重建，摘要必然不同。
 
