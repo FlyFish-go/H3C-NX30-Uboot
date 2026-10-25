@@ -266,7 +266,7 @@ def run():
         code, body, _ = dispatch(lib, "/firmware/layout", 1)
         obj = json.loads(body)
         assert code == 200 and obj["status"] == "ok" and obj["mode"] == "dual"
-        assert obj["write_supported"] is True and obj["ptable_write_supported"] is False
+        assert obj["write_supported"] is True and obj["ptable_write_supported"] is True
         assert [(p["name"],p["offset"],p["size"]) for p in obj["partitions"]] == [
             ("rootfs",0x900000,40*1024*1024),
             ("rootfs_1",0x3100000,40*1024*1024)]
@@ -362,10 +362,10 @@ def run():
         assert dispatch(lib,"/firmware/write",2,[("token",token),("target","rootfs_1"),("mode","dual")])[0] == 409
         assert lib.host_erase_count_get()==0
 
-        # Single layout exposes one rootfs and permits only that target; table writes stay unsupported.
+        # Single layout exposes one rootfs and permits only that target; tables are written from the PTABLE page.
         lib.host_reset(2)
         code, body, _ = dispatch(lib,"/firmware/layout",1)
-        obj=json.loads(body); assert code==200 and obj["mode"]=="single" and obj["ptable_write_supported"] is False
+        obj=json.loads(body); assert code==200 and obj["mode"]=="single" and obj["ptable_write_supported"] is True
         assert len(obj["partitions"])==1 and obj["partitions"][0]["name"]=="rootfs"
         assert dispatch(lib,"/firmware/validate",2,
                         [("firmware",bytes(ubi)),("target","rootfs_1"),("mode","single")])[0] == 409

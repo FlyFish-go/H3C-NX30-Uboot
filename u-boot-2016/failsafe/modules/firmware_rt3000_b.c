@@ -536,7 +536,7 @@ snprintf(fw_reply, sizeof(fw_reply),
          rt3_layout_mode_name(layout.mode));
 #else
 snprintf(fw_reply, sizeof(fw_reply),
-         "{\"status\":\"ok\",\"mode\":\"%s\",\"read_only\":false,\"write_supported\":true,\"ptable_write_supported\":false,\"partitions\":[",
+         "{\"status\":\"ok\",\"mode\":\"%s\",\"read_only\":false,\"write_supported\":true,\"ptable_write_supported\":true,\"partitions\":[",
          rt3_layout_mode_name(layout.mode));
 #endif
 	for (i = 0; i < layout.count; i++) {

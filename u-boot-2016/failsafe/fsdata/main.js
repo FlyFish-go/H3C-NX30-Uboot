@@ -8635,7 +8635,10 @@ const firmwareModeManager = (() => {
         if (!canWrite) {
             content.appendChild(textNode('p', isZh() ? '当前引导环境尚未开放固件写入。' : 'Firmware writing is not enabled in this bootloader.'));
         }
-        if (!singleActive && layout.ptable_write_supported === false) {
+        if (layout.ptable_write_supported === true) {
+            content.appendChild(textNode('p', ptableSwitchNote()));
+            content.appendChild(navigationButton(isZh() ? '打开 PTABLE 页面' : 'Open PTABLE page', '/ptable.html'));
+        } else if (!singleActive && layout.ptable_write_supported === false) {
             const ptableNote = isZh()
                 ? '当前版本暂未开放分区表写入。PTABLE 页面可查看，但不能在此转换布局。'
                 : 'Partition-table writing is not enabled in this version. The PTABLE page is view-only for this workflow; it cannot convert the layout.';
@@ -8643,6 +8646,12 @@ const firmwareModeManager = (() => {
             content.appendChild(navigationButton(isZh() ? '查看 PTABLE 页面' : 'View PTABLE page', '/ptable.html'));
         }
         addWriteWarnings(foot);
+    }
+
+    function ptableSwitchNote() {
+        return isZh()
+            ? '切换双系统 / 大分区布局请到 PTABLE 页面生成并写入分区表：先在 Flash Backup 导出 rootfs 和 rootfs_1，写入后重启，再写入系统。'
+            : 'To switch between the dual and big-partition layouts, generate and write the table on the PTABLE page: export rootfs and rootfs_1 from Flash Backup first, reboot after writing, then write a system.';
     }
 
     function validPartition(part) {
@@ -8679,7 +8688,10 @@ const firmwareModeManager = (() => {
     function renderGate(title, reason, layout) {
         const { content, foot } = frame(title, isZh() ? '写入目标仅来自当前活动分区表。' : 'Targets are derived from the active partition table.');
         content.appendChild(textNode('p', reason));
-        if (layout && layout.ptable_write_supported === false) {
+        if (layout && layout.ptable_write_supported === true) {
+            content.appendChild(textNode('p', ptableSwitchNote()));
+            content.appendChild(navigationButton(isZh() ? '打开 PTABLE 页面' : 'Open PTABLE page', '/ptable.html'));
+        } else if (layout && layout.ptable_write_supported === false) {
             content.appendChild(textNode('p', isZh()
                 ? '当前版本暂未开放分区表写入；此页面不会创建或启用新布局。'
                 : 'Partition-table writing is not enabled in this version. This page cannot create or activate a new layout.'));

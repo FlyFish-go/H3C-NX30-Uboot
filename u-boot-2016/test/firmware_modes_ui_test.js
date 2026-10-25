@@ -105,6 +105,15 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
     assert(c.context.window.location.href === '/firmware-dual.html',
         'mode button must navigate to the selected same-origin page');
 
+    // A bootloader that writes tables points to the PTABLE page instead.
+    c = await bootContext({ layout: { ...baseLayout('dual'), ptable_write_supported: true } });
+    await c.context.testFirmwareModes.initLanding();
+    assert(c.elements().bFirmwareContent.textContent.includes('generate and write the table on the PTABLE page'));
+    assert(!c.elements().bFirmwareContent.textContent.includes('not enabled'));
+    c = await bootContext({ layout: { ...baseLayout('dual'), ptable_write_supported: true } });
+    await c.context.testFirmwareModes.initMode('single');
+    assert(c.elements().bFirmwareContent.textContent.includes('generate and write the table on the PTABLE page'));
+
     c = await bootContext({ layout: baseLayout('dual') });
     await c.context.testFirmwareModes.initMode('single');
     assert(c.elements().bFirmwareContent.textContent.includes('First install and activate a compatible large-rootfs table'));
