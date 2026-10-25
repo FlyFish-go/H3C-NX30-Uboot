@@ -102,7 +102,8 @@ static const struct rt3_partition *rt3_layout_find(const struct rt3_layout *l,co
 static void slots_rt3000_b_invalidate_cache(void){host_slot_invalidates++;}
 static struct httpd_form_value *httpd_request_find_value(struct httpd_request *r,const char *n){unsigned i;for(i=0;i<r->form.count;i++)if(!strcmp(r->form.values[i].name,n))return &r->form.values[i];return NULL;}
 static void httpd_register_uri_handler(struct httpd_instance *i,const char *p,host_uri_cb cb,void *arg){(void)i;(void)arg;strlcpy(host_uris[host_uri_count].path,p,sizeof(host_uris[host_uri_count].path));host_uris[host_uri_count++].cb=cb;}
-static int nand_block_isbad(struct mtd_info *m,u64 off){(void)m;(void)off;return 0;}
+static u64 host_bad_off=~(u64)0;
+static int nand_block_isbad(struct mtd_info *m,u64 off){(void)m;return off==host_bad_off;}
 static int mtd_erase(struct mtd_info *m,struct erase_info *e){if(!host_window_open||!(m->flags&MTD_WRITEABLE)||e->addr<host_erase_min||e->addr+e->len>host_erase_max)return -EROFS;memset(host_flash+e->addr,0xff,e->len);if(e->addr<host_touched_min)host_touched_min=e->addr;if(e->addr+e->len>host_touched_max)host_touched_max=e->addr+e->len;host_erase_count++;return 0;}
 static void *memchr_inv(const void *s,int c,size_t n){const u8 *p=s;size_t i;for(i=0;i<n;i++)if(p[i]!=(u8)c)return (void *)(p+i);return NULL;}
 static int mtd_write(struct mtd_info *m,u64 off,size_t n,size_t *done,const u8 *p){size_t i;if(!host_window_open||!(m->flags&MTD_WRITEABLE)||off<host_write_min||off+n>host_write_max)return -EROFS;for(i=0;i+m->writesize<=n;i+=m->writesize)if(!memchr_inv(p+i,0xff,m->writesize))host_ff_page_writes++;memcpy(host_flash+off,p,n);if(off<host_touched_min)host_touched_min=off;if(off+n>host_touched_max)host_touched_max=off+n;*done=n;host_write_count++;return 0;}
@@ -116,6 +117,7 @@ extern int fdt_check_header(const void *); static u32 fdt_totalsize(const void *
 WRAPPERS = r"""
 struct host_field { const char *name; const unsigned char *data; size_t size; };
 void host_reset(int mode) {
+    host_bad_off=~(u64)0;
     memset(&host_layout,0,sizeof(host_layout)); host_layout.mode=mode;
     if(mode==RT3_LAYOUT_DUAL){host_layout.count=2;strlcpy(host_layout.parts[0].name,"rootfs",16);host_layout.parts[0].display_index=16;host_layout.parts[0].offset=0x900000;host_layout.parts[0].size=40ULL*1024*1024;strlcpy(host_layout.parts[1].name,"rootfs_1",16);host_layout.parts[1].display_index=17;host_layout.parts[1].offset=0x3100000;host_layout.parts[1].size=40ULL*1024*1024;}
     else if(mode==RT3_LAYOUT_SINGLE){host_layout.count=1;strlcpy(host_layout.parts[0].name,"rootfs",16);host_layout.parts[0].display_index=16;host_layout.parts[0].offset=0x900000;host_layout.parts[0].size=80ULL*1024*1024;}
@@ -141,6 +143,9 @@ unsigned int host_reserve_margin_get(void){return fw_reserve_margin(&nand_info[0
 unsigned int host_erase_count_get(void){return host_erase_count;}
 unsigned int host_write_count_get(void){return host_write_count;}
 unsigned int host_ff_page_writes_get(void){return host_ff_page_writes;}
+void host_set_bad_block(u64 off){host_bad_off=off;}
+int host_flash_equals(u64 off,const u8 *p,size_t n){return off+n<=host_flash_size&&!memcmp(host_flash+off,p,n);}
+int host_flash_all_ff(u64 off,size_t n){size_t i;for(i=0;i<n;i++)if(host_flash[off+i]!=0xff)return 0;return 1;}
 unsigned int host_read_count_get(void){return host_read_count;}
 unsigned int host_window_closes_get(void){return host_window_closes;}
 unsigned int host_slot_invalidates_get(void){return host_slot_invalidates;}
@@ -262,7 +267,7 @@ def run():
         lib = build_test_lib(td)
         lib.host_reset(1)
         evidence["reserve_margin_pebs"] = int(lib.host_reserve_margin_get())
-        assert evidence["reserve_margin_pebs"] == 24
+        assert evidence["reserve_margin_pebs"] == 4
         code, body, _ = dispatch(lib, "/firmware/layout", 1)
         obj = json.loads(body)
         assert code == 200 and obj["status"] == "ok" and obj["mode"] == "dual"
@@ -412,6 +417,31 @@ def run():
         erase_before=lib.host_erase_count_get()
         assert dispatch(lib,"/firmware/write",2,[("token",token),("target","rootfs_1"),("mode","dual")])[0]==409
         assert lib.host_erase_count_get()==erase_before
+
+        # A full-partition image (padded with free, EC-only PEBs to 320) still fits a
+        # target with one bad block: one free PEB is dropped and the bad block is skipped.
+        PEB = 131072
+        free_peb = bytes(ubi[:64]) + b"\xff" * (PEB - 64)
+        full = bytes(ubi) + free_peb * (320 - len(ubi) // PEB)
+        bad = 0x3100000 + 5 * PEB
+        lib.host_reset(1); lib.host_clear_target(b"rootfs_1")
+        lib.host_set_bad_block.argtypes = [ctypes.c_uint64]
+        lib.host_set_bad_block(bad)
+        code, body, keep = dispatch(lib, "/firmware/validate", 2,
+                                    [("firmware", full), ("target", "rootfs_1"), ("mode", "dual")])
+        assert code == 200, body
+        token = token_from(body)
+        code, body, keep2 = dispatch(lib, "/firmware/write", 2,
+                                     [("token", token), ("target", "rootfs_1"), ("mode", "dual")])
+        assert code == 200 and json.loads(body)["verified"] is True, body
+        assert lib.host_erase_count_get() == 319
+        lib.host_flash_equals.argtypes = [ctypes.c_uint64, ctypes.c_char_p, ctypes.c_size_t]
+        lib.host_flash_all_ff.argtypes = [ctypes.c_uint64, ctypes.c_size_t]
+        assert lib.host_flash_equals(0x3100000, full[:5 * PEB], 5 * PEB)
+        assert lib.host_flash_all_ff(bad, PEB), "bad block must not be touched"
+        assert lib.host_flash_equals(bad + PEB, full[5 * PEB:319 * PEB], 314 * PEB)
+        assert lib.host_ff_page_writes_get() == 0
+        evidence["mock_full_image_one_bad_block"] = {"http_status": code, "erase_blocks": int(lib.host_erase_count_get())}
 
         # A readback mismatch returns failure, consumes token, and still closes gate/invalidates cache.
         lib.host_reset(1); lib.host_clear_target(b"rootfs_1"); lib.host_fail_readback_at(1)

@@ -85,6 +85,10 @@ struct backup_session {
 
 	struct spi_flash *spi;
 	nand_info_t *nand;
+
+	/* Full NAND partition backup: good blocks only, never past the end. */
+	bool skip_bad;
+	u64 phys;
 };
 
 static void str_sanitize_component(char *s, char sep)
@@ -365,6 +369,30 @@ static void backup_handler(enum httpd_uri_handler_status status,
 		if (start_offset + total_size > st->target_size)
 			goto bad_range;
 
+		/*
+		 * nand_read_skip_bad() would step over a bad block and read into the
+		 * next partition. Send only this partition's good blocks, so a UBI
+		 * backup can be written back to the same partition.
+		 */
+		if (!strcmp(mode->data, "full") && !strcasecmp(storage_sel, "smem") &&
+		    !(st->smem.flash_type == SMEM_BOOT_SPI_FLASH && !st->smem.which_flash)) {
+			nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+			u64 off;
+
+			if (nand->erasesize && !(st->smem.start % nand->erasesize) &&
+			    !(st->smem.size % nand->erasesize)) {
+				st->skip_bad = true;
+				total_size = 0;
+				for (off = 0; off < st->smem.size; off += nand->erasesize) {
+					ret = nand_block_isbad(nand, st->smem.start + off);
+					if (ret < 0)
+						goto bad_target;
+					if (!ret)
+						total_size += nand->erasesize;
+				}
+			}
+		}
+
 		st->start = start_offset;
 		st->total = total_size;
 		st->cur = 0;
@@ -423,7 +451,26 @@ static void backup_handler(enum httpd_uri_handler_status status,
 
 		to_read = (size_t)min_t(u64, remain, st->buf_size);
 
-		if (st->src == BACKUP_SRC_SMEM) {
+		if (st->skip_bad) {
+			nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+			size_t len;
+
+			while (!(st->phys % nand->erasesize) && st->phys < st->smem.size &&
+			       nand_block_isbad(nand, st->smem.start + st->phys))
+				st->phys += nand->erasesize;
+			if (st->phys >= st->smem.size)
+				goto io_err;
+			to_read = min_t(size_t, to_read,
+					nand->erasesize - st->phys % nand->erasesize);
+			len = to_read;
+			/* Keep going past uncorrectable pages: a backup of a damaged
+			 * partition is still worth having, and restore re-validates it. */
+			ret = nand_read(nand, st->smem.start + st->phys, &len, st->buf);
+			if ((ret && ret != -EUCLEAN && ret != -EBADMSG) || len != to_read)
+				goto io_err;
+			st->phys += to_read;
+			got = to_read;
+		} else if (st->src == BACKUP_SRC_SMEM) {
 			size_t readsz = 0;
 
 			ret = smem_read_data(&st->smem,

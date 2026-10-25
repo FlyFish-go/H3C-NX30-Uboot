@@ -32,8 +32,7 @@
 #define RT3_UBI_VTBL_REC_SIZE   172U
 #define RT3_UBI_VTBL_SIZE       (128U * RT3_UBI_VTBL_REC_SIZE)
 #define RT3_UBI_LAYOUT_ID       (0x7fffffffU - 4096U)
-#define RT3_UBI_FREE_MARGIN     24U /* min: 20 BEB + 2 layout + WL/EBA */
-#define RT3_UBI_BEB_LIMIT       20U /* matches CONFIG_MTD_UBI_BEB_LIMIT */
+#define RT3_UBI_MIN_RESERVE     4U /* 2 layout + WL + EBA PEBs */
 #define RT3_FIT_OFFSET          160U
 
 struct rt3_fw_pending {
@@ -473,16 +472,18 @@ static int fw_extract_input(const u8 *file, size_t file_size,
 	return 0;
 }
 
+/*
+ * Match what UBI needs to attach: the volumes plus its two layout PEBs and
+ * the WL and EBA reserves. When good PEBs run short UBI shrinks the bad-PEB
+ * reserve with a warning instead of refusing, so demanding the full reserve
+ * here refused images that UBI and the flash command accept, such as a full
+ * backup of the partition.
+ */
 static u32 fw_reserve_margin(const struct mtd_info *mtd)
 {
-	u32 chip_pebs, bad_block_reserve, margin;
 	if (!mtd || !mtd->erasesize)
 		return 0xffffffffU;
-	/* UBI computes BEB limit from the whole physical chip, not this MTD. */
-	chip_pebs = mtd->size / mtd->erasesize;
-	bad_block_reserve = (chip_pebs * RT3_UBI_BEB_LIMIT + 1023) / 1024;
-	margin = bad_block_reserve + 4; /* two layout PEBs plus WL and EBA slack */
-	return margin > RT3_UBI_FREE_MARGIN ? margin : RT3_UBI_FREE_MARGIN;
+	return RT3_UBI_MIN_RESERVE;
 }
 
 static int fw_target_geometry(const struct rt3_partition *part,
@@ -733,9 +734,32 @@ static int fw_write_image(struct mtd_info *mtd,
 	};
 	struct rt3_fw_io io = io_template;
 	struct fw_mtd_io ctx;
+	u32 good = 0, pebs, i;
+	u64 off;
+	u8 *peb;
 	if (ubi_size > 0xffffffffU || ubi_size % mtd->erasesize ||
 	    ubi_size > part->size || sum->image_pebs != ubi_size / mtd->erasesize)
 		return -EINVAL;
+	/*
+	 * A full backup holds one PEB per partition block. Where the target has
+	 * bad blocks, drop free PEBs (EC header only) until the image fits; UBI
+	 * does not care where its PEBs sit. The staged upload is consumed by this
+	 * write, so it is compacted in place.
+	 */
+	for (off = part->offset; off < part->offset + part->size; off += mtd->erasesize) {
+		int bad = nand_block_isbad(mtd, off);
+		if (bad < 0)
+			return bad;
+		good += !bad;
+	}
+	pebs = sum->image_pebs;
+	for (i = pebs; i-- > 0 && pebs > good;) {
+		peb = (u8 *)ubi + (size_t)i * mtd->erasesize;
+		if (!fw_all_value(peb + RT3_UBI_VID_OFFSET, UBI_VID_HDR_SIZE, 0xff))
+			continue;
+		memmove(peb, peb + mtd->erasesize, (size_t)(pebs - i - 1) * mtd->erasesize);
+		pebs--;
+	}
 	if (!rt3_verify_buf) {
 		rt3_verify_buf = memalign(ARCH_DMA_MINALIGN, mtd->erasesize);
 		if (!rt3_verify_buf) return -ENOMEM;
@@ -748,8 +772,8 @@ static int fw_write_image(struct mtd_info *mtd,
 	ctx.write_buf = rt3_write_buf;
 	io.ctx = &ctx;
 	return rt3_fw_core_transaction(&io, part->offset, part->size, ubi,
-				       (u32)ubi_size, mtd->erasesize,
-				       sum->image_pebs, sum->reserved_pebs,
+				       pebs * mtd->erasesize, mtd->erasesize,
+				       pebs, sum->reserved_pebs,
 				       fw_reserve_margin(mtd), rt3_good_blocks,
 				       ARRAY_SIZE(rt3_good_blocks), rt3_verify_buf);
 }
