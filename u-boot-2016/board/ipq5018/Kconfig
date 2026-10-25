@@ -273,6 +273,16 @@ config H3C_DEFAULT_WEB
       Keep power-on at the common web UI while preserving the selected
       default system for explicit boot. Does not save environment variables.
 
+config H3C_RAM_RESCUE
+    bool "RAM-run rescue image loaded by an installed U-Boot"
+    depends on H3C_RELEASE_SYSTEM_DEFAULT
+    default n
+    help
+      Link at 0x49A20000 so an installed U-Boot at 0x4A920000 can load this
+      ELF from its rescue page and start it with bootelf. Power-on always
+      enters the rescue page. Writes keep the normal checks; the build
+      identity is unchanged, so the matching flash build can be installed.
+
 config H3C_NAND_PROFILE_ID
     string "Source-bound OEM NAND profile ID"
     depends on H3C_IPQ5018_COMMON

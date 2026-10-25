@@ -100,14 +100,22 @@ if [[ -n "${H3C_NAND_PROFILE_ID:-}" ]]; then
   sed -i '/^CONFIG_H3C_NAND_PROFILE_ID=/d; /^CONFIG_H3C_NAND_SOURCE_MASK=/d; /^CONFIG_H3C_NAND_LOAD_ECC_BITS=/d; /^CONFIG_H3C_NAND_STORAGE_ECC_BITS=/d' "$build/.config"
   printf 'CONFIG_H3C_NAND_PROFILE_ID="%s"\nCONFIG_H3C_NAND_SOURCE_MASK=0x%x\nCONFIG_H3C_NAND_LOAD_ECC_BITS=%d\nCONFIG_H3C_NAND_STORAGE_ECC_BITS=%d\n' "$H3C_NAND_PROFILE_ID" "$H3C_NAND_SOURCE_MASK" "$H3C_NAND_LOAD_ECC_BITS" "$H3C_NAND_STORAGE_ECC_BITS" >> "$build/.config"
 fi
+# A RAM rescue image runs below an installed U-Boot and is loaded with bootelf.
+text_base=0x4A920000
+if [[ "${H3C_RAM_RESCUE:-0}" == 1 ]]; then
+  text_base=0x49A20000
+  sed -i '/^# CONFIG_H3C_RAM_RESCUE is not set$/d; /^CONFIG_H3C_RAM_RESCUE=/d' "$build/.config"
+  printf '%s\n' 'CONFIG_H3C_RAM_RESCUE=y' >> "$build/.config"
+fi
 make "${host_make_args[@]}" -C "$uboot" O="$build" olddefconfig
+[[ "${H3C_RAM_RESCUE:-0}" != 1 ]] || grep -Fxq 'CONFIG_H3C_RAM_RESCUE=y' "$build/.config"
 grep -Fxq 'CONFIG_H3C_RELEASE_SYSTEM_DEFAULT=y' "$build/.config"
 grep -Fxq "$target=y" "$build/.config"
 grep -Fxq 'CONFIG_H3C_IPQ5018_COMMON=y' "$build/.config"
 grep -Fq "CONFIG_DEFAULT_DEVICE_TREE=\"$name\"" "$build/.config"
 grep -Fq "$name" "$uboot/arch/arm/dts/Makefile"
 
-make "${host_make_args[@]}" -C "$uboot" O="$build" -j1 LDFLAGS_u-boot="-pie --gc-sections --nmagic -Ttext 0x4A920000"
+make "${host_make_args[@]}" -C "$uboot" O="$build" -j1 LDFLAGS_u-boot="-pie --gc-sections --nmagic -Ttext $text_base"
 if [[ "$board" == D ]]; then
   for symbol in h3c_release_autoboot h3c_boot_recovery h3c_boot_decide h3c_boot_sample_reset h3c_boot_load_failed; do
     "${CROSS_COMPILE}nm" "$build/u-boot" | awk -v s="$symbol" '$3 == s { found=1 } END { exit !found }'
@@ -116,14 +124,14 @@ fi
 
 cp -- "$build/dtb_combined.bin" "$out/dtb_combined.bin"
 cp -- "$build/dtb_combined.bin.gz" "$out/dtb_combined.bin.gz"
-python3 - "$out/dtb_combined.bin" "$out/$name.packed.dtb" "$machid" <<'PYDTB'
+python3 - "$out/dtb_combined.bin" "$out/$name.packed.dtb" "$machid" "$text_base" <<'PYDTB'
 import struct, sys
 from pathlib import Path
 blob = Path(sys.argv[1]).read_bytes()
 if len(blob) < 12 or struct.unpack_from("<I", blob, 0)[0] != 1:
     raise SystemExit("combined DTB must contain exactly one table entry")
 machid, address = struct.unpack_from("<II", blob, 4)
-offset = address - 0x4A8E0000
+offset = address - (int(sys.argv[4], 0) - 0x40000)
 if machid != int(sys.argv[3], 0) or offset < 12 or offset + 40 > len(blob):
     raise SystemExit("combined DTB table has an invalid board entry")
 if struct.unpack_from(">I", blob, offset)[0] != 0xD00DFEED:
@@ -136,10 +144,16 @@ PYDTB
 
 label="${board,,}"
 stem="h3c-hw-$label-common-release"
+images=(appsbl.mbn appsbl.partition.bin)
+profile=release
+if [[ "${H3C_RAM_RESCUE:-0}" == 1 ]]; then
+  stem="h3c-hw-$label-ram-rescue"; images=(); profile=ram-rescue
+fi
 cp -- "$build/u-boot" "$out/$stem.elf"
 "${CROSS_COMPILE}strip" "$out/$stem.elf" -o "$out/$stem.strip.elf"
 cp -- "$build/.config" "$out/build.config"
-python3 "$packager" "$out/$stem.strip.elf" "$out/appsbl.mbn" \
+# The APPSBL packager only accepts the flash link address.
+[[ "$profile" == ram-rescue ]] || python3 "$packager" "$out/$stem.strip.elf" "$out/appsbl.mbn" \
   --partition "$out/appsbl.partition.bin" --board "$board"
 "${CROSS_COMPILE}gcc" --version > "$out/toolchain.txt"
 "${CROSS_COMPILE}ld" --version >> "$out/toolchain.txt"
@@ -152,10 +166,10 @@ cat > "$out/provenance.json" <<EOF
   "source_date_epoch": "$SOURCE_DATE_EPOCH",
   "source_tree_mode": "source snapshot identifier; no Git commit or hardware qualification implied",
   "board": "$board",
-  "profile": "release",
+  "profile": "$profile",
   "hardware_validation": "NOT_EXECUTED",
   "installation_status": "offline candidate only"
 }
 EOF
-(cd "$out" && sha256sum "$stem.elf" "$stem.strip.elf" "$name.packed.dtb" appsbl.mbn appsbl.partition.bin build.config toolchain.txt provenance.json > SHA256SUMS)
+(cd "$out" && sha256sum "$stem.elf" "$stem.strip.elf" "$name.packed.dtb" "${images[@]}" build.config toolchain.txt provenance.json > SHA256SUMS)
 echo "Offline candidate built. This does not establish hardware or installation qualification."
