@@ -50,7 +50,11 @@ $(OUT)/arm/bb_dhcp: runtime/boot/bb_dhcp.c
 	@mkdir -p $(OUT)/arm
 	$(ARM_CC) $(ARM_CFLAGS) -std=c99 -Wall -Wextra -Werror -o $@ $<
 
-arm: $(OUT)/arm/bb_oem_return $(OUT)/arm/bb_facts $(OUT)/arm/bbd $(OUT)/arm/bb_init $(OUT)/arm/bb_dhcp
+$(OUT)/arm/bb_keyd: runtime/bb_keyd_main.c
+	@mkdir -p $(OUT)/arm
+	$(ARM_CC) $(ARM_CFLAGS) -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -o $@ $<
+
+arm: $(OUT)/arm/bb_oem_return $(OUT)/arm/bb_facts $(OUT)/arm/bbd $(OUT)/arm/bb_init $(OUT)/arm/bb_dhcp $(OUT)/arm/bb_keyd
 
 clean:
 	rm -rf $(OUT)

@@ -51,7 +51,7 @@ OEM_LIBS = ["libc.so", "ld-musl-arm.so.1", "libgcc_s.so.1", "libubox.so", "librp
 APPLETS = ["sh", "ash", "cat", "mkdir", "mknod", "mount", "ifconfig", "brctl", "ip", "sleep",
            "readlink", "grep", "awk", "route", "ls", "dmesg", "reboot"]
 OUR_BINARIES = {"bbd": "usr/sbin/bbd", "bb_oem_return": "usr/sbin/bb-oem-return",
-                "bb_facts": "usr/sbin/bb-facts"}
+                "bb_facts": "usr/sbin/bb-facts", "bb_keyd": "usr/sbin/bb-keyd"}
 
 
 def sha(b, algo="sha256"):

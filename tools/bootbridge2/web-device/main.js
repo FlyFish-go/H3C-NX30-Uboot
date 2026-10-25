@@ -115,7 +115,7 @@
     if (last.code && !done && last.code !== "ok" && last.code !== "ready")
       notice("上次操作没有完成", last.message);
     if (!canReturn) $("note").textContent = "当前不能返回原厂：" + r.message;
-    else $("note").textContent = "随时可以返回原厂系统";
+    else $("note").textContent = "随时可以返回原厂系统，也可以长按路由器的 Mesh/WPS 键 3 秒";
     tech(s);
   }
 

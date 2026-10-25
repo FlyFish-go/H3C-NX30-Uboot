@@ -284,6 +284,9 @@ typedef struct {
 static char *const dhcp_argv[] = {
     "/usr/sbin/bridge-dhcp", "-i", "eth1", "-s", "192.168.10.1", NULL
 };
+static char *const keyd_argv[] = {
+    "/usr/sbin/bb-keyd", NULL
+};
 static char *const web_argv[] = {
     "/usr/sbin/bbd", "-b", "192.168.10.1", "-p", "80", "-w", "/www", NULL
 };
@@ -430,7 +433,8 @@ int main(int argc, char **argv) {
 
     child_job jobs[] = {
         {"bridge-dhcp", dhcp_argv, access(dhcp_argv[0], X_OK) == 0, 0, 0, {0, 0}},
-        {"bbd", web_argv, access(web_argv[0], X_OK) == 0, 0, 0, {0, 0}}
+        {"bbd", web_argv, access(web_argv[0], X_OK) == 0, 0, 0, {0, 0}},
+        {"bb-keyd", keyd_argv, access(keyd_argv[0], X_OK) == 0, 0, 0, {0, 0}}
     };
     if (!jobs[1].enabled) {
         logmsg("bridge-init: bbd missing; remaining alive without reboot");

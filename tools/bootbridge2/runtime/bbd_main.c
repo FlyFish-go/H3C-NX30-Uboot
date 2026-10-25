@@ -37,6 +37,7 @@
 #include <unistd.h>
 
 #define BACKUP_PATH "/tmp/bridge/backup.zip"
+#define BUSY_FLAG "/tmp/bridge/busy"	/* bb-keyd ignores the key while it exists */
 #define PACK_MAX (8u << 20)
 
 static const char *www = "/www";
@@ -568,33 +569,6 @@ static void handle(int fd)
 		serve_file(fd, "style.css", "text/css; charset=utf-8", NULL);
 	} else if (!strcmp(path, "/backup.zip") && !post) {
 		serve_backup(fd);
-	} else if (!strncmp(path, "/api/raw/", 9) && !post) {
-		/* diagnostics: /api/raw/<mtd index>/<hex offset>/<hex length>, read-only */
-		unsigned idx, off, len;
-		char dev[32];
-		uint8_t *data;
-		int rfd;
-
-		if (sscanf(path + 9, "%u/%x/%x", &idx, &off, &len) == 3 && len && len <= 0x40000 &&
-		    (data = malloc(len))) {
-			snprintf(dev, sizeof(dev), "/dev/mtd%u", idx);
-			rfd = open(dev, O_RDONLY | O_CLOEXEC);
-			ssize_t n = rfd >= 0 ? pread(rfd, data, len, off) : -1;
-			char err[64];
-
-			if (n == (ssize_t)len) {
-				respond(fd, 200, "application/octet-stream", NULL, data, len);
-			} else {
-				int e = errno;
-				snprintf(err, sizeof(err), "read %zd errno %d\n", n, e);
-				respond(fd, 500, "text/plain", NULL, err, strlen(err));
-			}
-			if (rfd >= 0)
-				close(rfd);
-			free(data);
-		} else {
-			respond(fd, 404, "text/plain", NULL, "bad raw request\n", 16);
-		}
 	} else if (!strcmp(path, "/api/pack.bin") && !post && S.pack_buf) {
 		/* the rule pack as read from flash, for diagnosing pack errors */
 		uint32_t rl, ll;
@@ -605,12 +579,21 @@ static void handle(int fd)
 	} else if (!strncmp(path, "/api/", 5)) {
 		const char *api = path + 5, *extra = NULL;
 
-		if (post && !strcmp(api, "backup"))
-			do_backup();
-		else if (post && !strcmp(api, "install"))
-			do_install();
-		else if (post && !strcmp(api, "return"))
-			do_return();
+		if (post && (!strcmp(api, "backup") || !strcmp(api, "install") || !strcmp(api, "return"))) {
+			int busy;
+
+			mkdir("/tmp/bridge", 0700);
+			busy = open(BUSY_FLAG, O_CREAT | O_WRONLY | O_CLOEXEC, 0600);
+			if (!strcmp(api, "backup"))
+				do_backup();
+			else if (!strcmp(api, "install"))
+				do_install();
+			else
+				do_return();
+			if (busy >= 0)
+				close(busy);
+			unlink(BUSY_FLAG);
+		}
 		else if (post && !strcmp(api, "reboot"))
 			set_result("reboot", "ok", "正在重启");
 		else if (!post && !strcmp(api, "diagnostics"))
