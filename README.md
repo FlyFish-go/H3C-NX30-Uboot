@@ -9,9 +9,9 @@
 > [!CAUTION]
 > **用以前版本的救援页「固件更新」刷过固件的设备，系统分区会逐渐出现无法纠正的 ECC 错误，严重时开机停在救援页、写入全被拒绝。** 请按 [U-Boot pre.3 说明](releases/uboot-v0.1.0-pre.3.md#从旧版升级)升级 U-Boot，然后再刷一次固件。
 
-**当前测试版：U-Boot v0.1.0-pre.5 与 BootBridge v0.2.0-pre.2（规则 BB2-R2，安装 pre.4），正在由测试人员上机测试，尚未取得整机验收结论。** 已装过本项目 U-Boot 的设备按 pre.5 说明升级；还是原厂系统的设备用 [BootBridge 网页版](https://flyfish-go.github.io/H3C-NX30-Uboot/)安装，再升级到 pre.5。
+**当前测试版：U-Boot v0.1.0-pre.5 与 BootBridge v0.2.0-pre.3（规则 BB2-R3），正在由测试人员上机测试，尚未取得整机验收结论。** 已装过本项目 U-Boot 的设备按 pre.5 说明升级；还是原厂系统的设备用 [BootBridge 网页版](https://flyfish-go.github.io/H3C-NX30-Uboot/)安装。
 
-[U-Boot pre.5 说明](releases/uboot-v0.1.0-pre.5.md) · [U-Boot pre.4 说明](releases/uboot-v0.1.0-pre.4.md) · [U-Boot pre.3 说明](releases/uboot-v0.1.0-pre.3.md) · [BootBridge v0.2.0-pre.2 说明](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/bootbridge-v0.2.0-pre.2) · [适配范围](docs/HARDWARE.md) · [验证记录](docs/VALIDATION.md) · [构建说明](docs/BUILDING.md) · [BootBridge](tools/bootbridge/README.md)
+[U-Boot pre.5 说明](releases/uboot-v0.1.0-pre.5.md) · [U-Boot pre.4 说明](releases/uboot-v0.1.0-pre.4.md) · [U-Boot pre.3 说明](releases/uboot-v0.1.0-pre.3.md) · [BootBridge v0.2.0-pre.3 说明](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/bootbridge-v0.2.0-pre.3) · [适配范围](docs/HARDWARE.md) · [验证记录](docs/VALIDATION.md) · [构建说明](docs/BUILDING.md) · [BootBridge](tools/bootbridge/README.md)
 
 ## 项目功能
 
