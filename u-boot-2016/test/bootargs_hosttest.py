@@ -13,7 +13,7 @@ HARNESS = r"""
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define CONFIG_SYS_CBSIZE 64
+#define CONFIG_SYS_CBSIZE 96
 #define CMD_RET_SUCCESS 0
 #define CMD_RET_FAILURE 1
 #define FIT_BOOTARGS_PROP "bootargs"
@@ -74,15 +74,23 @@ int main(void) {
     if (update_bootargs(NULL, 0, 0) != CMD_RET_FAILURE || setenv_calls != 0 ||
         strcmp(old_args, original)) abort();
 
-    /* A selected rootfs extent is reported to Linux by physical offset. */
+    /* A selected rootfs extent is reported to Linux by physical offset and size. */
     strcpy(old_args, original); strcpy(fs_args, "root=/dev/test");
     sfi->rootfs.offset = 0x3100000; sfi->rootfs.size = 0x2800000;
     setenv_calls = 0;
     if (update_bootargs(NULL, 0, 0) != CMD_RET_SUCCESS || setenv_calls != 1 ||
-        strcmp(old_args, "old-base=1 root=/dev/test rootwait h3c.boot_slot=0x3100000")) abort();
+        strcmp(old_args, "old-base=1 root=/dev/test rootwait h3c.boot_slot=0x3100000 h3c.boot_size=0x2800000")) abort();
 
-    /* No room for the slot argument fails without touching the environment. */
-    strcpy(old_args, original); strcpy(fs_args, "root=/dev/test-long-name-xx");
+    /* The single big rootfs layout reports its 80 MiB extent. */
+    strcpy(old_args, original);
+    sfi->rootfs.offset = 0x900000; sfi->rootfs.size = 0x5000000;
+    setenv_calls = 0;
+    if (update_bootargs(NULL, 0, 0) != CMD_RET_SUCCESS || setenv_calls != 1 ||
+        strcmp(old_args, "old-base=1 root=/dev/test rootwait h3c.boot_slot=0x900000 h3c.boot_size=0x5000000")) abort();
+
+    /* Room for the slot but not the size fails without a partial argument. */
+    strcpy(old_args, original); strcpy(fs_args, "root=/dev/test-long-name-xxxxxxxxxxxxxxxxxx");
+    sfi->rootfs.offset = 0x3100000; sfi->rootfs.size = 0x2800000;
     setenv_calls = 0;
     if (update_bootargs(NULL, 0, 0) != CMD_RET_FAILURE || setenv_calls != 0 ||
         strcmp(old_args, original)) abort();
