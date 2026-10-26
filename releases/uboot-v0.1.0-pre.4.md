@@ -32,7 +32,7 @@ pre.3 救援页只接受与当前运行版本同一硬件组、同一 NAND 配�
 
 **比 pre.3 更旧的版本**（pre.1、pre.2，BootBridge pre.1–pre.6 安装的 U-Boot）：按 [pre.3 说明](uboot-v0.1.0-pre.3.md#从旧版升级)的步骤升级，只是把文件换成本版的 `ram-rescue.elf` 和 `appsbl.mbn`；升级后同样要再刷一次固件。
 
-**还是原厂系统的设备**：用 [BootBridge](https://flyfish-go.github.io/H3C-NX30-Uboot/) 安装。BootBridge v0.2.0-pre.1 目前安装的是 pre.3，装好后按上面的步骤升级到本版即可。
+**还是原厂系统的设备**：用 [BootBridge](https://flyfish-go.github.io/H3C-NX30-Uboot/) 安装。BootBridge v0.2.0-pre.2（规则 BB2-R2）起安装的就是本版；用 v0.2.0-pre.1 装上 pre.3 的设备，按上面的步骤升级即可。
 
 ## 验证状态
 
