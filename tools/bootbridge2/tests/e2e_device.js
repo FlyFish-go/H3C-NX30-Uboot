@@ -75,6 +75,9 @@ fs.mkdirSync(SHOTS, { recursive: true });
       !document.getElementById('notice').hidden, null, { timeout: 180000 });
     await page.screenshot({ path: path.join(SHOTS, 'device-3.png'), fullPage: true });
     ok('install finished', (await text('#main-button')) === '重启', await text('#message'));
+    const active = await page.evaluate(() => [...document.querySelectorAll('.bk-nav li.bk-active')].map((li) => li.dataset.step).join());
+    ok('done page shows step 4 only', active === '4', active);
+    ok('return still available once done', await page.isEnabled('#return-button'));
     if (process.env.BB_EXPECTED_APPSBL_SHA256) {
       const state = await page.evaluate(() => fetch('/api/state').then(r => r.json()));
       ok('both APPSBL copies match pinned candidate',

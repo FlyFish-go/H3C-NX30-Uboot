@@ -57,6 +57,8 @@
   }
 
   function render(s) {
+    // Returning to OEM is independent of every other feature: only an operation in flight blocks it.
+    $("return-button").disabled = busy;
     state = s;
     const d = s.decision, r = s.oem_return, b = s.backup, last = s.last;
     const canReturn = r.code === "ready" || r.code === "already_oem";
@@ -72,7 +74,6 @@
       ? "备份已生成（" + Math.round(b.bytes / 1048576) + " MiB）。建议先下载保存到电脑，不要公开分享。" +
         (b.unreadable_blocks ? " 注意：有 " + b.unreadable_blocks + " 个块读不出，已用 0xFF 代替。" : "")
       : "安装前必须先生成备份。备份含设备私有数据，请保存在自己的电脑上，不要公开分享。";
-    $("return-button").disabled = busy || !canReturn || done;
     notice("", "");
 
     const main = $("main-button");
