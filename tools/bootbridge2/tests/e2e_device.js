@@ -32,6 +32,14 @@ fs.mkdirSync(SHOTS, { recursive: true });
   await page.waitForFunction(() => document.getElementById('badge').textContent !== '检查中', null, { timeout: 30000 });
   await page.screenshot({ path: path.join(SHOTS, 'device-1.png'), fullPage: true });
   ok('device recognised', /HW-/.test(await text('#device-name')), await text('#device-name'));
+  // The stylesheet is scoped to #bootkit-bridge-proposal; without it every icon renders page-wide.
+  const styled = await page.evaluate(() => {
+    const root = document.getElementById('bootkit-bridge-proposal');
+    if (!root || getComputedStyle(root).getPropertyValue('--bk-color-0').trim() === '') return 'scope missing';
+    const big = [...document.querySelectorAll('#app svg')].filter((s) => s.getBoundingClientRect().width > 64);
+    return big.length ? big.length + ' oversized icons' : '';
+  });
+  ok('stylesheet applied', styled === '', styled);
   ok('return button enabled', await page.isEnabled('#return-button'));
 
   // Return dialog: cancel must not change anything.
