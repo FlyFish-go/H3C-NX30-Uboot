@@ -4,7 +4,7 @@
  * site's own rule data.  SPDX-License-Identifier: GPL-2.0-or-later */
 (function () {
   'use strict';
-  var CAT = window.BB_CATALOG, STR = window.BB_STRINGS, CMDS = window.BB_COMMANDS, E = window.BBEngine, NX = window.BBNx30;
+  var CAT = window.BB_CATALOG, STR = window.BB_STRINGS, CMDS = window.BB_COMMANDS, E = window.BBEngine, NX = window.BBNx30, INJ = window.BBInject;
   var root = document.getElementById('root');
 
   function bootFail(detail) {
@@ -82,9 +82,12 @@
 
   (function verifyCatalog() {
     try {
-      if (!CAT.meta || CAT.meta.schema !== 'bootbridge-web-catalog-v1') throw err('schema');
+      if (!CAT.meta || CAT.meta.schema !== 'bootbridge-web-catalog-v2') throw err('schema');
+      if (!CAT.pack || !CAT.pack.data || !INJ) throw err('pack');
       CAT.bundles.forEach(function (b) {
         if (!E.validPlan(b) || E.dataSize(b) !== b.data.size) throw err('plan ' + b.id);
+        if (!b.layout || b.layout.base.bytes !== b.outSize || b.layout.base.sha256 !== b.outSha ||
+            CAT.pack.data.size > b.layout.pack.capacity) throw err('layout ' + b.id);
         var g = guideById(b.model);
         if (!g || g.bytes !== b.inSize || g.sha !== b.inSha || g.version !== b.version) throw err('guide ' + b.id);
       });
@@ -293,6 +296,18 @@
         });
       })
       .then(function (r) {
+        /* The plan rebuilds the base image; the rule pack goes in afterwards. */
+        var pack;
+        return loadData(CAT.pack, function () {}).then(function (p) {
+          pack = p;
+          return E.sha256(pack);
+        }).then(function (h) {
+          if (h !== CAT.pack.data.sha) throw err('data-mismatch', 'pack');
+          var bytes = INJ.apply(r.bytes, b.layout, pack);
+          return E.sha256(bytes).then(function (sha) { return { bytes: bytes, sha: sha }; });
+        });
+      })
+      .then(function (r) {
         if (S.file.bytes !== input) return;
         S.gen = { st: 'done', bytes: r.bytes, sha: r.sha, name: outName(g) };
         render();
@@ -319,7 +334,7 @@
   function diag() {
     var m = CAT.meta, f = S.file, lines = [
       'BootBridge Web ' + m.web + (m.label ? ' (' + m.label + ')' : ''),
-      'release: ' + m.release + ' · engine ' + m.engine + ' · dat ' + m.datSha.slice(0, 16),
+      'release: ' + m.release + ' · engine ' + m.engine + ' · pack ' + CAT.pack.data.sha.slice(0, 16),
       'rules: ' + S.rules + (S.rulesWhy ? ' (' + S.rulesWhy + ')' : ''),
       'page: ' + location.protocol + ' secure=' + !!window.isSecureContext + ' subtle=' + E.hasSubtle(),
       'browser: ' + navigator.userAgent,
@@ -379,18 +394,12 @@
       return '<li><span class="n">' + (i + 1) + '</span><span class="tx"><b>' + it[0] + '</b><span>' + tx + '</span>' + (vars.extra && vars.extra[i] || '') + '</span></li>';
     }).join('') + '</ol>';
   }
-  // pre.6 on mp02.1 boards: install is ambiguous between B and D and OEM return may be refused. Only NX30 firmware
-  // (D-only) is unaffected; the same file also serves RX3000, which runs on any class.
-  function holdWarn(g) {
-    if (!g) return '';
-    var l = L(), nx = g.id === 'NX30', m = nx ? 'RX3000' : mname(g);
-    return '<div class="callout amber" data-k="holdwarn">' + ic('alert') + '<span>' + fmt(l.holdWarn, { m: esc(m) }) + (nx ? ' ' + l.holdNx : '') + '</span></div>';
-  }
+
   function head(n, t, lead) { var l = L(); return '<div class="eyebrow">' + fmt(l.stepOf, { n: n }) + '</div><h1>' + t + '</h1><p class="lead">' + lead + '</p>'; }
 
   function step1() {
     var l = L();
-    return head(1, l.s1t, l.s1l) + holdWarn(G()) + '<div class="mgrid" role="radiogroup">' + CAT.guide.map(function (g) {
+    return head(1, l.s1t, l.s1l) + '<div class="mgrid" role="radiogroup">' + CAT.guide.map(function (g) {
       var sel = S.model === g.id;
       return '<button class="mcard' + (sel ? ' sel' : '') + '" data-model="' + esc(g.id) + '" role="radio" aria-checked="' + sel + '"><span class="ic">' + ic('router') + '</span><span class="tx"><b>' + esc(g.primary) + (g.alias ? '<em class="alias">' + esc(g.alias) + '</em>' : '') + '</b><span>' + fmt(l.needVer, { v: esc(g.version) }) + '</span></span><span class="radio"></span></button>';
     }).join('') + '</div><div class="fine">' + ic('info') + '<span>' + l.s1fine + '</span></div>';
@@ -510,7 +519,7 @@
           '<div class="row-end"><button class="btn primary lg" data-act="gen">' + l.gen + '</button><div class="fine">' + ic('shield') + '<span>' + l.genFine + '</span></div></div>';
       }
     }
-    return head(4, l.s4t, l.s4l) + holdWarn(f.st === 'matched' ? guideById(f.model) : G()) + body;
+    return head(4, l.s4t, l.s4l) + body;
   }
 
   function step5() {
