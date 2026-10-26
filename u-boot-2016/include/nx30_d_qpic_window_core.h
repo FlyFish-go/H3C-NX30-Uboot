@@ -18,6 +18,8 @@ static inline int nx30_d_qpic_extent_allowed(nx30_d_core_u64 offset,
 {
  return (offset==0x00900000ULL && size==0x02800000ULL) ||
         (offset==0x03100000ULL && size==0x02800000ULL) ||
+        /* PTABLE single layout: one 80 MiB rootfs replaces both slots. */
+        (offset==0x00900000ULL && size==0x05000000ULL) ||
         (offset==0x00480000ULL && size==0x00040000ULL) ||
         (offset==0x00100000ULL && size==0x00040000ULL) ||
         (offset==0x00140000ULL && size==0x00040000ULL) ||

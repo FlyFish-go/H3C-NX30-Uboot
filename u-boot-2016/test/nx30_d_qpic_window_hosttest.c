@@ -6,6 +6,9 @@ int main(void)
  struct nx30_d_qpic_window_core w={0}; int mtd_a, mtd_b;
  assert(nx30_d_qpic_extent_allowed(0x00900000,0x02800000));
  assert(nx30_d_qpic_extent_allowed(0x03100000,0x02800000));
+ assert(nx30_d_qpic_extent_allowed(0x00900000,0x05000000));
+ assert(!nx30_d_qpic_extent_allowed(0x03100000,0x05000000));
+ assert(!nx30_d_qpic_extent_allowed(0x00900000,0x05020000));
  assert(nx30_d_qpic_extent_allowed(0x00480000,0x00040000));
  assert(nx30_d_qpic_extent_allowed(0x00100000,0x00040000));
  assert(nx30_d_qpic_extent_allowed(0x00140000,0x00040000));

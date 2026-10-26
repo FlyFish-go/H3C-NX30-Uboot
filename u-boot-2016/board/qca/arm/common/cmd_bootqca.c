@@ -295,11 +295,19 @@ static int h3c_hw_c_set_fit_rootfs_bootargs(const void *fit, const char *name,
 #endif
 	if (root_labels || extent_nodes) {
 		const char *expected;
+		struct rt3_layout native_layout;
+		/* PTABLE single layout: one 80 MiB rootfs at 0x900000 that no
+		 * 40 MiB DT partition node matches; the SMEM table decides. */
+		int single = sfi->rootfs.offset == 0x00900000 &&
+			sfi->rootfs.size == 0x05000000 &&
+			!rt3_layout_read(&native_layout) &&
+			native_layout.mode == RT3_LAYOUT_SINGLE;
 #ifdef CONFIG_H3C_HW_D_RAM_WEB
-		if (!is_native || root_labels != 2 || extent_nodes != 2 || matches != 1)
+		if (!is_native || root_labels != 2 || extent_nodes != 2 ||
+		    matches != (single ? 0 : 1))
 #else
 		if (profile != H3C_HW_C_PROFILE_NATIVE || root_labels != 2 ||
-		    extent_nodes != 2 || matches != 1)
+		    extent_nodes != 2 || matches != (single ? 0 : 1))
 #endif
 			return CMD_RET_FAILURE;
 		if (sfi->rootfs.offset == 0x03100000 &&
@@ -308,8 +316,12 @@ static int h3c_hw_c_set_fit_rootfs_bootargs(const void *fit, const char *name,
 		else if (sfi->rootfs.offset == 0x00900000 &&
 			 sfi->rootfs.size == 0x02800000)
 			expected = "rootfs";
+		else if (single)
+			expected = "rootfs";
 		else
 			return CMD_RET_FAILURE;
+		if (single)
+			strlcpy(label, expected, sizeof(label));
 		if (strcmp(label, expected) ||
 		    setenv("h3c_hw_c_keep_fit_partitions", "1"))
 			return CMD_RET_FAILURE;
