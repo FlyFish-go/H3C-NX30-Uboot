@@ -722,7 +722,7 @@ static void fw_io_window_close(void *ctx)
 static int fw_write_image(struct mtd_info *mtd,
 			  const struct rt3_partition *part,
 			  const u8 *ubi, size_t ubi_size,
-			  const struct rt3_ubi_summary *sum)
+			  const struct rt3_ubi_summary *sum, int *stage)
 {
 	static const struct rt3_fw_io io_template = {
 		.is_bad = fw_io_bad,
@@ -771,6 +771,7 @@ static int fw_write_image(struct mtd_info *mtd,
 	ctx.mtd = mtd;
 	ctx.write_buf = rt3_write_buf;
 	io.ctx = &ctx;
+	io.stage = stage;
 	return rt3_fw_core_transaction(&io, part->offset, part->size, ubi,
 				       pebs * mtd->erasesize, mtd->erasesize,
 				       pebs, sum->reserved_pebs,
@@ -792,7 +793,7 @@ static void fw_write_handler(enum httpd_uri_handler_status status,
 	char token_text[16], target[RT3_LAYOUT_PARTITION_NAME_LEN], mode[8];
 	u32 token;
 	u8 digest[SHA256_SUM_LEN];
-	int ret;
+	int ret, stage = RT3_FW_STAGE_NONE;
 	if (status != HTTP_CB_NEW) return;
 #if defined(CONFIG_H3C_HW_C_RAM_READONLY)
 	fw_reply_json(response, 403, "{\"status\":\"fail\",\"error\":\"read-only target\"}");
@@ -847,13 +848,23 @@ static void fw_write_handler(enum httpd_uri_handler_status status,
 		fw_reply_json(response, 422, "{\"status\":\"fail\",\"error\":\"staged image no longer validates\"}");
 		return;
 	}
-	ret = fw_write_image(mtd, part, extracted.ubi, extracted.ubi_size, &sum);
+	ret = fw_write_image(mtd, part, extracted.ubi, extracted.ubi_size, &sum,
+			     &stage);
 	rt3_layout_invalidate_cache();
 	slots_rt3000_b_invalidate_cache();
 	if (ret) {
+		/* Report where it stopped: before ERASE the target is untouched. */
+		const char *error = "write or full readback failed";
+		if (stage < RT3_FW_STAGE_ERASE)
+			error = "write refused before erase";
+		else if (stage < RT3_FW_STAGE_VERIFY)
+			error = "erase or write failed";
+		printf("firmware: write %s failed at stage %d, errno %d\n",
+		       target, stage, ret);
 		snprintf(fw_reply, sizeof(fw_reply),
-			 "{\"status\":\"fail\",\"target\":\"%s\",\"mode\":\"%s\",\"error\":\"write or full readback failed\",\"errno\":%d}",
-			 target, mode, ret);
+			 "{\"status\":\"fail\",\"target\":\"%s\",\"mode\":\"%s\",\"error\":\"%s\",\"stage\":%d,\"flash_changed\":%s,\"errno\":%d}",
+			 target, mode, error, stage,
+			 stage >= RT3_FW_STAGE_ERASE ? "true" : "false", ret);
 		fw_reply_json(response, 500, fw_reply);
 		return;
 	}

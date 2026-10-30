@@ -14,6 +14,16 @@ typedef u32 rt3_core_u32;
 typedef u64 rt3_core_u64;
 #endif
 
+/* Where rt3_fw_core_transaction stopped. Before ERASE nothing was changed. */
+enum rt3_fw_stage {
+	RT3_FW_STAGE_NONE = 0,
+	RT3_FW_STAGE_SCAN,	/* bad-block scan or capacity */
+	RT3_FW_STAGE_OPEN,	/* write window refused */
+	RT3_FW_STAGE_ERASE,
+	RT3_FW_STAGE_WRITE,
+	RT3_FW_STAGE_VERIFY,	/* readback of written or erased PEBs */
+};
+
 struct rt3_fw_io {
 	void *ctx;
 	int (*is_bad)(void *ctx, rt3_core_u64 offset);
@@ -25,6 +35,7 @@ struct rt3_fw_io {
 	int (*window_open)(void *ctx, rt3_core_u64 offset,
 			   rt3_core_u64 size);
 	void (*window_close)(void *ctx);
+	int *stage;		/* optional: set to enum rt3_fw_stage */
 };
 
 /* Authorize only one exact MTD and range, with ordinary ECC data mode. */

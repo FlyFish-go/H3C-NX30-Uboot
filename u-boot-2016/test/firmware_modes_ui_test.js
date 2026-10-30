@@ -179,6 +179,23 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
     assert(c.elements().bFirmwareContent.textContent.includes('Write or full readback failed'));
     assert(c.elements().bFirmwareContent.textContent.includes('do not retry automatically'));
 
+    /* A window refused before erase (HW-D ECC gate) says flash is unchanged and shows errno. */
+    c = await bootContext({ layout: baseLayout('single'), replies: [
+        { status: 'ok', token: 'tok-refused', target: 'rootfs', mode: 'single', bytes: 102, sha256: 'd'.repeat(64), format: 'ubi_unidentified' },
+        { status: 'fail', target: 'rootfs', mode: 'single', error: 'write refused before erase', stage: 2, flash_changed: false, errno: -30 }
+    ], pathName: '/firmware-single.html' });
+    await c.context.testFirmwareModes.initMode('single');
+    inputs = c.elements().bFirmwareContent.find('input');
+    inputs.find(x => x.type === 'radio').checked = true;
+    await inputs.find(x => x.type === 'radio').dispatch('change');
+    inputs.find(x => x.type === 'file').files = [{ name: 'refused.bin' }];
+    await inputs.find(x => x.type === 'file').dispatch('change');
+    buttons = c.elements().bFirmwareContent.find('button');
+    await buttons[0].click(); await buttons[1].click();
+    assert(c.elements().bFirmwareContent.textContent.includes('flash was not changed'));
+    assert(c.elements().bFirmwareContent.textContent.includes('(error code -30)'));
+    assert(!c.elements().bFirmwareContent.textContent.includes('readback failed'));
+
     c = await bootContext({ lang: 'zh-cn', layout: baseLayout('dual'), replies: [
         { defer: true, status: 'ok', token: 'stale-token', target: 'rootfs', mode: 'dual' },
         { status: 'ok', token: 'fresh-token', target: 'rootfs_1', mode: 'dual', format: 'ubi_unidentified' }
@@ -266,5 +283,5 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
     await c.context.testFirmwareModes.initMode('single');
     assert(c.elements().bFirmwareContent.textContent.includes('rootfs物理第 1 区 · 地址范围：0x900000 – 0x58fffff'));
 
-    console.log('PASS: dual/single layout gates, explicit no-default targets, target-bound token invalidation, validate/write, deferred file/target race rejection, typed non-2xx errors, unverified failure, legacy other-board upload route');
+    console.log('PASS: dual/single layout gates, explicit no-default targets, target-bound token invalidation, validate/write, deferred file/target race rejection, typed non-2xx errors, unverified failure, refused-before-erase with errno, legacy other-board upload route');
 })().catch(error => { console.error(error); process.exitCode = 1; });

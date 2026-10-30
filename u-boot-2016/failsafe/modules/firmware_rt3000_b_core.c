@@ -68,7 +68,9 @@ int rt3_fw_core_transaction(const struct rt3_fw_io *io,
 {
 	rt3_core_u64 end, offset;
 	rt3_core_u32 good_count = 0, i, done;
-	int ret, opened = 0;
+	int ret, opened = 0, stage = RT3_FW_STAGE_SCAN;
+	if (io && io->stage)
+		*io->stage = RT3_FW_STAGE_NONE;
 	if (!io || !io->is_bad || !io->erase || !io->write || !io->read ||
 	    !io->window_open || !io->window_close || !image || !verify_buf ||
 	    !good_offsets || !target_size || !peb_size || !image_bytes ||
@@ -82,22 +84,27 @@ int rt3_fw_core_transaction(const struct rt3_fw_io *io,
 	/* Complete bad-block and capacity scan before opening the write window. */
 	for (offset = target_offset; offset < end; offset += peb_size) {
 		ret = io->is_bad(io->ctx, offset);
-		if (ret < 0) return ret;
+		if (ret < 0) goto out;
 		if (ret) continue;
 		good_offsets[good_count++] = (rt3_core_u32)offset;
 	}
 	if (!rt3_fw_core_capacity_ok(good_count, image_pebs,
-				     reserved_pebs, margin))
-		return -ENOSPC;
+				     reserved_pebs, margin)) {
+		ret = -ENOSPC;
+		goto out;
+	}
+	stage = RT3_FW_STAGE_OPEN;
 	ret = io->window_open(io->ctx, target_offset, target_size);
-	if (ret) return ret;
+	if (ret) goto out;
 	opened = 1;
 
+	stage = RT3_FW_STAGE_ERASE;
 	for (i = 0; i < good_count; i++) {
 		ret = io->erase(io->ctx, good_offsets[i], peb_size);
 		if (ret) goto out;
 	}
 	for (i = 0; i < image_pebs; i++) {
+		stage = RT3_FW_STAGE_WRITE;
 		done = 0;
 		ret = io->write(io->ctx, good_offsets[i], image + (size_t)i * peb_size,
 				peb_size, &done);
@@ -105,6 +112,7 @@ int rt3_fw_core_transaction(const struct rt3_fw_io *io,
 			if (!ret) ret = -EIO;
 			goto out;
 		}
+		stage = RT3_FW_STAGE_VERIFY;
 		done = 0;
 		ret = io->read(io->ctx, good_offsets[i], verify_buf, peb_size, &done);
 		if (ret || done != peb_size) {
@@ -130,7 +138,10 @@ int rt3_fw_core_transaction(const struct rt3_fw_io *io,
 			}
 	}
 	ret = 0;
+	stage = RT3_FW_STAGE_NONE;
 out:
 	if (opened) io->window_close(io->ctx);
+	if (io->stage)
+		*io->stage = stage;
 	return ret;
 }

@@ -12,7 +12,7 @@ struct mock {
 	uint8_t flash[LIMIT][PEB];
 	int bad[LIMIT];
 	int open, close_count, erase_count, write_count, read_count;
-	int fail_erase, fail_write, corrupt_read;
+	int fail_open, fail_erase, fail_write, corrupt_read;
 	uint64_t target, extent;
 };
 static int block_index(uint64_t off) { return (int)(off / PEB); }
@@ -33,7 +33,8 @@ static int read_peb(void *ctx,uint64_t off,uint8_t *b,uint32_t len,uint32_t *don
 	return 0;
 }
 static int open_window(void *ctx,uint64_t off,uint64_t size) {
-	struct mock *m=ctx; assert(!m->open); m->open=1;m->target=off;m->extent=size;return 0;
+	struct mock *m=ctx; assert(!m->open); if (m->fail_open) return -EROFS;
+	m->open=1;m->target=off;m->extent=size;return 0;
 }
 static void close_window(void *ctx) { struct mock *m=ctx; assert(m->open);m->open=0;m->close_count++; }
 static void init(struct mock *m) { memset(m,0,sizeof(*m));memset(m->flash,0xa5,sizeof(m->flash)); }
@@ -41,8 +42,8 @@ static void init(struct mock *m) { memset(m,0,sizeof(*m));memset(m->flash,0xa5,s
 int main(void)
 {
 	struct mock m; uint32_t offsets[LIMIT]; uint8_t image[3*PEB], verify[PEB];
-	uint8_t full_image[320*PEB]; unsigned int i;
-	struct rt3_fw_io io={&m,is_bad,erase,write_peb,read_peb,open_window,close_window};
+	uint8_t full_image[320*PEB]; unsigned int i; int stage=-1;
+	struct rt3_fw_io io={&m,is_bad,erase,write_peb,read_peb,open_window,close_window,&stage};
 	static int identity1, identity2;
 	memset(image,0x5a,sizeof(image));
 	assert(rt3_fw_core_range_allows(1,&identity1,&identity1,100,200,120,20,0,0));
@@ -76,20 +77,28 @@ int main(void)
 	/* Successful write erases selected good PEBs, preserves bad PEB and tail. */
 	init(&m);m.bad[2]=1;
 	assert(rt3_fw_core_transaction(&io,PEB,7*PEB,image,sizeof(image),PEB,3,5,1,offsets,LIMIT,verify)==0);
+	assert(stage==RT3_FW_STAGE_NONE);
 	assert(!m.open && m.close_count==1 && m.erase_count==6 && m.write_count==3);
 	assert(m.bad[2] && !memcmp(m.flash[1],image,PEB) && !memcmp(m.flash[3],image+PEB,PEB));
 	assert(m.flash[5][0]==0xff && m.flash[7][PEB-1]==0xff);
 
 	/* Protected target bounds, capacity failure and malformed sizes fail before opening. */
 	init(&m);assert(rt3_fw_core_transaction(&io,PEB,7*PEB,image,sizeof(image),PEB,3,5,6,offsets,LIMIT,verify)==-ENOSPC);assert(!m.open&&!m.erase_count);
+	assert(stage==RT3_FW_STAGE_SCAN);
+	/* A refused write window (e.g. HW-D ECC/extent gate) leaves flash untouched. */
+	init(&m);m.fail_open=1;assert(rt3_fw_core_transaction(&io,PEB,7*PEB,image,sizeof(image),PEB,3,5,1,offsets,LIMIT,verify)==-EROFS);
+	assert(stage==RT3_FW_STAGE_OPEN&&!m.erase_count&&!m.write_count&&!m.close_count);
 	init(&m);assert(rt3_fw_core_transaction(&io,PEB,LIMIT*PEB+PEB,image,sizeof(image),PEB,3,5,1,offsets,LIMIT,verify)==-EINVAL);assert(!m.open);
 	init(&m);assert(rt3_fw_core_transaction(&io,PEB,7*PEB,image,sizeof(image)-1,PEB,3,5,1,offsets,LIMIT,verify)==-EINVAL);assert(!m.open);
 	init(&m);assert(rt3_fw_core_transaction(&io,PEB+1,7*PEB,image,sizeof(image),PEB,3,5,1,offsets,LIMIT,verify)==-EINVAL);assert(!m.open);
 
 	/* All post-open failure paths close the temporary writer window. */
 	init(&m);m.fail_erase=1;assert(rt3_fw_core_transaction(&io,PEB,7*PEB,image,sizeof(image),PEB,3,5,1,offsets,LIMIT,verify)==-EIO);assert(!m.open&&m.close_count==1&&m.write_count==0);
+	assert(stage==RT3_FW_STAGE_ERASE);
 	init(&m);m.fail_write=1;assert(rt3_fw_core_transaction(&io,PEB,7*PEB,image,sizeof(image),PEB,3,5,1,offsets,LIMIT,verify)==-EIO);assert(!m.open&&m.close_count==1);
+	assert(stage==RT3_FW_STAGE_WRITE);
 	init(&m);m.corrupt_read=1;assert(rt3_fw_core_transaction(&io,PEB,7*PEB,image,sizeof(image),PEB,3,5,1,offsets,LIMIT,verify)==-EIO);assert(!m.open&&m.close_count==1);
+	assert(stage==RT3_FW_STAGE_VERIFY);
 
 	/* A complete equal-length image may use its embedded EC-only PEBs for
 	 * UBI free space; no second image-sized reserve is charged. */
