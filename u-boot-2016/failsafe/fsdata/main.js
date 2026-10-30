@@ -8705,12 +8705,12 @@ const firmwareModeManager = (() => {
     function formatDescription(result) {
         const format = result && typeof result.format === 'string' ? result.format : '';
         if (format === 'h3c_rt3000_oem_ubi') {
-            return isZh() ? '已识别的 H3C H3C OEM 固件包' : 'Recognized H3C H3C OEM firmware package';
+            return isZh() ? 'H3C 原厂固件包' : 'H3C OEM firmware package';
         }
         if (format === 'ubi_unidentified') {
             return isZh()
-                ? '完整 UBI 系统镜像（含内核和系统卷）；板型身份未验证，不属于已识别 OEM 包'
-                : 'Complete UBI system image (kernel and system volumes); board identity is unverified, not a recognized OEM package';
+                ? '完整 UBI 系统镜像（含内核和系统卷）'
+                : 'Complete UBI system image (kernel and system volumes)';
         }
         return isZh() ? '未知格式：' + format.slice(0, 96) : 'Unknown format: ' + format.slice(0, 96);
     }

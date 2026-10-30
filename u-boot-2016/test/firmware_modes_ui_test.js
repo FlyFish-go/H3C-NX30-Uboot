@@ -148,7 +148,7 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
     assert(targetCards[1].textContent.includes('Physical slot 2 · Address range: 0x3100000 – 0x58fffff'));
     assert(c.elements().bFirmwareContent.textContent.includes('Target: rootfsPhysical slot 1 · Address range: 0x900000 – 0x30fffff'));
 
-    assert(c.elements().bFirmwareContent.textContent.includes('board identity is unverified, not a recognized OEM package'));
+    assert(c.elements().bFirmwareContent.textContent.includes('Complete UBI system image (kernel and system volumes)'));
     radios[1].checked = true; radios[0].checked = false; await radios[1].dispatch('change');
     assert.strictEqual(write.disabled, true, 'changing target must invalidate the prior token');
     assert.strictEqual(c.elements().bFirmwareContent.find('div').some(x => x.textContent.includes('SHA-256:')), false);
