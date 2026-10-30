@@ -14,6 +14,7 @@
 #include <rt3000_b_layout.h>
 #include <rt3000_b_fw_write.h>
 #include <rt3000_b_fw_core.h>
+#include <rt3_fw_fit_ubi.h>
 #include "modules.h"
 #include "../../drivers/mtd/ubi/ubi-media.h"
 #if defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY)
@@ -434,16 +435,15 @@ static int fw_extract_input(const u8 *file, size_t file_size,
 	char path[160];
 	int node, len;
 	struct rt3_ubi_summary sum;
+	const void *fit_ubi;
+	size_t fit_ubi_size;
 
 	memset(out, 0, sizeof(*out));
 	if (file_size >= 4 && get_unaligned_be32(file) == UBI_EC_HDR_MAGIC) {
 		out->ubi = file;
 		out->ubi_size = file_size;
 		*format = "ubi_unidentified";
-	} else {
-		entry = fw_catalog_match(file_size, file_hash);
-		if (!entry)
-			return -EPERM;
+	} else if ((entry = fw_catalog_match(file_size, file_hash))) {
 		if (file_size <= RT3_FIT_OFFSET || entry->fit_bytes > file_size - RT3_FIT_OFFSET)
 			return -EINVAL;
 		fit = file + RT3_FIT_OFFSET;
@@ -466,6 +466,14 @@ static int fw_extract_input(const u8 *file, size_t file_size,
 		out->ubi = data;
 		out->ubi_size = len;
 		*format = "h3c_rt3000_oem_ubi";
+	} else if (!rt3_fw_fit_ubi(file, file_size, &fit_ubi, &fit_ubi_size)) {
+		/* QSDK upgrade package (e.g. third-party firmware): write its one
+		 * UBI image to the chosen slot; its flash script is never run. */
+		out->ubi = fit_ubi;
+		out->ubi_size = fit_ubi_size;
+		*format = "qsdk_fit_ubi";
+	} else {
+		return -EPERM;
 	}
 	if (fw_validate_ubi(out->ubi, out->ubi_size, &sum))
 		return -EBADMSG;
