@@ -366,7 +366,8 @@ static int h3c_hw_c_set_fit_rootfs_bootargs(const void *fit, const char *name,
 #if !defined(CONFIG_H3C_HW_D_RAM_WEB)
 	*verified_oem = candidate_oem;
 #endif
-	printf("H3C HW-C: FIT %s maps 0x%llx+0x%llx to %s bootargs (%s)\n",
+	printf("%s: FIT %s maps 0x%llx+0x%llx to %s bootargs (%s)\n",
+	       RT3_BOOT_BOARD_LABEL,
 	       name, (unsigned long long)sfi->rootfs.offset,
 	       (unsigned long long)sfi->rootfs.size,
 	       is_native ? "native" : "OEM", bootargs);
