@@ -11,8 +11,15 @@ typedef u64 nx30_d_core_u64;
 struct nx30_d_qpic_window_core {
  const void *mtd;
  nx30_d_core_u64 start, end;
+ unsigned int ecc_bits;
  int open;
 };
+/* C8:41 and other parts exist with both QPIC ECC4 and ECC8 on HW-D (H3C
+ * moved them to ECC8 from R005); the window follows the running mode. */
+static inline int nx30_d_qpic_ecc_supported(unsigned int ecc_bits)
+{
+ return ecc_bits==4 || ecc_bits==8;
+}
 static inline int nx30_d_qpic_extent_allowed(nx30_d_core_u64 offset,
                                               nx30_d_core_u64 size)
 {
@@ -38,22 +45,25 @@ static inline int nx30_d_qpic_window_core_open(
  struct nx30_d_qpic_window_core *w, const void *mtd, int profile_valid,
  unsigned int ecc_bits, nx30_d_core_u64 offset, nx30_d_core_u64 size)
 {
- if (!w || w->open || !mtd || !profile_valid || ecc_bits!=4 ||
+ if (!w || w->open || !mtd || !profile_valid ||
+     !nx30_d_qpic_ecc_supported(ecc_bits) ||
      !nx30_d_qpic_extent_allowed(offset,size) ||
      offset>(nx30_d_core_u64)-1-size) return -1;
- w->mtd=mtd; w->start=offset; w->end=offset+size; w->open=1;
+ w->mtd=mtd; w->start=offset; w->end=offset+size; w->ecc_bits=ecc_bits;
+ w->open=1;
  return 0;
 }
 static inline void nx30_d_qpic_window_core_close(
  struct nx30_d_qpic_window_core *w)
 {
- if (w) { w->mtd=0; w->start=0; w->end=0; w->open=0; }
+ if (w) { w->mtd=0; w->start=0; w->end=0; w->ecc_bits=0; w->open=0; }
 }
 static inline int nx30_d_qpic_window_core_allows(
  const struct nx30_d_qpic_window_core *w, const void *mtd,
  nx30_d_core_u64 offset, nx30_d_core_u64 size, unsigned int ecc_bits)
 {
- return w && w->open && w->mtd && w->mtd==mtd && size && ecc_bits==4 &&
+ return w && w->open && w->mtd && w->mtd==mtd && size &&
+        ecc_bits==w->ecc_bits &&
         offset>=w->start && offset<=w->end && size<=w->end-offset;
 }
 #endif

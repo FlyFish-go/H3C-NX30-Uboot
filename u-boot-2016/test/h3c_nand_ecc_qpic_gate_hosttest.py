@@ -43,6 +43,11 @@ static int nx30_d_protect_set(void *context, unsigned int value)
 '''
 harness += function
 harness += r'''
+static void reset_window(void)
+{
+ memset(&nx30_d_nand_window,0,sizeof(nx30_d_nand_window));
+ nand_info[0].flags=0; protect_reads=protect_writes=0; protect_value=0x7c;
+}
 static void geometry(void)
 {
  struct mtd_info *mtd=&nand_info[0];
@@ -52,40 +57,39 @@ static void geometry(void)
 int main(void)
 {
  struct mock m;
- unsigned int i;
- for(i=0;i<H3C_NAND_CATALOG_PROFILE_COUNT;i++) {
-  const struct h3c_nand_catalog_profile *p=&h3c_nand_catalog_profiles[i];
-  setup(&m,&nand_info[0],H3C_NAND_ECC_TEST_BOARD_D);
-  geometry();
-  m.profile.profile=100+i; m.profile.catalog_profile=p;
-  m.profile.physical_spare=p->qpic_raw_spare_bytes;
-  m.profile.nand_size=p->capacity_bytes;
-  m.profile.page_size=p->page_bytes; m.profile.erase_size=p->erase_bytes;
-  h3c_nand_ecc_init();
-  assert(nx30_d_qpic_write_window_open(&nand_info[0],APPSBL1,APPSBL_LEN,4)<0);
-  assert(!nx30_d_nand_window.core.open);
-  assert(!protect_reads && !protect_writes);
-  assert(!(nand_info[0].flags&MTD_WRITEABLE));
-  cleanup(&m);
- }
+ /* APPSBL rows are now opened by the rescue page's U-Boot update (flash
+  * unlock); their SBL1/identity gate is covered by h3c_nand_ecc tests. */
  /* Inconsistent ENV/system and unknown profile both stop before A0 IO. */
  setup(&m,&nand_info[0],H3C_NAND_ECC_TEST_BOARD_D); geometry();
  m.sys_mode=8; h3c_nand_ecc_init();
- assert(nx30_d_qpic_write_window_open(&nand_info[0],APPSBL1,APPSBL_LEN,4)<0);
+ assert(nx30_d_qpic_write_window_open(&nand_info[0],0x900000,0x2800000,4)<0);
  assert(!protect_reads && !protect_writes && !nx30_d_nand_window.core.open);
  m.sys_mode=4; m.profile.profile=999; h3c_nand_ecc_init();
- assert(nx30_d_qpic_write_window_open(&nand_info[0],APPSBL1,APPSBL_LEN,4)<0);
+ assert(nx30_d_qpic_write_window_open(&nand_info[0],0x900000,0x2800000,4)<0);
  assert(!protect_reads && !protect_writes && !nx30_d_nand_window.core.open);
  cleanup(&m);
  /* Control: exact native ECC4 system extent still opens the real aperture. */
  setup(&m,&nand_info[0],H3C_NAND_ECC_TEST_BOARD_D); geometry();
  h3c_nand_ecc_init();
  assert(!nx30_d_qpic_write_window_open(&nand_info[0],0x900000,0x2800000,4));
- assert(nx30_d_nand_window.core.open);
+ assert(nx30_d_nand_window.core.open && nx30_d_nand_window.core.ecc_bits==4);
  assert(protect_reads && protect_writes);
  assert(nand_info[0].flags&MTD_WRITEABLE);
  cleanup(&m);
- puts("Real QPIC open + real ECC gate: all catalog APPSBL denied before protection/window; system control PASS");
+ reset_window();
+ /* ECC8 C8:41 unit (OEM R005+): the same extent opens in ECC8 ... */
+ setup(&m,&nand_info[0],H3C_NAND_ECC_TEST_BOARD_D); geometry();
+ m.env4=0; m.env8=1; m.sys_mode=8; m.profile.configured_mode=8;
+ nand_info[0].ecc_strength=8; h3c_nand_ecc_init();
+ assert(!nx30_d_qpic_write_window_open(&nand_info[0],0x900000,0x2800000,8));
+ assert(nx30_d_nand_window.core.open && nx30_d_nand_window.core.ecc_bits==8);
+ assert(protect_reads && protect_writes);
+ reset_window();
+ /* ... but asking for ECC4 there is refused before any A0 IO. */
+ assert(nx30_d_qpic_write_window_open(&nand_info[0],0x900000,0x2800000,4)<0);
+ assert(!protect_reads && !protect_writes && !nx30_d_nand_window.core.open);
+ cleanup(&m);
+ puts("Real QPIC open + real ECC gate: inconsistent/unknown denied before protection; ECC4 and ECC8 system controls PASS");
  return 0;
 }
 '''

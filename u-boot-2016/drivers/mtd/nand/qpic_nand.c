@@ -825,7 +825,7 @@ int rt3_fw_write_window_open(struct mtd_info *mtd, u64 offset, u64 size)
 	if (!exact_target || exact_targets != 1)
 		return -EROFS;
 #ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, mtd->ecc_strength)) return -EROFS;
 #endif
 	rt3_fw_window.mtd = mtd;
 	rt3_fw_window.start = offset;
@@ -888,7 +888,7 @@ int rt3_bootconfig_write_window_open(struct mtd_info *mtd, const char *name,
 	    (u64)count * mtd->erasesize != size)
 		return -EROFS;
 #ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, mtd->ecc_strength)) return -EROFS;
 #endif
 	rt3_fw_window.mtd = mtd;
 	rt3_fw_window.start = offset;
@@ -963,7 +963,7 @@ int rt3_metadata_write_window_open(struct mtd_info *mtd, const char *name,
 	     (offset != 0x780000 || size != 0x100000)))
 		return -EROFS;
 #ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, mtd->ecc_strength)) return -EROFS;
 #endif
 	rt3_fw_window.mtd = mtd;
 	rt3_fw_window.start = offset;
@@ -1055,7 +1055,7 @@ int rt3_named_nand_write_window_open(struct mtd_info *mtd, const char *name,
 		return -EROFS;
 
 #ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
-	if (nx30_d_qpic_write_window_open(mtd, offset, size, 4)) return -EROFS;
+	if (nx30_d_qpic_write_window_open(mtd, offset, size, mtd->ecc_strength)) return -EROFS;
 #endif
 	rt3_fw_window.mtd = mtd;
 	rt3_fw_window.start = offset;
@@ -1134,7 +1134,8 @@ int nx30_d_qpic_write_window_open(struct mtd_info *mtd, u64 offset, u64 size,
      mtd != &nand_info[CONFIG_QPIC_NAND_NAND_INFO_IDX] ||
      mtd->type != MTD_NANDFLASH || mtd->size != (128ULL<<20) ||
      mtd->erasesize != 0x20000 || mtd->writesize != 0x800 ||
-     ecc_bits != 4 || offset>mtd->size || size>mtd->size-offset ||
+     !nx30_d_qpic_ecc_supported(ecc_bits) ||
+     offset>mtd->size || size>mtd->size-offset ||
      offset%mtd->erasesize || size%mtd->erasesize)
   return -EROFS;
  ret=h3c_nand_ecc_select_mode(ecc_bits);
@@ -1174,8 +1175,8 @@ void nx30_d_qpic_write_window_close(void)
 int nx30_d_qpic_write_window_close_error(void) { return nx30_d_window_close_error; }
 int nx30_d_qpic_write_window_allows(struct mtd_info *mtd,u64 offset,u64 size)
 {
- return mtd && mtd->ecc_strength==4 &&
-        nx30_d_qpic_window_core_allows(&nx30_d_nand_window.core,mtd,offset,size,4);
+ return mtd && nx30_d_qpic_window_core_allows(&nx30_d_nand_window.core,mtd,
+        offset,size,mtd->ecc_strength);
 }
 #else
 int nx30_d_qpic_write_window_open(struct mtd_info *mtd,u64 offset,u64 size,
