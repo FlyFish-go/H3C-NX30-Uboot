@@ -217,7 +217,7 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 	int image_seq_set = 0;
 	int have_kernel = 0, have_rootfs = 0, rootfs_data = 0, kernel_data = 0;
 	int oem_volumes = 0;
-	u32 kernel_needed_lebs = 0, rootfs_needed_lebs = 0;
+	u32 kernel_needed_lebs = 0, rootfs_needed_lebs = 0, rootfs_max_lnum = 0;
 	u32 kernel_id = 0xffffffffU, rootfs_id = 0xffffffffU;
 
 	if (!image || !summary || size < RT3_UBI_PEB_SIZE ||
@@ -379,16 +379,24 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 			}
 			if (vol_id == rootfs_id) {
 				u64 squash_bytes;
-				if (memcmp(data, "hsqs", 4) ||
-				    fw_get_unaligned_le16(data + 28) != 4)
+				if (memcmp(data, "hsqs", 4))
 					return -EINVAL;
 				squash_bytes = fw_get_unaligned_le64(data + 40);
-				if (squash_bytes < 96 || squash_bytes >
+				/* Some vendors (e.g. Jike) reorder the superblock
+				 * fields after the magic; their kernels mount it,
+				 * but bytes_used is unreadable. Then require the
+				 * written LEBs to be contiguous from 0 instead. */
+				if (fw_get_unaligned_le16(data + 28) == 4 &&
+				    squash_bytes >= 96 && squash_bytes <=
 				    (u64)volume_reserved[vol_id] * RT3_UBI_LEB_SIZE)
-					return -EINVAL;
-				rootfs_needed_lebs = (squash_bytes + RT3_UBI_LEB_SIZE - 1) / RT3_UBI_LEB_SIZE;
+					rootfs_needed_lebs = (squash_bytes + RT3_UBI_LEB_SIZE - 1) / RT3_UBI_LEB_SIZE;
 				rootfs_data = 1;
 			}
+		}
+		if (vol_id == rootfs_id) {
+			u32 lnum = get_unaligned_be32(vid + 12);
+			if (lnum + 1 > rootfs_max_lnum)
+				rootfs_max_lnum = lnum + 1;
 		}
 	}
 	for (i = 0; i < 128; i++) {
@@ -398,6 +406,8 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 			if (!(lnum_seen[i][lnum >> 3] & (1U << (lnum & 7))))
 				return -EINVAL;
 	}
+	if (rootfs_data && !rootfs_needed_lebs)
+		rootfs_needed_lebs = rootfs_max_lnum;
 	if (!kernel_data || !rootfs_data || !kernel_needed_lebs || !rootfs_needed_lebs)
 		return -EINVAL;
 	for (i = 0; i < kernel_needed_lebs; i++)
