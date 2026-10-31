@@ -586,27 +586,27 @@ static void fw_platform_json(const u8 *ubi, size_t size, char *out, size_t cap)
 {
 	struct rt3_fw_platform p;
 	char board[96] = "";
-	const char *match = "";
-	int known = !rt3_fw_ubi_platform(ubi, size, &p);
+	const char *names[8];
+	unsigned int count = 0;
+	int known;
 #ifdef CONFIG_LIST_OF_CONFIG_NAMES_SUPPORT
 	u32 i;
 
-	for (i = 0; i < config_entries.no_of_entries; i++) {
-		const char *name = config_entries.entry[i];
+	for (i = 0; i < config_entries.no_of_entries && count < ARRAY_SIZE(names); i++) {
+		names[count++] = config_entries.entry[i];
 		if (board[0])
 			strlcat(board, ",", sizeof(board));
-		strlcat(board, name, sizeof(board));
-		if (known && !match[0] && rt3_fw_platform_has_config(p.configs, name))
-			match = name;
+		strlcat(board, config_entries.entry[i], sizeof(board));
 	}
 #endif
+	known = !rt3_fw_ubi_platform(ubi, size, names, count, &p);
 	if (!known) {
 		snprintf(out, cap, ",\"platform\":{\"known\":false,\"board_configs\":\"%s\"}", board);
 		return;
 	}
 	snprintf(out, cap,
-		 ",\"platform\":{\"known\":true,\"configs\":\"%s\",\"arch\":\"%s\",\"board_configs\":\"%s\",\"match\":\"%s\",\"arch_ok\":%s}",
-		 p.configs, p.arch, board, match, strcmp(p.arch, "arm") ? "false" : "true");
+		 ",\"platform\":{\"known\":true,\"configs\":\"%s\",\"count\":%u,\"arch\":\"%s\",\"board_configs\":\"%s\",\"match\":\"%s\",\"arch_ok\":%s}",
+		 p.configs, p.count, p.arch, board, p.match, strcmp(p.arch, "arm") ? "false" : "true");
 }
 
 static void fw_validate_handler(enum httpd_uri_handler_status status,

@@ -19,10 +19,9 @@ int main(int argc, char **argv)
  FILE *f = fopen(argv[1], "rb"); long n; void *buf; struct rt3_fw_platform p; int rc;
  fseek(f, 0, SEEK_END); n = ftell(f); rewind(f);
  buf = malloc(n); if (fread(buf, 1, n, f) != (size_t)n) return 2;
- rc = rt3_fw_ubi_platform(buf, n, &p);
- printf("%d|%s|%s", rc, rc ? "" : p.configs, rc ? "" : p.arch);
- for (int i = 2; i < argc; i++) printf("|%d", rt3_fw_platform_has_config(p.configs, argv[i]));
- printf("\n");
+ rc = rt3_fw_ubi_platform(buf, n, (const char *const *)argv + 2, argc - 2, &p);
+ if (rc) printf("%d\n", rc);
+ else printf("0|%s|%u|%s|%s\n", p.configs, p.count, p.arch, p.match);
  return 0;
 }
 '''
@@ -83,18 +82,24 @@ def main():
     with tempfile.TemporaryDirectory(prefix="rt3-platform-") as td:
         tmp = Path(td)
         exe = build(tmp)
+        many = [f"config@db-mp0{i}.{j}" for i in range(1, 5) for j in range(1, 4)] + ["config@mp03.1"]
         cases = [
-            ("default config, two configs",
+            ("default config, two configs; board order decides",
              ubi(fit(tmp, ["config@mp02.1", "config@mp03.1"], "config@mp02.1")),
-             ("config@mp03.1", "config@mp03", "mp02.1"), "0|config@mp02.1,config@mp03.1|arm|1|0|0"),
-            ("arm64 kernel", ubi(fit(tmp, ["config@mp03.5-c1"], "config@mp03.5-c1", "arm64")),
-             ("config@mp02.1",), "0|config@mp03.5-c1|arm64|0"),
+             ("config@mp03", "config@mp03.1", "config@mp02.1"), "0|config@mp02.1,config@mp03.1|2|arm|config@mp03.1"),
+            ("arm64 kernel, no matching config",
+             ubi(fit(tmp, ["config@mp03.5-c1"], "config@mp03.5-c1", "arm64")),
+             ("config@mp02.1", "config-mp02.1"), "0|config@mp03.5-c1|1|arm64|"),
             ("no default: first config's kernel", ubi(fit(tmp, ["config@mp02.1"])), (),
-             "0|config@mp02.1|arm"),
+             "0|config@mp02.1|1|arm|"),
             ("unsafe characters are replaced", ubi(fit(tmp, ["config@mp02.1"], None, 'ar\\"m<')), (),
-             "0|config@mp02.1|ar?m?"),
-            ("no configurations node", ubi(fit(tmp, None)), (), "-2||"),
-            ("kernel LEB missing", ubi(fit(tmp, ["config@mp02.1"]), drop_lnum=1), (), "-22||"),
+             "0|config@mp02.1|1|ar?m?|"),
+            # Like OEM FITs: the list overflows the display buffer, the match must not.
+            ("13 configs, board's one listed last",
+             ubi(fit(tmp, many, many[0])), ("config@mp03.1",),
+             "0|" + ",".join(many[:9]) + "|13|arm|config@mp03.1"),
+            ("no configurations node", ubi(fit(tmp, None)), (), "-2"),
+            ("kernel LEB missing", ubi(fit(tmp, ["config@mp02.1"]), drop_lnum=1), (), "-22"),
         ]
         for name, image, names, want in cases:
             got = run(exe, tmp, image, *names)

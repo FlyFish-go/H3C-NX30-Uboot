@@ -29,35 +29,32 @@ static unsigned int be32(const unsigned char *p)
 	       ((unsigned int)p[2] << 8) | p[3];
 }
 
-/* Append name to a comma-separated list, keeping only safe characters. */
-static void append_name(char *list, size_t cap, const char *name)
+/* Copy name, keeping only characters that are safe in JSON as is. */
+static void copy_name(char *out, size_t cap, const char *name)
 {
-	size_t len = strlen(list);
+	size_t len = 0;
 
-	if (len && len + 1 < cap)
-		list[len++] = ',';
 	for (; *name && len + 1 < cap; name++) {
 		char c = *name;
 		int ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 			 (c >= '0' && c <= '9') || strchr("@._+-", c);
-		list[len++] = ok ? c : '?';
+		out[len++] = ok ? c : '?';
 	}
-	list[len] = '\0';
+	out[len] = '\0';
 }
 
-int rt3_fw_platform_has_config(const char *list, const char *name)
+/* Append a whole name to a comma-separated list, or nothing once it is full. */
+static void append_name(char *list, size_t cap, const char *name)
 {
-	size_t n = strlen(name);
-	const char *p = list;
+	char safe[64];
+	size_t len = strlen(list);
 
-	if (!n)
-		return 0;
-	while ((p = strstr(p, name))) {
-		if ((p == list || p[-1] == ',') && (p[n] == ',' || !p[n]))
-			return 1;
-		p += n;
-	}
-	return 0;
+	copy_name(safe, sizeof(safe), name);
+	if (len + !!len + strlen(safe) + 1 > cap)
+		return;
+	if (len)
+		list[len++] = ',';
+	strcpy(list + len, safe);
 }
 
 static int kernel_volume_id(const unsigned char *ubi, size_t pebs, unsigned int *id)
@@ -137,10 +134,11 @@ static const char *str_prop(const void *fit, int node, const char *name)
 	return v && len > 0 && !v[len - 1] ? v : NULL;
 }
 
-int rt3_fw_ubi_platform(const void *ubi, size_t size, struct rt3_fw_platform *p)
+int rt3_fw_ubi_platform(const void *ubi, size_t size, const char *const *board,
+			unsigned int board_count, struct rt3_fw_platform *p)
 {
 	unsigned char *fit = NULL;
-	unsigned int id;
+	unsigned int id, i;
 	const char *def, *kernel, *arch;
 	int confs, node, images, ret;
 
@@ -157,11 +155,17 @@ int rt3_fw_ubi_platform(const void *ubi, size_t size, struct rt3_fw_platform *p)
 	if (confs < 0)
 		goto out;
 	for (node = fdt_first_subnode(fit, confs); node >= 0;
-	     node = fdt_next_subnode(fit, node))
+	     node = fdt_next_subnode(fit, node)) {
 		append_name(p->configs, sizeof(p->configs), fdt_get_name(fit, node, NULL));
-	if (!p->configs[0])
+		p->count++;
+	}
+	if (!p->count)
 		goto out;
 	ret = 0;
+	/* Same lookup bootipq makes: the board's names in order, by node name. */
+	for (i = 0; i < board_count && !p->match[0]; i++)
+		if (board[i] && board[i][0] && fdt_subnode_offset(fit, confs, board[i]) >= 0)
+			copy_name(p->match, sizeof(p->match), board[i]);
 	/* Arch of the kernel the default (else first) config would boot. */
 	def = str_prop(fit, confs, "default");
 	node = def ? fdt_subnode_offset(fit, confs, def) : fdt_first_subnode(fit, confs);

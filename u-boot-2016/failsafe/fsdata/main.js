@@ -8727,7 +8727,10 @@ const firmwareModeManager = (() => {
         const p = result && result.platform;
         if (!p || typeof p !== 'object') return null;
         const clip = v => typeof v === 'string' ? v.slice(0, 160) : '';
-        const configs = clip(p.configs).split(',').filter(Boolean).join(', ');
+        const shown = clip(p.configs).split(',').filter(Boolean);
+        const more = Number.isInteger(p.count) && p.count > shown.length
+            ? (isZh() ? ' 等共 ' + p.count + ' 个' : ' and others, ' + p.count + ' in total') : '';
+        const configs = shown.join(', ') + more;
         const board = clip(p.board_configs).split(',').filter(Boolean).join(', ');
         if (p.known !== true) {
             return { warn: true, text: isZh()

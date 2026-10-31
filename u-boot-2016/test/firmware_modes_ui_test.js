@@ -121,7 +121,7 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
 
     c = await bootContext({ layout: baseLayout('dual'), replies: [
         { status: 'ok', token: 'tok-one', target: 'rootfs', mode: 'dual', bytes: 100, sha256: 'a'.repeat(64), format: 'ubi_unidentified',
-          platform: { known: true, configs: 'config@emulation-c1,config@mp03.5-c1', arch: 'arm64', board_configs: 'config@mp02.1,config-mp02.1', match: '', arch_ok: false } },
+          platform: { known: true, configs: 'config@emulation-c1,config@mp03.5-c1', count: 13, arch: 'arm64', board_configs: 'config@mp02.1,config-mp02.1', match: '', arch_ok: false } },
         { status: 'ok', token: 'tok-two', target: 'rootfs_1', mode: 'dual', bytes: 101, sha256: 'b'.repeat(64), format: 'h3c_rt3000_oem_ubi',
           platform: { known: true, configs: 'config@mp02.1', arch: 'arm', board_configs: 'config@mp02.1,config-mp02.1', match: 'config@mp02.1', arch_ok: true } },
         { status: 'ok', verified: true, target: 'rootfs_1', mode: 'dual' }
@@ -152,7 +152,7 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
 
     assert(c.elements().bFirmwareContent.textContent.includes('Complete UBI system image (kernel and system volumes)'));
     const warnNode = c.elements().bFirmwareContent.find('p').find(x => x.className === 'firmware-platform-warn');
-    assert(warnNode && warnNode.textContent.includes('targets config@emulation-c1, config@mp03.5-c1 (arm64)'), 'platform mismatch must be shown');
+    assert(warnNode && warnNode.textContent.includes('targets config@emulation-c1, config@mp03.5-c1 and others, 13 in total (arm64)'), 'platform mismatch must be shown');
     assert(warnNode.textContent.includes('this board needs config@mp02.1, config-mp02.1 (arm)'));
     assert.strictEqual(write.disabled, false, 'a platform mismatch must not block the write');
     radios[1].checked = true; radios[0].checked = false; await radios[1].dispatch('change');
