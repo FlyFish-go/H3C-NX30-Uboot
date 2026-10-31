@@ -15,6 +15,8 @@
 #include <rt3000_b_fw_write.h>
 #include <rt3000_b_fw_core.h>
 #include <rt3_fw_fit_ubi.h>
+#include <rt3_fw_platform.h>
+#include <asm/arch-qca-common/qca_common.h>
 #include "modules.h"
 #include "../../drivers/mtd/ubi/ubi-media.h"
 #if defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY)
@@ -60,7 +62,7 @@ struct rt3_fw_oem {
 };
 
 static struct rt3_fw_pending fw_pending;
-static char fw_reply[1024];
+static char fw_reply[1536];
 static u32 rt3_good_blocks[RT3_FW_MAX_PEB_COUNT];
 static u8 *rt3_verify_buf;
 static u8 *rt3_write_buf;
@@ -571,6 +573,42 @@ snprintf(fw_reply, sizeof(fw_reply),
 	fw_reply_json(response, 200, fw_reply);
 }
 
+#ifdef CONFIG_LIST_OF_CONFIG_NAMES_SUPPORT
+extern struct config_list config_entries;
+#endif
+
+/*
+ * Describe what the image was built for next to this board's own config
+ * names (the ones bootipq tries, in order). Informational: a mismatch is
+ * shown on the page, the write is still allowed.
+ */
+static void fw_platform_json(const u8 *ubi, size_t size, char *out, size_t cap)
+{
+	struct rt3_fw_platform p;
+	char board[96] = "";
+	const char *match = "";
+	int known = !rt3_fw_ubi_platform(ubi, size, &p);
+#ifdef CONFIG_LIST_OF_CONFIG_NAMES_SUPPORT
+	u32 i;
+
+	for (i = 0; i < config_entries.no_of_entries; i++) {
+		const char *name = config_entries.entry[i];
+		if (board[0])
+			strlcat(board, ",", sizeof(board));
+		strlcat(board, name, sizeof(board));
+		if (known && !match[0] && rt3_fw_platform_has_config(p.configs, name))
+			match = name;
+	}
+#endif
+	if (!known) {
+		snprintf(out, cap, ",\"platform\":{\"known\":false,\"board_configs\":\"%s\"}", board);
+		return;
+	}
+	snprintf(out, cap,
+		 ",\"platform\":{\"known\":true,\"configs\":\"%s\",\"arch\":\"%s\",\"board_configs\":\"%s\",\"match\":\"%s\",\"arch_ok\":%s}",
+		 p.configs, p.arch, board, match, strcmp(p.arch, "arm") ? "false" : "true");
+}
+
 static void fw_validate_handler(enum httpd_uri_handler_status status,
 				struct httpd_request *request,
 				struct httpd_response *response)
@@ -585,6 +623,7 @@ static void fw_validate_handler(enum httpd_uri_handler_status status,
 	u32 reserve_margin;
 	char target[RT3_LAYOUT_PARTITION_NAME_LEN], mode[8], digest_hex[65];
 	char identity[32] = "unidentified";
+	char platform[448];
 	u8 digest[SHA256_SUM_LEN];
 	int ret;
 	if (status != HTTP_CB_NEW) return;
@@ -657,9 +696,10 @@ static void fw_validate_handler(enum httpd_uri_handler_status status,
 	fw_hex(digest, sizeof(digest), digest_hex);
 	if (extracted.catalog)
 		snprintf(identity, sizeof(identity), "%s %s", extracted.catalog->model, extracted.catalog->release);
+	fw_platform_json(extracted.ubi, extracted.ubi_size, platform, sizeof(platform));
 	snprintf(fw_reply, sizeof(fw_reply),
-		 "{\"status\":\"ok\",\"token\":\"%08x\",\"target\":\"%s\",\"mode\":\"%s\",\"bytes\":%lu,\"sha256\":\"%s\",\"format\":\"%s\",\"firmware_identity\":\"%s\"}",
-		 fw_pending.token, target, mode, (ulong)file->size, digest_hex, format, identity);
+		 "{\"status\":\"ok\",\"token\":\"%08x\",\"target\":\"%s\",\"mode\":\"%s\",\"bytes\":%lu,\"sha256\":\"%s\",\"format\":\"%s\",\"firmware_identity\":\"%s\"%s}",
+		 fw_pending.token, target, mode, (ulong)file->size, digest_hex, format, identity, platform);
 	fw_reply_json(response, 200, fw_reply);
 }
 

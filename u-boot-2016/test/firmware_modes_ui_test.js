@@ -120,8 +120,10 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
     assert.strictEqual(c.elements().bFirmwareContent.find('input').length, 0, 'mismatched layout must not expose upload controls');
 
     c = await bootContext({ layout: baseLayout('dual'), replies: [
-        { status: 'ok', token: 'tok-one', target: 'rootfs', mode: 'dual', bytes: 100, sha256: 'a'.repeat(64), format: 'ubi_unidentified' },
-        { status: 'ok', token: 'tok-two', target: 'rootfs_1', mode: 'dual', bytes: 101, sha256: 'b'.repeat(64), format: 'h3c_rt3000_oem_ubi' },
+        { status: 'ok', token: 'tok-one', target: 'rootfs', mode: 'dual', bytes: 100, sha256: 'a'.repeat(64), format: 'ubi_unidentified',
+          platform: { known: true, configs: 'config@emulation-c1,config@mp03.5-c1', arch: 'arm64', board_configs: 'config@mp02.1,config-mp02.1', match: '', arch_ok: false } },
+        { status: 'ok', token: 'tok-two', target: 'rootfs_1', mode: 'dual', bytes: 101, sha256: 'b'.repeat(64), format: 'h3c_rt3000_oem_ubi',
+          platform: { known: true, configs: 'config@mp02.1', arch: 'arm', board_configs: 'config@mp02.1,config-mp02.1', match: 'config@mp02.1', arch_ok: true } },
         { status: 'ok', verified: true, target: 'rootfs_1', mode: 'dual' }
     ] });
     await c.context.testFirmwareModes.initMode('dual');
@@ -149,11 +151,17 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
     assert(c.elements().bFirmwareContent.textContent.includes('Target: rootfsPhysical slot 1 · Address range: 0x900000 – 0x30fffff'));
 
     assert(c.elements().bFirmwareContent.textContent.includes('Complete UBI system image (kernel and system volumes)'));
+    const warnNode = c.elements().bFirmwareContent.find('p').find(x => x.className === 'firmware-platform-warn');
+    assert(warnNode && warnNode.textContent.includes('targets config@emulation-c1, config@mp03.5-c1 (arm64)'), 'platform mismatch must be shown');
+    assert(warnNode.textContent.includes('this board needs config@mp02.1, config-mp02.1 (arm)'));
+    assert.strictEqual(write.disabled, false, 'a platform mismatch must not block the write');
     radios[1].checked = true; radios[0].checked = false; await radios[1].dispatch('change');
     assert.strictEqual(write.disabled, true, 'changing target must invalidate the prior token');
     assert.strictEqual(c.elements().bFirmwareContent.find('div').some(x => x.textContent.includes('SHA-256:')), false);
     await validate.click();
     assert.strictEqual(write.disabled, false);
+    assert(c.elements().bFirmwareContent.textContent.includes('Target platform: config@mp02.1 (arm); this board will boot config@mp02.1.'));
+    assert(!c.elements().bFirmwareContent.find('p').some(x => x.className === 'firmware-platform-warn'), 'a matching platform is not a warning');
     await write.click();
     assert.strictEqual(c.requests[0].url, '/firmware/validate');
     assert.strictEqual(c.requests[0].form.target, 'rootfs');

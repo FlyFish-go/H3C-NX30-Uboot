@@ -3948,3 +3948,11 @@ html[data-theme="light"] .syslog-output {
         max-height: 550px;
     }
 }
+
+/* Firmware built for another platform: shown, never blocking. */
+.firmware-platform-warn {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+}

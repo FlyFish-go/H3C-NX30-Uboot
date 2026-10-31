@@ -8720,6 +8720,31 @@ const firmwareModeManager = (() => {
         return isZh() ? '未知格式：' + format.slice(0, 96) : 'Unknown format: ' + format.slice(0, 96);
     }
 
+    // What the image was built for vs. the config names this board boots
+    // (bootipq tries them in order). Only a notice: the write stays allowed,
+    // because a board that fails to boot can always re-enter this page.
+    function platformNotice(result) {
+        const p = result && result.platform;
+        if (!p || typeof p !== 'object') return null;
+        const clip = v => typeof v === 'string' ? v.slice(0, 160) : '';
+        const configs = clip(p.configs).split(',').filter(Boolean).join(', ');
+        const board = clip(p.board_configs).split(',').filter(Boolean).join(', ');
+        if (p.known !== true) {
+            return { warn: true, text: isZh()
+                ? '未能读取固件的目标平台（内核 FIT 不可识别），无法判断是否适用于本机。'
+                : 'Could not read the target platform from the image (kernel FIT not recognised), so it is unknown whether it suits this board.' };
+        }
+        const arch = clip(p.arch) || (isZh() ? '未知' : 'unknown');
+        if (p.match && p.arch_ok === true) {
+            return { warn: false, text: isZh()
+                ? '目标平台：' + configs + '（' + arch + '），本机将使用 ' + clip(p.match) + '。'
+                : 'Target platform: ' + configs + ' (' + arch + '); this board will boot ' + clip(p.match) + '.' };
+        }
+        return { warn: true, text: isZh()
+            ? '注意：固件的目标平台是 ' + configs + '（' + arch + '），本机需要 ' + (board || '未知') + '（arm）。它可能无法在本机启动；写入不会被阻止，启动失败时可以重新进入救援页写回其他系统。'
+            : 'Notice: the image targets ' + configs + ' (' + arch + '), but this board needs ' + (board || 'unknown') + ' (arm). It may not boot here; the write is not blocked, and if it fails to boot you can re-enter this rescue page and write another system.' };
+    }
+
     function failureText(result, isWrite) {
         const code = result && result.info && typeof result.info.type === 'string' ? result.info.type : '';
         const raw = result && typeof result.error === 'string' ? result.error.slice(0, 180) : '';
@@ -8924,6 +8949,8 @@ const firmwareModeManager = (() => {
                 if (typeof result.bytes === 'number') reviewDetails.appendChild(textNode('p', (isZh() ? '文件大小：' : 'File size: ') + formatBytes(result.bytes)));
                 if (typeof result.sha256 === 'string') reviewDetails.appendChild(textNode('p', 'SHA-256: ' + result.sha256));
                 if (typeof result.format === 'string') reviewDetails.appendChild(textNode('p', (isZh() ? '格式：' : 'Format: ') + formatDescription(result)));
+                const platform = platformNotice(result);
+                if (platform) reviewDetails.appendChild(textNode('p', platform.text, platform.warn ? 'firmware-platform-warn' : ''));
                 review.hidden = false;
                 writeButton.disabled = false;
                 status.textContent = isZh() ? '文件已验证。检查目标与摘要后，明确提交写入。' : 'Image validated. Review the target and digest, then explicitly submit the write.';
