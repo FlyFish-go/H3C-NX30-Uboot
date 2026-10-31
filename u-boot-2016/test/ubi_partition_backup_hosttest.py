@@ -42,7 +42,7 @@ def load_handler(tree):
     spec.loader.exec_module(helper)
     helper.ROOT = tree
     helper.MODULE = tree / "u-boot-2016/failsafe/modules/firmware_rt3000_b.c"
-    helper.OEM_HEADER = tree / "u-boot-2016/failsafe/modules/firmware_oem_rt3000_b.h"
+    helper.OEM_HEADER = tree / "u-boot-2016/failsafe/modules/firmware_oem_catalog.h"
     for needed in (helper.MODULE, helper.OEM_HEADER,
                    tree / "u-boot-2016/failsafe/modules/firmware_rt3000_b_core.c",
                    tree / "u-boot-2016/include/rt3000_b_fw_core.h"):

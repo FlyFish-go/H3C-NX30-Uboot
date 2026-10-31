@@ -13,8 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = ROOT / "u-boot-2016/failsafe/modules/firmware_rt3000_b.c"
-OEM_HEADER = ROOT / "u-boot-2016/failsafe/modules/firmware_oem_rt3000_b.h"
-CATALOG = ROOT / "doc/RT3000-B-OEM-CATALOG-20261008.json"
+OEM_HEADER = ROOT / "u-boot-2016/failsafe/modules/firmware_oem_catalog.h"
+CATALOG = Path(os.environ.get("RT3000_OEM_CATALOG", str(ROOT / "doc/RT3000-B-OEM-CATALOG-20261008.json")))
 UBI_TEST = Path(__file__).with_name("firmware_rt3000_b_ubi_hosttest.py")
 EVIDENCE = Path(os.environ.get("RT3000_B_HANDLER_EVIDENCE_OUT", "handler-hosttest.json"))
 UPLOAD_ADDR = 0x44000000
@@ -169,12 +169,23 @@ def build_test_lib(tmp):
     core_header = ROOT / "u-boot-2016/include/rt3000_b_fw_core.h"
     core_src = (ROOT / "u-boot-2016/failsafe/modules/firmware_rt3000_b_core.c").read_text()
     core_src = re.sub(r"^#include\s+.*$", "", core_src, flags=re.M)
-    test_src = SHIM + "\n#include \"" + str(core_header) + "\"\n" + catalog + "\n" + src + "\n" + core_src + "\n" + WRAPPERS
+    # QSDK FIT unwrap and platform notice live in their own production files.
+    extra_headers = "".join("\n#include \"%s\"" % (ROOT / "u-boot-2016/include" / h)
+                            for h in ("rt3_fw_fit_ubi.h", "rt3_fw_platform.h"))
+    extra_objs = []
+    for f in ("firmware_fit_ubi.c", "firmware_platform.c"):
+        obj = Path(tmp) / (f[:-2] + ".o")
+        subprocess.run(["gcc", "-c", "-fPIC", "-O1", "-std=gnu99", "-DRT3_FW_HOST_TEST", "-DUSE_HOSTCC",
+                        "-I" + str(ROOT / "u-boot-2016/tools"), "-idirafter", str(ROOT / "u-boot-2016/include"),
+                        "-o", str(obj), str(ROOT / "u-boot-2016/failsafe/modules" / f)], check=True)
+        extra_objs.append(str(obj))
+    test_src = (SHIM + "\n#include \"" + str(core_header) + "\"" + extra_headers + "\n" + catalog + "\n" +
+                src + "\n" + core_src + "\n" + WRAPPERS)
     cfile = Path(tmp) / "http_handlers.c"
     sofile = Path(tmp) / "http_handlers.so"
     cfile.write_text(test_src)
     subprocess.run(["gcc", "-shared", "-fPIC", "-O1", "-w", "-DRT3_FW_HOST_TEST",
-                    str(cfile),
+                    str(cfile), *extra_objs,
                     "-Wl,-l:libfdt.so.1", "-lcrypto", "-o", str(sofile)], check=True)
     lib = ctypes.CDLL(str(sofile))
     lib.host_reset.argtypes = [ctypes.c_int]
@@ -256,6 +267,9 @@ def run():
     entries = json.loads(CATALOG.read_text())["entries"]
     rt = [e for e in entries if e["model"] == "RT3000"]
     assert len(rt) == 16
+    # One allowlist on every board: all 47 packages of all four models.
+    oem = [e for e in entries if e["model"] in ("NX30", "RC3000", "RT3000", "RW3000")]
+    assert len(oem) == 47
     evidence = {"schema_version": 1, "created_utc": datetime.now(timezone.utc).isoformat(),
                 "sample": "RT3000-B source-only host callback harness; no device/network/flash operation",
                 "staging_window": {"address": UPLOAD_ADDR, "bytes": UPLOAD_SIZE},
@@ -281,7 +295,7 @@ def run():
         assert dispatch(lib,"/firmware/validate",1)[0] == 405
 
         # Every exact OEM package passes through the actual validate callback, including target capacity.
-        for entry in rt:
+        for entry in oem:
             package = Path(entry["package_paths"][0]).read_bytes()
             fields = [("firmware",package),("target","rootfs_1"),("mode","dual")]
             code, body, keep = dispatch(lib,"/firmware/validate",2,fields)
@@ -289,7 +303,7 @@ def run():
             assert code == 200 and response["status"] == "ok", (entry["release"], code, body)
             assert response["target"] == "rootfs_1" and response["mode"] == "dual"
             assert response["format"] == "h3c_rt3000_oem_ubi"
-            assert response["firmware_identity"] == "RT3000 " + entry["release"]
+            assert response["firmware_identity"] == entry["model"] + " " + entry["release"]
             assert response["sha256"] == entry["package_sha256"]
             evidence["oem_validate"].append({"release": entry["release"], "http_status": code,
                 "bytes": response["bytes"], "sha256": response["sha256"],
@@ -299,11 +313,19 @@ def run():
             oldtoken = response["token"]
             badfields = [("firmware",b"bad"),("target","rootfs_1"),("mode","dual")]
             badcode, badbody, badkeep = dispatch(lib,"/firmware/validate",2,badfields)
-            assert badcode == 422
+            assert badcode == 422 and json.loads(badbody)["error"] == "unsupported firmware format"
             evidence["negative_callback_cases"].append({"case": "new_invalid_validate_invalidates_prior_token", "http_status": badcode})
             writefields = [("token",oldtoken),("target","rootfs_1"),("mode","dual")]
             assert dispatch(lib,"/firmware/write",2,writefields)[0] == 409
             assert lib.host_erase_count_get() == 0
+
+        # An H3C package whose exact bytes are not listed gets its own error, not "invalid UBI".
+        tampered = bytearray(Path(next(e for e in entries if e["model"] == "RC3000" and e["release"] == "R013L01")["package_paths"][0]).read_bytes())
+        tampered[-1] ^= 0xff
+        code, body, _ = dispatch(lib,"/firmware/validate",2,[("firmware",bytes(tampered)),("target","rootfs_1"),("mode","dual")])
+        assert code == 422 and json.loads(body)["error"] == "unknown H3C OEM package", (code, body)
+        assert lib.host_erase_count_get() == 0
+        evidence["negative_callback_cases"].append({"case": "unlisted_h3c_package", "http_status": code})
 
         # The staging window is mandatory; heap-backed direct pointers are rejected before parsing.
         ubi = ubi_test.extract_ubi(next(e for e in rt if e["release"] == "R012"))
@@ -468,7 +490,7 @@ def run():
         "malformed_trailing_token", "single_layout_wrong_target", "one_shot_replay", "readback_failure_consumes_token"]
     EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
     EVIDENCE.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
-    print("HANDLER_HOSTTEST_PASS: GET/validate/write callbacks, 16 OEM packages, one-shot/layout guards, commit and readback failure")
+    print("HANDLER_HOSTTEST_PASS: GET/validate/write callbacks, 47 OEM packages (NX30/RC3000/RT3000/RW3000), unlisted H3C package error, one-shot/layout guards, commit and readback failure")
     print("EVIDENCE: " + str(EVIDENCE))
 
 

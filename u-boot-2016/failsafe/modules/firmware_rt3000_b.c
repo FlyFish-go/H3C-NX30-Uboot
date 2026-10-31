@@ -19,11 +19,7 @@
 #include <asm/arch-qca-common/qca_common.h>
 #include "modules.h"
 #include "../../drivers/mtd/ubi/ubi-media.h"
-#if defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY)
-#include "firmware_oem_hw_a.h"
-#else
-#include "firmware_oem_rt3000_b.h"
-#endif
+#include "firmware_oem_catalog.h"
 
 #define RT3_FW_MAX_UPLOAD       (80U * SZ_1M)
 #define RT3_FW_MAX_PEB_COUNT    640U
@@ -662,6 +658,16 @@ static void fw_validate_handler(enum httpd_uri_handler_status status,
 	}
 	fw_sha256(file->data, file->size, digest);
 	ret = fw_extract_input((const u8 *)file->data, file->size, digest, &extracted, &format);
+	if (ret == -EPERM) {
+		/* Neither UBI, a listed OEM package nor a QSDK FIT. Say whether
+		 * it looked like an H3C package so the page does not blame the
+		 * UBI structure of a file whose release is simply not listed. */
+		if (file->size >= 4 && !memcmp(file->data, "H3C_", 4))
+			fw_reply_json(response, 422, "{\"status\":\"fail\",\"error\":\"unknown H3C OEM package\"}");
+		else
+			fw_reply_json(response, 422, "{\"status\":\"fail\",\"error\":\"unsupported firmware format\"}");
+		return;
+	}
 	if (ret || extracted.ubi_size > part->size ||
 	    fw_validate_ubi(extracted.ubi, extracted.ubi_size, &summary)) {
 		fw_reply_json(response, 422, "{\"status\":\"fail\",\"error\":\"unsupported package or invalid UBI image\"}");

@@ -10,7 +10,7 @@ def generate(source, models, guard, description):
         raise ValueError("expected reviewed OEM catalog47 schema v1")
     rows = [row for row in doc["entries"] if row.get("model") in models]
     counts = {m: sum(1 for r in rows if r["model"] == m) for m in models}
-    expected = {"RT3000": 16, "RC3000": 14, "RW3000": 11}
+    expected = {"RT3000": 16, "RC3000": 14, "RW3000": 11, "NX30": 6}
     if any(counts[m] != expected[m] for m in models):
         raise ValueError("unexpected exact model counts: " + repr(counts))
     lines = [
@@ -45,12 +45,13 @@ def generate(source, models, guard, description):
     lines.extend(["};", "#endif", ""])
     return "\n".join(lines), counts
 if __name__ == "__main__":
-    source, output, profile = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
-    profiles = {
-        "hwa": ({"RC3000", "RT3000", "RW3000"}, "__H3C_HW_A_OEM_FW_CATALOG_H__", "HW-A RC3000+RT3000+RW3000 exact package allowlist"),
-        "hwb": ({"RT3000"}, "__RT3000_B_OEM_FW_CATALOG_H__", "HW-B RT3000 exact package allowlist"),
-    }
-    models, guard, description = profiles[profile]
+    # Every model's firmware has been seen on every board class (an RC3000
+    # can be an HW-A, HW-B/D mp02.1 or HW-C board), so all boards share one
+    # list; a platform mismatch is only a notice on the rescue page.
+    source, output = Path(sys.argv[1]), Path(sys.argv[2])
+    models = {"NX30", "RC3000", "RT3000", "RW3000"}
+    guard = "__H3C_OEM_FW_CATALOG_H__"
+    description = "NX30+RC3000+RT3000+RW3000 exact package allowlist shared by HW-A/B/C/D"
     generated, counts = generate(source, models, guard, description)
     output.write_text(generated, encoding="ascii")
     print("wrote %s: %s" % (output, counts))

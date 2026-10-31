@@ -267,6 +267,24 @@ const baseLayout = (mode = 'dual', write = true) => ({ status: 'ok', mode, write
     assert(c.elements().bFirmwareContent.textContent.includes('固件包不支持，或完整 UBI 系统镜像结构无效、不完整。'));
     assert(!c.elements().bFirmwareContent.textContent.includes('固件验证失败'));
 
+    for (const [error, text] of [
+        ['unknown H3C OEM package', '这是 H3C 原厂固件包，但这个文件不在救援系统的白名单里'],
+        ['unsupported firmware format', '文件格式不支持；请选择 H3C 原厂固件包、QSDK 升级包或完整 UBI 系统镜像。']]) {
+        c = await bootContext({ lang: 'zh-cn', layout: baseLayout('dual'), replies: [
+            { status: 'fail', error, httpStatus: 422 }
+        ] });
+        await c.context.testFirmwareModes.initMode('dual');
+        inputs = c.elements().bFirmwareContent.find('input');
+        inputs.find(x => x.type === 'radio').checked = true;
+        await inputs.find(x => x.type === 'radio').dispatch('change');
+        inputs.find(x => x.type === 'file').files = [{ name: 'RC3000V100R013L01.bin' }];
+        await inputs.find(x => x.type === 'file').dispatch('change');
+        buttons = c.elements().bFirmwareContent.find('button');
+        await buttons[0].click();
+        assert(c.elements().bFirmwareContent.textContent.includes(text), error);
+        assert(!c.elements().bFirmwareContent.textContent.includes('UBI 系统镜像结构无效'), error);
+    }
+
     c = await bootContext({ legacy: true, pathName: '/firmware.html' });
     await c.context.testFirmwareModes.initLanding();
     assert.strictEqual(c.legacyCalls.length, 1);

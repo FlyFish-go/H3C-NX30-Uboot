@@ -11,7 +11,7 @@ m=t("failsafe/modules/rt3000_b_metadata_core.c")
 for x in ["machid[4]={1,1,4,8}",'has(load,size,"h3c,hw-c",8)','has(load,size,"H3C HW-C",8)', "b_identity[5]={2,8,4,1,1}"]: assert x in m
 
 fw=t("failsafe/modules/firmware_rt3000_b.c")
-assert '#include "firmware_oem_rt3000_b.h"' in fw
+assert '#include "firmware_oem_catalog.h"' in fw
 q=t("drivers/mtd/nand/qpic_nand.c")
 assert q.count("h3c_hw_c_nand_write_rejected()")>=5 and "CONFIG_H3C_HW_C_PRODUCTION_PORT" in q
 assert "W25N01GWZEIG" in q
