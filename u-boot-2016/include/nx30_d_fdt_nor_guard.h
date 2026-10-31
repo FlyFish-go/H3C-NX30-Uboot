@@ -56,6 +56,13 @@ static int nx30_d_fdt_nor_guard_validate(int handoff_verified, int nand_boot,
 		return -EINVAL;
 	root_ok = nx30_d_fdt_stringlist_has(root_compat, root_len,
 					    "qcom,ipq5018-mp02.1");
+	/*
+	 * Generic IPQ5018 QSDK kernels (for example Jike N3000) carry no
+	 * SPI-NOR child at all.  There is nothing to disable, so hand off
+	 * unchanged instead of hanging the board in fdt fixup.
+	 */
+	if (root_ok == 1 && !exact_path_count && !known_flash_node_count)
+		return 0;
 	parent_ok = nx30_d_fdt_stringlist_has(parent_compat, parent_len,
 					      "qcom,spi-qup-v2.2.1");
 	child_n25 = nx30_d_fdt_stringlist_has(chip_compat, chip_len,

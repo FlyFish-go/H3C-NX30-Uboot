@@ -42,6 +42,14 @@ int main(void)
 	      reg0, sizeof(reg0), -EINVAL, 0);
 	check(1, root, sizeof(root) - 1, 0, 1, parent, sizeof(parent) - 1,
 	      n25, sizeof(n25) - 1, reg0, sizeof(reg0), -EINVAL, 0);
+	/* No SPI-NOR child anywhere (generic QSDK FDT): no-op, no error. */
+	check(1, root, sizeof(root) - 1, 0, 0, NULL, 0, NULL, 0, NULL, 0, 0, 0);
+	check(1, root, sizeof(root) - 1, 0, 0, parent, sizeof(parent) - 1,
+	      NULL, 0, NULL, 0, 0, 0);
+	check(0, root, sizeof(root) - 1, 0, 0, NULL, 0, NULL, 0, NULL, 0,
+	      -EINVAL, 0);
+	check(1, "qcom,wrong\0", sizeof("qcom,wrong\0") - 1, 0, 0,
+	      NULL, 0, NULL, 0, NULL, 0, -EINVAL, 0);
 	check(1, root, sizeof(root) - 1, 2, 1, parent, sizeof(parent) - 1,
 	      n25, sizeof(n25) - 1, reg0, sizeof(reg0), -EINVAL, 0);
 	check(1, root, sizeof(root) - 1, 1, 2, parent, sizeof(parent) - 1,
