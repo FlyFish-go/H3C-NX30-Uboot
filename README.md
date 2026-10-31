@@ -6,7 +6,7 @@
 
 不拆机、不接 TTL：浏览器里生成桥接包，在原厂后台上传，跟着向导就能装好。装完原厂系统照常使用，随时可以回原厂。
 
-[![U-Boot](https://img.shields.io/badge/U--Boot-v0.1.0--pre.5-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.5)
+[![U-Boot](https://img.shields.io/badge/U--Boot-v0.1.0--pre.6-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.6)
 [![BootBridge](https://img.shields.io/badge/BootBridge-v0.2.0--pre.3-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/bootbridge-v0.2.0-pre.3)
 [![QSDK 固件](https://img.shields.io/badge/QSDK_11.5_固件-r6-e76f51)](https://github.com/FlyFish-go/H3C-RT3000-Product-R1)
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue)](LICENSE)
@@ -15,7 +15,7 @@
 
 ### [🚀 打开 BootBridge 网页版，开始安装](https://flyfish-go.github.io/H3C-NX30-Uboot/)
 
-[下载 U-Boot](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.5) · [配套 QSDK 11.5 固件](https://github.com/FlyFish-go/H3C-RT3000-Product-R1) · [支持的设备](#支持的设备) · [QQ 群 1131957442](#交流与反馈) · [English](README_EN.md)
+[下载 U-Boot](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.6) · [配套 QSDK 11.5 固件](https://github.com/FlyFish-go/H3C-RT3000-Product-R1) · [支持的设备](#支持的设备) · [QQ 群 1131957442](#交流与反馈) · [English](README_EN.md)
 
 </div>
 
@@ -60,7 +60,7 @@
 
 之后想进救援页：断电，按住 Reset 再通电，打开 `http://192.168.10.1`。
 
-**已经装过本项目旧版 U-Boot：** 在救援页「U-Boot 更新」上传新版即可，见 [pre.5 升级说明](releases/uboot-v0.1.0-pre.5.md#从-pre3-或-pre4-升级)。比 pre.3 更旧的版本按 [pre.3 说明](releases/uboot-v0.1.0-pre.3.md#从旧版升级)操作，升级后需要再刷一次固件。
+**已经装过本项目旧版 U-Boot：** 在救援页「U-Boot 更新」上传新版即可，见 [pre.6 升级说明](releases/uboot-v0.1.0-pre.6.md#从-pre3pre4-或-pre5-升级)（HW-D 的 ECC8 机器要用 RAM 救援版）。比 pre.3 更旧的版本按 [pre.3 说明](releases/uboot-v0.1.0-pre.3.md#从旧版升级)操作，升级后需要再刷一次固件。
 
 ## 装好之后：刷 QSDK 11.5 固件
 
@@ -77,7 +77,7 @@
 | HW-C（RT3000 RTL8367S） | ✅ | ✅ | ✅ | ✅ |
 | HW-D（NX30） | ✅ | ✅ | ✅ | ✅ |
 
-U-Boot 共 84 个候选（4 类主板 × 21 种 NAND 配置），全部离线构建通过；实机测试的是上表 4 个，其余候选还没有在实物上跑过。每类主板目前只有一台样机，详细记录见[验证记录](docs/VALIDATION.md)。
+U-Boot 共 84 个候选（4 类主板 × 21 种 NAND 配置），全部离线构建通过；实机测试的是上表 4 个，其余候选还没有在实物上跑过。pre.6 修复的是救援页「固件更新」，实机测试了 HW-A、HW-B、HW-D，HW-C 还没有在 pre.6 上测试，见 [pre.6 说明](releases/uboot-v0.1.0-pre.6.md#验证状态)。每类主板目前只有一台样机，详细记录见[验证记录](docs/VALIDATION.md)。
 
 ## 使用前请注意
 

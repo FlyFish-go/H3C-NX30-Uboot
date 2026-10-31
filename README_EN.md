@@ -6,7 +6,7 @@
 
 No disassembly, no serial cable: build a bridge package in your browser, upload it from the stock admin page, and follow the wizard. The stock firmware keeps working afterwards, and you can return to it at any time.
 
-[![U-Boot](https://img.shields.io/badge/U--Boot-v0.1.0--pre.5-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.5)
+[![U-Boot](https://img.shields.io/badge/U--Boot-v0.1.0--pre.6-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.6)
 [![BootBridge](https://img.shields.io/badge/BootBridge-v0.2.0--pre.3-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/bootbridge-v0.2.0-pre.3)
 [![QSDK firmware](https://img.shields.io/badge/QSDK_11.5_firmware-r6-e76f51)](https://github.com/FlyFish-go/H3C-RT3000-Product-R1)
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue)](LICENSE)
@@ -14,7 +14,7 @@ No disassembly, no serial cable: build a bridge package in your browser, upload 
 
 ### [🚀 Open BootBridge Web and start installing](https://flyfish-go.github.io/H3C-NX30-Uboot/)
 
-[Download U-Boot](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.5) · [QSDK 11.5 firmware](https://github.com/FlyFish-go/H3C-RT3000-Product-R1) · [Supported devices](#supported-devices) · [Community](#community-and-feedback) · [简体中文](README.md)
+[Download U-Boot](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.6) · [QSDK 11.5 firmware](https://github.com/FlyFish-go/H3C-RT3000-Product-R1) · [Supported devices](#supported-devices) · [Community](#community-and-feedback) · [简体中文](README.md)
 
 </div>
 
@@ -59,7 +59,7 @@ One retail model can ship with different boards (the RT3000 exists as HW-B and H
 
 To reach the rescue page later: power off, hold Reset, power on, open `http://192.168.10.1`.
 
-**Already running an older U-Boot from this project:** upload the new build on the rescue page under "U-Boot Update"; see the [pre.5 notes](releases/uboot-v0.1.0-pre.5.md). Versions older than pre.3 follow the [pre.3 notes](releases/uboot-v0.1.0-pre.3.md) and need the firmware reflashed afterwards.
+**Already running an older U-Boot from this project:** upload the new build on the rescue page under "U-Boot Update"; see the [pre.6 notes](releases/uboot-v0.1.0-pre.6.md) (Chinese; HW-D ECC8 units must use the RAM rescue build). Versions older than pre.3 follow the [pre.3 notes](releases/uboot-v0.1.0-pre.3.md) and need the firmware reflashed afterwards.
 
 ## Next: QSDK 11.5 firmware
 
@@ -76,7 +76,7 @@ One unit per board group has gone through the whole path from stock firmware to 
 | HW-C (RT3000 RTL8367S) | ✅ | ✅ | ✅ | ✅ |
 | HW-D (NX30) | ✅ | ✅ | ✅ | ✅ |
 
-All 84 U-Boot candidates (4 board groups × 21 NAND configurations) build and pass offline checks; the 4 above have run on hardware, the rest have not. Details in the [validation record](docs/VALIDATION.md) (Chinese).
+All 84 U-Boot candidates (4 board groups × 21 NAND configurations) build and pass offline checks; the 4 above have run on hardware, the rest have not. pre.6 fixes the rescue page's firmware update and was tested on HW-A, HW-B and HW-D; HW-C has not been tested on pre.6 yet. Details in the [validation record](docs/VALIDATION.md) (Chinese).
 
 ## Before you start
 

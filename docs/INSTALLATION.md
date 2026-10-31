@@ -1,11 +1,11 @@
 # 安装说明
 
 > [!WARNING]
-> 当前版本（U-Boot `v0.1.0-pre.5` / BootBridge `v0.2.0-pre.3`）正在由测试人员上机测试，尚未取得整机验收结论。改写启动程序有变砖风险。
+> 当前版本（U-Boot `v0.1.0-pre.6` / BootBridge `v0.2.0-pre.3`）正在由测试人员上机测试，尚未取得整机验收结论。改写启动程序有变砖风险。
 
 ## 已装过本项目 U-Boot：从旧版升级
 
-已装 pre.3 或 pre.4 的设备，直接在救援页「U-Boot 更新」上传本版 `appsbl.mbn` 即可，见 [pre.5 说明](../releases/uboot-v0.1.0-pre.5.md#从-pre3-或-pre4-升级)。用 BootBridge v0.2.0-pre.2 装上 pre.4 的设备也按这个步骤升级。
+已装 pre.3、pre.4 或 pre.5 的设备，直接在救援页「U-Boot 更新」上传本版 `appsbl.mbn` 即可，见 [pre.6 说明](../releases/uboot-v0.1.0-pre.6.md#从-pre3pre4-或-pre5-升级)。HW-D 的 ECC8 机器在旧版上「U-Boot 更新」会失败，要先在「网页终端」加载本版 RAM 救援版，再写入。BootBridge v0.2.0-pre.3 安装的是 pre.5，装好后同样按这个步骤升级。用 BootBridge v0.2.0-pre.2 装上 pre.4 的设备也按这个步骤升级。
 
 比 pre.3 更旧的版本：以前的救援页「固件更新」会留下 ECC 隐患，请升级后再刷一次固件。升级方法是在旧救援页的「网页终端」加载 RAM 救援版，再在新救援页写入 U-Boot（两份 APPSBL 一起写），完整步骤见 [pre.3 说明](../releases/uboot-v0.1.0-pre.3.md#从旧版升级)。不要用旧救援页的「U-Boot 更新」直接上传：它只写一份 APPSBL，HW-D 和部分 NAND 型号还会拒绝。
 
