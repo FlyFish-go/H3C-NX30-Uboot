@@ -1096,6 +1096,278 @@ int rt3_bootconfig_write_window_open(struct mtd_info *mtd, const char *name,
 
 #endif
 
+
+/*
+ * HW-D hybrid ECC.  The PBL/SBL loads the boot chain (SBL1 .. CDT_1 and both
+ * APPSBL copies) with the ECC this U-Boot was built for
+ * (CONFIG_H3C_NAND_LOAD_ECC_BITS), which on C8:41 is a per-unit factory choice.
+ * The ECC of the data area (APPSBLENV, ART, both rootfs slots, ...) is detected
+ * at runtime and may differ, e.g. an ECC4 boot unit whose data area was moved
+ * to ECC8 so that vendor kernels with a fixed ECC8 table can run.
+ * Every MTD access that touches the boot chain is executed in the load ECC and
+ * the controller is switched back afterwards; on units where both match this
+ * is a no-op.
+ */
+#if defined(CONFIG_H3C_HW_D_STORAGE_PORT) && defined(CONFIG_H3C_NAND_LOAD_ECC_BITS)
+#define H3C_HYB_ENV_START    0x00480000ULL
+#define H3C_HYB_APPSBL_START 0x00500000ULL
+#define H3C_HYB_DATA_START   0x00780000ULL
+static int h3c_hyb_active;          /* currently switched to the load ECC */
+static unsigned int h3c_hyb_logical; /* ECC to restore (system ECC) */
+static unsigned int h3c_hyb_switches;
+
+static int h3c_hyb_boot_region(u64 off)
+{
+	return off < H3C_HYB_ENV_START ||
+	       (off >= H3C_HYB_APPSBL_START && off < H3C_HYB_DATA_START);
+}
+
+static u64 h3c_hyb_segment_end(u64 off)
+{
+	if (off < H3C_HYB_ENV_START)
+		return H3C_HYB_ENV_START;
+	if (off < H3C_HYB_APPSBL_START)
+		return H3C_HYB_APPSBL_START;
+	if (off < H3C_HYB_DATA_START)
+		return H3C_HYB_DATA_START;
+	return ~0ULL;
+}
+
+/* 1 = switched (caller must leave), 0 = nothing to do, <0 = error */
+static int h3c_hyb_enter(struct mtd_info *mtd, u64 off)
+{
+	unsigned int want = CONFIG_H3C_NAND_LOAD_ECC_BITS;
+
+	if (h3c_hyb_active || !h3c_hyb_boot_region(off) ||
+	    (want != 4U && want != 8U) || mtd->ecc_strength == want)
+		return 0;
+	h3c_hyb_logical = mtd->ecc_strength;
+	if (nx30_nor_nand_set_read_ecc(want) || mtd->ecc_strength != want)
+		return -EIO;
+	h3c_hyb_active = 1;
+	h3c_hyb_switches++;
+	return 1;
+}
+
+static void h3c_hyb_leave(int entered)
+{
+	if (entered != 1)
+		return;
+	h3c_hyb_active = 0;
+	if (nx30_nor_nand_set_read_ecc(h3c_hyb_logical))
+		printf("H3C NAND: hybrid ECC restore to ECC%u failed\n",
+		       h3c_hyb_logical);
+}
+
+/* ECC the current write window was opened for (logical, not boot-region). */
+static unsigned int h3c_hyb_window_ecc(struct mtd_info *mtd)
+{
+	return h3c_hyb_active ? h3c_hyb_logical : mtd->ecc_strength;
+}
+
+unsigned int h3c_hyb_switch_count(void)
+{
+	return h3c_hyb_switches;
+}
+
+static int (*h3c_hyb_read_fn)(struct mtd_info *, loff_t, size_t, size_t *,
+			      u_char *);
+static int (*h3c_hyb_write_fn)(struct mtd_info *, loff_t, size_t, size_t *,
+			       const u_char *);
+static int (*h3c_hyb_read_oob_fn)(struct mtd_info *, loff_t,
+				  struct mtd_oob_ops *);
+static int (*h3c_hyb_write_oob_fn)(struct mtd_info *, loff_t,
+				   struct mtd_oob_ops *);
+static int (*h3c_hyb_erase_fn)(struct mtd_info *, struct erase_info *);
+static int (*h3c_hyb_isbad_fn)(struct mtd_info *, loff_t);
+static int (*h3c_hyb_markbad_fn)(struct mtd_info *, loff_t);
+
+static size_t h3c_hyb_chunk(u64 off, size_t left)
+{
+	u64 end = h3c_hyb_segment_end(off);
+
+	return (end != ~0ULL && off + left > end) ? (size_t)(end - off) : left;
+}
+
+static int h3c_hyb_read(struct mtd_info *mtd, loff_t from, size_t len,
+			size_t *retlen, u_char *buf)
+{
+	size_t done = 0;
+	int max = 0;
+
+	*retlen = 0;
+	while (done < len) {
+		u64 off = from + done;
+		size_t n = h3c_hyb_chunk(off, len - done), got = 0;
+		int ent = h3c_hyb_enter(mtd, off), ret;
+
+		if (ent < 0)
+			return -EIO;
+		ret = h3c_hyb_read_fn(mtd, off, n, &got, buf + done);
+		h3c_hyb_leave(ent);
+		done += got;
+		*retlen = done;
+		if (ret < 0)
+			return ret;
+		if (ret > max)
+			max = ret;
+		if (got != n)
+			return -EIO;
+	}
+	return max;
+}
+
+static int h3c_hyb_write(struct mtd_info *mtd, loff_t to, size_t len,
+			 size_t *retlen, const u_char *buf)
+{
+	size_t done = 0;
+
+	*retlen = 0;
+	while (done < len) {
+		u64 off = to + done;
+		size_t n = h3c_hyb_chunk(off, len - done), put = 0;
+		int ent = h3c_hyb_enter(mtd, off), ret;
+
+		if (ent < 0)
+			return -EIO;
+		ret = h3c_hyb_write_fn(mtd, off, n, &put, buf + done);
+		h3c_hyb_leave(ent);
+		done += put;
+		*retlen = done;
+		if (ret)
+			return ret;
+		if (put != n)
+			return -EIO;
+	}
+	return 0;
+}
+
+static int h3c_hyb_oob_op(struct mtd_info *mtd, loff_t off,
+			  struct mtd_oob_ops *ops, int write)
+{
+	int (*fn)(struct mtd_info *, loff_t, struct mtd_oob_ops *) =
+		write ? h3c_hyb_write_oob_fn : h3c_hyb_read_oob_fn;
+	size_t len = ops->datbuf ? ops->len : 0, done = 0;
+	int max = 0;
+
+	/* OOB transfers, or data that stays in one region: one call. */
+	if (ops->oobbuf || ops->ooblen || !len ||
+	    h3c_hyb_chunk(off, len) == len) {
+		int ent = h3c_hyb_enter(mtd, off), ret;
+
+		if (ent < 0)
+			return -EIO;
+		if (ops->oobbuf && len && h3c_hyb_chunk(off, len) != len) {
+			h3c_hyb_leave(ent);
+			return -EINVAL;
+		}
+		ret = fn(mtd, off, ops);
+		h3c_hyb_leave(ent);
+		return ret;
+	}
+	ops->retlen = 0;
+	while (done < len) {
+		struct mtd_oob_ops part = *ops;
+		u64 at = off + done;
+		size_t n = h3c_hyb_chunk(at, len - done);
+		int ent = h3c_hyb_enter(mtd, at), ret;
+
+		if (ent < 0)
+			return -EIO;
+		part.len = n;
+		part.retlen = 0;
+		part.datbuf = ops->datbuf + done;
+		ret = fn(mtd, at, &part);
+		h3c_hyb_leave(ent);
+		done += part.retlen;
+		ops->retlen = done;
+		if (ret < 0)
+			return ret;
+		if (ret > max)
+			max = ret;
+		if (part.retlen != n)
+			return -EIO;
+	}
+	return write ? 0 : max;
+}
+
+static int h3c_hyb_read_oob(struct mtd_info *mtd, loff_t from,
+			    struct mtd_oob_ops *ops)
+{
+	return h3c_hyb_oob_op(mtd, from, ops, 0);
+}
+
+static int h3c_hyb_write_oob(struct mtd_info *mtd, loff_t to,
+			     struct mtd_oob_ops *ops)
+{
+	return h3c_hyb_oob_op(mtd, to, ops, 1);
+}
+
+static int h3c_hyb_erase(struct mtd_info *mtd, struct erase_info *instr)
+{
+	u64 off = instr->addr, end = instr->addr + instr->len;
+
+	while (off < end) {
+		struct erase_info part = *instr;
+		size_t n = h3c_hyb_chunk(off, (size_t)(end - off));
+		int ent = h3c_hyb_enter(mtd, off), ret;
+
+		if (ent < 0)
+			return -EIO;
+		part.addr = off;
+		part.len = n;
+		ret = h3c_hyb_erase_fn(mtd, &part);
+		h3c_hyb_leave(ent);
+		if (ret) {
+			instr->fail_addr = part.fail_addr;
+			instr->state = part.state;
+			return ret;
+		}
+		off += n;
+	}
+	instr->state = MTD_ERASE_DONE;
+	return 0;
+}
+
+static int h3c_hyb_isbad(struct mtd_info *mtd, loff_t ofs)
+{
+	int ent = h3c_hyb_enter(mtd, ofs), ret;
+
+	if (ent < 0)
+		return -EIO;
+	ret = h3c_hyb_isbad_fn(mtd, ofs);
+	h3c_hyb_leave(ent);
+	return ret;
+}
+
+static int h3c_hyb_markbad(struct mtd_info *mtd, loff_t ofs)
+{
+	int ent = h3c_hyb_enter(mtd, ofs), ret;
+
+	if (ent < 0)
+		return -EIO;
+	ret = h3c_hyb_markbad_fn(mtd, ofs);
+	h3c_hyb_leave(ent);
+	return ret;
+}
+
+static void h3c_hyb_install(struct mtd_info *mtd)
+{
+	h3c_hyb_read_fn = mtd->_read;       mtd->_read = h3c_hyb_read;
+	h3c_hyb_write_fn = mtd->_write;     mtd->_write = h3c_hyb_write;
+	h3c_hyb_read_oob_fn = mtd->_read_oob;   mtd->_read_oob = h3c_hyb_read_oob;
+	h3c_hyb_write_oob_fn = mtd->_write_oob; mtd->_write_oob = h3c_hyb_write_oob;
+	h3c_hyb_erase_fn = mtd->_erase;     mtd->_erase = h3c_hyb_erase;
+	h3c_hyb_isbad_fn = mtd->_block_isbad;   mtd->_block_isbad = h3c_hyb_isbad;
+	h3c_hyb_markbad_fn = mtd->_block_markbad; mtd->_block_markbad = h3c_hyb_markbad;
+}
+#else
+static inline unsigned int h3c_hyb_window_ecc(struct mtd_info *mtd)
+{
+	return mtd->ecc_strength;
+}
+#endif
+
 /* NX30 D NAND service: a separate ECC4-only aperture. The layout/service
  * layer must validate SMEM and transaction intent before opening this window;
  * this driver independently accepts only exact fixed physical extents.
@@ -1176,7 +1448,7 @@ int nx30_d_qpic_write_window_close_error(void) { return nx30_d_window_close_erro
 int nx30_d_qpic_write_window_allows(struct mtd_info *mtd,u64 offset,u64 size)
 {
  return mtd && nx30_d_qpic_window_core_allows(&nx30_d_nand_window.core,mtd,
-        offset,size,mtd->ecc_strength);
+        offset,size,h3c_hyb_window_ecc(mtd));
 }
 #else
 int nx30_d_qpic_write_window_open(struct mtd_info *mtd,u64 offset,u64 size,
@@ -5203,6 +5475,10 @@ qpic_nand_mtd_params(struct mtd_info *mtd)
 	mtd->_block_isbad = qpic_nand_block_isbad;
 	mtd->_block_markbad = qpic_nand_mark_badblock;
 	mtd->_sync = qpic_nand_sync;
+#if defined(CONFIG_H3C_HW_D_STORAGE_PORT) && defined(CONFIG_H3C_NAND_LOAD_ECC_BITS)
+	if (mtd->_read != h3c_hyb_read)
+		h3c_hyb_install(mtd);
+#endif
 
 	mtd->ecclayout = NULL;
 	mtd->bitflip_threshold = DIV_ROUND_UP(mtd->ecc_strength * 3, 4);
