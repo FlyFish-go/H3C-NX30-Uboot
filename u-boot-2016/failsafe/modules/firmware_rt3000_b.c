@@ -214,6 +214,8 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 	u32 image_seq = 0;
 	int image_seq_set = 0;
 	int have_kernel = 0, have_rootfs = 0, rootfs_data = 0, kernel_data = 0;
+	int have_owrt_rootfs = 0;
+	u32 owrt_rootfs_id = 0xffffffffU;
 	int oem_volumes = 0;
 	u32 kernel_needed_lebs = 0, rootfs_needed_lebs = 0, rootfs_max_lnum = 0;
 	u32 kernel_id = 0xffffffffU, rootfs_id = 0xffffffffU;
@@ -314,11 +316,17 @@ static int fw_validate_ubi(const u8 *image, size_t size,
 		}
 		if (!strcmp(volume_name[i], "kernel")) { have_kernel++; kernel_id = i; }
 		if (!strcmp(volume_name[i], "ubi_rootfs")) { have_rootfs++; rootfs_id = i; }
+		/* upstream OpenWrt: kernel + rootfs (+ rootfs_data) */
+		if (!strcmp(volume_name[i], "rootfs")) { have_owrt_rootfs++; owrt_rootfs_id = i; }
 		if (!strcmp(volume_name[i], "wifi_fw") || !strcmp(volume_name[i], "bt_fw"))
 			oem_volumes = 1;
 		if (reserved > RT3_FW_MAX_PEB_COUNT - total_reserved)
 			return -EOVERFLOW;
 		total_reserved += reserved;
+	}
+	if (!have_rootfs && have_owrt_rootfs == 1) {
+		have_rootfs = 1;
+		rootfs_id = owrt_rootfs_id;
 	}
 	if (have_kernel != 1 || have_rootfs != 1)
 		return -EINVAL;

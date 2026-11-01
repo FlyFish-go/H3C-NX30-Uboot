@@ -101,6 +101,7 @@ obj-$(CONFIG_LIB_IPQ_API) += ipq_api.o ipq_led.o
 ifneq ($(CONFIG_H3C_HW_D_NOR_RESCUE),y)
 obj-$(CONFIG_H3C_IPQ5018_COMMON) += rt3000_b_layout.o
 endif
+obj-$(CONFIG_H3C_IPQ5018_COMMON) += h3c_mainline_fdt.o
 obj-$(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) += rt3000_b_bootargs.o
 obj-$(CONFIG_LIB_FLASHRW) += flashrw.o
 obj-$(CONFIG_CALL_FUNC_CAPTURE) += capture.o

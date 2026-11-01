@@ -35,6 +35,7 @@
 #include <rt3000_b_layout.h>
 #include <bootconfig.h>
 #include <rt3000_b_bootargs.h>
+#include <h3c_mainline_fdt.h>
 #include <libfdt.h>
 #endif
 #include <mmc.h>
@@ -288,6 +289,17 @@ static int h3c_hw_c_set_fit_rootfs_bootargs(const void *fit, const char *name,
 		matches++;
 	}
 
+	if (!is_native && !is_oem && !root_labels && !extent_nodes &&
+	    h3c_fdt_uses_smem_parts(fdt) == 1) {
+		/* Upstream kernel: it names the partitions from SMEM and sets
+		 * its own root=; update_bootargs() puts the booted extent's
+		 * SMEM name into ubi.mtd. */
+		if (setenv("fsbootargs", "ubi.mtd=rootfs"))
+			return CMD_RET_FAILURE;
+		printf("%s: FIT %s is a generic smem-part kernel\n",
+		       RT3_BOOT_BOARD_LABEL, name);
+		return 0;
+	}
 #ifndef CONFIG_H3C_HW_D_RAM_WEB
 	if (h3c_hw_c_classify_fit_profile(root_labels || extent_nodes,
 			is_native, is_oem, name, &profile))
@@ -625,6 +637,61 @@ static int h3c_append_boot_slot(char *cmd_line, size_t size)
 	return 0;
 }
 
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+/* An upstream kernel whose FDT names the NAND partitions from SMEM
+ * ("qcom,smem-part") ignores the mtdparts aliases a QSDK kernel gets, so
+ * ubi.mtd= has to be the SMEM name of the extent being booted: "rootfs"
+ * after a default-slot boot (SBL swapped the names), "rootfs_1" for a
+ * one-off boot of the other slot. Other kernels are left alone.
+ */
+static int h3c_mainline_ubi_fixup(void *fit, int config_noffset, char *cmd_line)
+{
+	const struct rt3_partition *booted = NULL;
+	struct rt3_layout layout;
+	const void *fdt;
+	size_t fdt_size;
+	uint8_t comp;
+	char *tmp;
+	int node, i, ret;
+
+	node = fit_conf_get_prop_node(fit, config_noffset, FIT_FDT_PROP);
+	if (node < 0 || fit_image_get_comp(fit, node, &comp) ||
+	    comp != IH_COMP_NONE ||
+	    fit_image_get_data(fit, node, &fdt, &fdt_size) ||
+	    fdt_size < sizeof(struct fdt_header) ||
+	    h3c_fdt_uses_smem_parts(fdt) != 1)
+		return CMD_RET_SUCCESS;
+	if (!sfi->rootfs.size || rt3_layout_read(&layout)) {
+		puts("H3C: smem-part kernel but no usable SMEM layout\n");
+		return CMD_RET_FAILURE;
+	}
+	for (i = 0; i < (int)layout.count; i++) {
+		if (layout.parts[i].offset != sfi->rootfs.offset ||
+		    layout.parts[i].size != sfi->rootfs.size)
+			continue;
+		if (booted)
+			return CMD_RET_FAILURE;
+		booted = &layout.parts[i];
+	}
+	if (!booted) {
+		puts("H3C: smem-part kernel: booted extent not in SMEM table\n");
+		return CMD_RET_FAILURE;
+	}
+	tmp = malloc(CONFIG_SYS_CBSIZE);
+	if (!tmp)
+		return CMD_RET_FAILURE;
+	ret = h3c_ubi_mtd_rewrite(cmd_line, booted->name, tmp, CONFIG_SYS_CBSIZE);
+	if (!ret)
+		memcpy(cmd_line, tmp, strlen(tmp) + 1);
+	free(tmp);
+	if (ret)
+		return CMD_RET_FAILURE;
+	printf("H3C: smem-part kernel, ubi.mtd=%s (0x%llx)\n", booted->name,
+	       (unsigned long long)sfi->rootfs.offset);
+	return CMD_RET_SUCCESS;
+}
+#endif
+
 static int update_bootargs(void *addr, int config_noffset, int verified_oem)
 {
 	char *fit_bootargs;
@@ -695,6 +762,10 @@ static int update_bootargs(void *addr, int config_noffset, int verified_oem)
             return CMD_RET_FAILURE;
         }
 #endif
+		if (h3c_mainline_ubi_fixup(addr, config_noffset, cmd_line)) {
+			free(cmd_line);
+			return CMD_RET_FAILURE;
+		}
 		if (h3c_append_boot_slot(cmd_line, CONFIG_SYS_CBSIZE)) {
 			free(cmd_line);
 			return CMD_RET_FAILURE;
@@ -771,6 +842,10 @@ static int update_bootargs(void *addr, int config_noffset, int verified_oem)
   else memcpy(cmd_line, normalized, strlen(normalized) + 1);
   free(normalized);
  }
+#endif
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+	if (ret == CMD_RET_SUCCESS)
+		ret = h3c_mainline_ubi_fixup(addr, config_noffset, cmd_line);
 #endif
 	if (ret == CMD_RET_SUCCESS)
 		ret = h3c_append_boot_slot(cmd_line, CONFIG_SYS_CBSIZE);

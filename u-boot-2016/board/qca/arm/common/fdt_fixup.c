@@ -15,6 +15,7 @@
 #ifdef CONFIG_H3C_NAND_ECC_COMPAT
 #include <nand.h>
 #include <h3c_nand_ecc.h>
+#include <h3c_mainline_fdt.h>
 #endif
 #ifdef CONFIG_H3C_HW_D_RAM_WEB
 #include <nand.h>
@@ -1336,6 +1337,14 @@ int ft_board_setup(void *blob, bd_t *bd)
   ret = fdt_setprop_string(blob, chosen, "bootargs", normalized);
   if (ret) return ret;
   printf("H3C NAND: final Linux handoff spare=%u ECC=%u\n", spare, mode);
+  /* Upstream kernels take the ECC from the DT, not from nandeccbits=. */
+  ret = h3c_fdt_set_snand_ecc(blob, mode);
+  if (ret < 0) {
+   puts("H3C NAND: upstream spi-nand ECC fixup failed\n");
+   return ret;
+  }
+  if (ret)
+   printf("H3C NAND: upstream spi-nand node ECC=%u\n", mode);
  }
 #endif
 #ifdef CONFIG_H3C_HW_D_STORAGE_PORT

@@ -1,0 +1,8 @@
+/dts-v1/;
+/ { compatible = "h3c,magic-nx30", "qcom,ipq5018";
+  soc { #address-cells = <1>; #size-cells = <1>;
+    spi@79b0000 { compatible = "qcom,ipq5018-snand", "qcom,ipq9574-snand"; reg = <0x79b0000 0x10000>; #address-cells = <1>; #size-cells = <0>;
+      flash@0 { compatible = "spi-nand"; reg = <0>; nand-ecc-strength = <4>;
+        partitions { compatible = "qcom,smem-part"; }; }; };
+    spi@1000 { compatible = "vendor,other-spi"; reg = <0x1000 0x100>; #address-cells = <1>; #size-cells = <0>;
+      flash@0 { compatible = "spi-nand"; reg = <0>; }; }; }; };

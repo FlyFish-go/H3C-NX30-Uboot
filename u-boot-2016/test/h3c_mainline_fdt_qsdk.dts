@@ -1,0 +1,5 @@
+/dts-v1/;
+/ { compatible = "h3c,nx30-hw-d", "qcom,ipq5018-mp02.1", "qcom,ipq5018";
+  soc { #address-cells = <1>; #size-cells = <1>;
+    nand@79b0000 { compatible = "qcom,qpic-nand.1.5.20"; reg = <0x79b0000 0x10000>;
+      partitions { compatible = "fixed-partitions"; }; }; }; };
