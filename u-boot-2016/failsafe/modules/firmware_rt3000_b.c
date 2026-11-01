@@ -582,6 +582,16 @@ extern struct config_list config_entries;
 #endif
 
 /*
+ * IPQ50xx has Cortex-A53 cores: this 32-bit U-Boot boots both arm and
+ * AArch64 kernels (the latter via the secure monitor), so upstream OpenWrt
+ * qualcommax images (arm64) are as bootable as QSDK/OEM ones (arm).
+ */
+static int fw_arch_bootable(const char *arch)
+{
+	return !strcmp(arch, "arm") || !strcmp(arch, "arm64");
+}
+
+/*
  * Describe what the image was built for next to this board's own config
  * names (the ones bootipq tries, in order). Informational: a mismatch is
  * shown on the page, the write is still allowed.
@@ -610,7 +620,8 @@ static void fw_platform_json(const u8 *ubi, size_t size, char *out, size_t cap)
 	}
 	snprintf(out, cap,
 		 ",\"platform\":{\"known\":true,\"configs\":\"%s\",\"count\":%u,\"arch\":\"%s\",\"board_configs\":\"%s\",\"match\":\"%s\",\"arch_ok\":%s}",
-		 p.configs, p.count, p.arch, board, p.match, strcmp(p.arch, "arm") ? "false" : "true");
+		 p.configs, p.count, p.arch, board, p.match,
+		 fw_arch_bootable(p.arch) ? "true" : "false");
 }
 
 static void fw_validate_handler(enum httpd_uri_handler_status status,

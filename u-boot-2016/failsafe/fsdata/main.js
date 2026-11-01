@@ -8744,8 +8744,8 @@ const firmwareModeManager = (() => {
                 : 'Target platform: ' + configs + ' (' + arch + '); this board will boot ' + clip(p.match) + '.' };
         }
         return { warn: true, text: isZh()
-            ? '注意：固件的目标平台是 ' + configs + '（' + arch + '），本机需要 ' + (board || '未知') + '（arm）。它可能无法在本机启动；写入不会被阻止，启动失败时可以重新进入救援页写回其他系统。'
-            : 'Notice: the image targets ' + configs + ' (' + arch + '), but this board needs ' + (board || 'unknown') + ' (arm). It may not boot here; the write is not blocked, and if it fails to boot you can re-enter this rescue page and write another system.' };
+            ? '注意：固件的目标平台是 ' + configs + '（' + arch + '），本机需要 ' + (board || '未知') + '（arm 或 arm64）。它可能无法在本机启动；写入不会被阻止，启动失败时可以重新进入救援页写回其他系统。'
+            : 'Notice: the image targets ' + configs + ' (' + arch + '), but this board needs ' + (board || 'unknown') + ' (arm or arm64). It may not boot here; the write is not blocked, and if it fails to boot you can re-enter this rescue page and write another system.' };
     }
 
     function failureText(result, isWrite) {
