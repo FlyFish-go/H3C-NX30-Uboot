@@ -145,6 +145,11 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
     APPEND_JSON_TO_BUF("\"ram_only\":false,\"read_only\":false,");
 #endif
 
+#ifdef CONFIG_H3C_RAM_RESCUE
+    APPEND_JSON_TO_BUF("\"ram_rescue\":true,");
+#else
+    APPEND_JSON_TO_BUF("\"ram_rescue\":false,");
+#endif
     json_escape(version_string, esc_version_string, sizeof(esc_version_string));
     APPEND_JSON_TO_BUF("\"uboot_version\":\"%s\",", esc_version_string);
 

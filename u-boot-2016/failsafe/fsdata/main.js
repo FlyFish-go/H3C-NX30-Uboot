@@ -5665,6 +5665,13 @@ const webTerminalManager = (() => {
 
         focusInput();
 
+        // These commands leave this U-Boot (jump to another image or reset),
+        // so the HTTP reply never arrives; that is expected, not an error.
+        const leaves = /^\s*(bootelf|bootm|bootipq|go|reset)\b/.test(cmdLine);
+        if (leaves) {
+            addTerminalLine('output', t("webterm.jump.note"));
+        }
+
         try {
             const formData = new FormData();
             formData.append("cmd", cmdLine);
@@ -5705,6 +5712,10 @@ const webTerminalManager = (() => {
             setStatus(t("webterm.status.done"));
 
         } catch (error) {
+            if (leaves) {
+                setStatus(t("webterm.jump.status"));
+                return;
+            }
             const errorMsg = formatError(error);
             addTerminalLine('error', errorMsg);
             setStatus(errorMsg, true);
@@ -6378,7 +6389,10 @@ const sysinfoManager = (() => {
 
             // 启动模式
             if (data.is_9008_mode !== undefined) {
-                const bootMode = data.is_9008_mode ? "9008" : "Normal";
+                let bootMode = data.is_9008_mode ? "9008" : "Normal";
+                if (data.ram_rescue) {
+                    bootMode += " / " + t("sysinfo.boot_mode.ram_rescue");
+                }
                 boardTable.appendChild(createInfoRow("sysinfo.boot_mode", bootMode));
             }
 
@@ -7875,6 +7889,8 @@ const I18N = (() => {
             "webterm.status.ready": "Ready",
             "webterm.status.running": "Running...",
             "webterm.status.done": "Done",
+            "webterm.jump.note": "This command leaves this U-Boot (jump or reset). The page loses its connection; \"Failed to fetch\" is expected. Reopen the page after the device is back.",
+            "webterm.jump.status": "Command started; connection closed as expected",
             "webterm.status.cleared": "Cleared",
             "webterm.status.http": "HTTP error:",
             "webterm.status.parse": "Parse error",
@@ -8041,6 +8057,7 @@ const I18N = (() => {
             "sysinfo.part_end": "End Address",
             "sysinfo.no_data": "No data available",
             "sysinfo.boot_mode": "Boot Mode",
+            "sysinfo.boot_mode.ram_rescue": "RAM rescue build (not installed in flash)",
             "syslog.title": "SYSTEM LOG",
             "syslog.copy": "Copy",
             "syslog.clear": "Clear",
@@ -8243,6 +8260,8 @@ const I18N = (() => {
             "webterm.status.ready": "就绪",
             "webterm.status.running": "执行中...",
             "webterm.status.done": "完成",
+            "webterm.jump.note": "该命令会离开当前 U-Boot（跳转或重启），页面连接会断开，出现 \"Failed to fetch\" 属正常现象。设备起来后重新打开页面即可。",
+            "webterm.jump.status": "命令已执行，连接按预期断开",
             "webterm.status.cleared": "已清空",
             "webterm.status.http": "HTTP 错误：",
             "webterm.status.parse": "解析失败",
@@ -8409,6 +8428,7 @@ const I18N = (() => {
             "sysinfo.part_end": "结束地址",
             "sysinfo.no_data": "无数据",
             "sysinfo.boot_mode": "启动模式",
+            "sysinfo.boot_mode.ram_rescue": "RAM 救援版（未写入闪存）",
             "syslog.title": "系统日志",
             "syslog.copy": "复制",
             "syslog.clear": "清空",
