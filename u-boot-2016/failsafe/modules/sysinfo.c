@@ -34,6 +34,8 @@
 #include <spi_flash.h>
 #if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
 #include <qpic_nand_model.h>
+#include <h3c_build_id.h>
+#include <h3c_nand_catalog.h>
 #endif
 #include <malloc.h>
 #include <errno.h>
@@ -145,6 +147,32 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
     APPEND_JSON_TO_BUF("\"ram_only\":false,\"read_only\":false,");
 #endif
 
+    /* The U-Boot package folder that matches this build exactly:
+     * HW-<board>/<NAND model>-ECC<load ECC>, as in the release zips. */
+    {
+        const struct h3c_nand_catalog_profile *bp =
+            h3c_nand_catalog_by_profile_id(h3c_build_profile());
+        const char *ecc = h3c_build_load_ecc();
+        char model[32] = "", folder[64] = "";
+        size_t i, n = 0;
+        int dash = 0;
+        if (bp && bp->oem_model) {
+            for (i = 0; bp->oem_model[i] && n + 1 < sizeof(model); i++) {
+                char c = bp->oem_model[i];
+                if (isalnum((unsigned char)c)) {
+                    if (dash && n) model[n++] = '-';
+                    if (n + 1 < sizeof(model)) model[n++] = c;
+                    dash = 0;
+                } else {
+                    dash = 1;
+                }
+            }
+            model[n] = 0;
+            snprintf(folder, sizeof(folder), "HW-%s/%s-ECC%s", h3c_build_board(), model, ecc);
+        }
+        APPEND_JSON_TO_BUF("\"uboot_build\":{\"board\":\"HW-%s\",\"nand_model\":\"%s\",\"ecc\":\"%s\",\"folder\":\"%s\"},",
+            h3c_build_board(), model, ecc, folder);
+    }
 #ifdef CONFIG_H3C_RAM_RESCUE
     APPEND_JSON_TO_BUF("\"ram_rescue\":true,");
 #else

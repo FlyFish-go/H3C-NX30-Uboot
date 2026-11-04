@@ -1687,6 +1687,9 @@ class FileUploadComponent {
                                     <button type="button" class="button" id="mibibPresetSingle">${APP_STATE.lang === 'zh-cn' ? '大分区（单 rootfs 80 MiB）' : 'Big partition (one 80 MiB rootfs)'}</button>
                                     <p>${APP_STATE.lang === 'zh-cn' ? '切换后，rootfs 区域里现有的系统都会失效：请先在“闪存备份”中导出 rootfs / rootfs_1。切换到大分区前，默认启动槽必须是物理第1区（0x900000）。大分区只接受第三方系统，原厂固件请切回原厂双系统分区表后再写。写入分区表后须重启，然后再写入系统。' : 'Switching invalidates every system in the rootfs area: export rootfs / rootfs_1 from Flash Backup first. Before switching to the big partition the default boot slot must be physical slot 1 (0x900000). The big partition accepts third-party systems only; restore the OEM dual table to write OEM firmware. Reboot after writing the table, then write a system.'}</p>
                                 </div>` : ''}
+                                ${pageName === 'uboot' ? `<div class="card-hint-section">
+                                    <p id="ubootBuildNow"></p>
+                                </div>` : ''}
                                 ${pageName === 'cdt' ? `<div class="card-hint-section">
                                     <p>${APP_STATE.lang === 'zh-cn' ? 'CDT 与 CDT_1 两份写入同一镜像；请使用与本机硬件和内存配置匹配的 CDT。' : 'CDT and CDT_1 both receive the same image. Use a CDT matching this device and RAM configuration.'}</p>
                                 </div>` : ''}
@@ -1848,6 +1851,7 @@ class FileUploadComponent {
      */
     bindEvents() {
         if (this.options.pageName === 'ptable') this.bindMibibPresets();
+        if (this.options.pageName === 'uboot') this.showUbootBuild();
         // 拖拽区域点击
         if (this.elements.dropZone) {
             this.elements.dropZone.addEventListener('click', () => this.openFileSelector());
@@ -1925,6 +1929,19 @@ class FileUploadComponent {
         if (this.elements.fileInput && !this.isUploading) {
             this.elements.fileInput.click();
         }
+    }
+
+    showUbootBuild() {
+        const zh = APP_STATE.lang === 'zh-cn';
+        const box = document.getElementById('ubootBuildNow');
+        if (!box || typeof fetch !== 'function') return;
+        fetch('/sysinfo').then(r => r.json()).then(info => {
+            const b = info.uboot_build;
+            if (!b || !b.folder) return;
+            box.textContent = zh
+                ? `本机：${b.board} · NAND ${b.nand_model} · ECC${b.ecc}。请从 ${b.board} 的 zip 中选择 ${b.folder}/appsbl.mbn，其他文件夹的文件会被拒绝。`
+                : `This device: ${b.board} · NAND ${b.nand_model} · ECC${b.ecc}. From the ${b.board} zip choose ${b.folder}/appsbl.mbn; files from other folders are refused.`;
+        }).catch(() => {});
     }
 
     bindMibibPresets() {

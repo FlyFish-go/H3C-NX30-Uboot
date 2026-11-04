@@ -59,6 +59,11 @@ const char *h3c_build_id(void)
 	return h3c_build_id_string;
 }
 
+/* Pieces of the identity for the rescue page (which package folder fits). */
+const char *h3c_build_board(void) { return H3C_ID_BOARD; }
+const char *h3c_build_profile(void) { return H3C_ID_PROFILE; }
+const char *h3c_build_load_ecc(void) { return H3C_ID_ECC; }
+
 int h3c_build_id_check(const u8 *image, size_t size)
 {
 	char key[sizeof(h3c_build_id_key)];
