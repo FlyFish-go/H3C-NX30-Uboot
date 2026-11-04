@@ -101,15 +101,12 @@ int main(void) {
  reset(); dispatch_error=-19; h3c_release_autoboot(); assert(web==1&&boot==1&&prepare==0);
  reset(); ready=0; h3c_release_autoboot(); assert(web==1&&boot==0);
  reset(); lan_error=1; levels[0]=levels[1]=levels[2]=levels[3]=levels[4]=0;
-#ifdef CONFIG_H3C_HW_D_RAM_WEB
- /* D keeps sampling the held key in the flash selector after HELD. */
+ /* The flash selector keeps sampling the held key after HELD. */
  for(i=5;i<20;i++) levels[i]=0;
-#endif
  h3c_release_autoboot(); assert(web==0&&boot==0);
  reset(); nest=1; for(i=0;i<20;i++) levels[i]=0;
  h3c_release_autoboot(); assert(web==1&&boot==0);
-#ifdef CONFIG_H3C_HW_D_RAM_WEB
- /* D RESET flash selector: release before flash 1 = default, after 1 or 2
+ /* RESET flash selector (all boards): release before flash 1 = default, after 1 or 2
   * flashes = slot request (plain bootipq here: no SMEM layout in host test),
   * held through flash 3 = web rescue. */
  reset(); for(i=0;i<20;i++) levels[i]=0; hold_ms=500;
@@ -120,8 +117,7 @@ int main(void) {
  h3c_release_autoboot(); assert(web==0&&boot==1&&load==1);
  reset(); for(i=0;i<20;i++) levels[i]=0; hold_ms=3500;
  h3c_release_autoboot(); assert(web==1&&boot==0);
- puts("PASS D RESET flash selector 0/1/2/3");
-#endif
+ puts("PASS RESET flash selector 0/1/2/3");
 #endif
  for(i=-20;i<=20;i++) {
   reset(); prep_error=i; h3c_release_autoboot();

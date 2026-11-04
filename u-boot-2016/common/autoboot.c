@@ -415,8 +415,9 @@ void autoboot_command(const char *s)
 {
 #ifdef CONFIG_H3C_RELEASE_SYSTEM_DEFAULT
 	/* Dedicated release path ignores all imported command strings. */
-	/* Keep the standard UART stop window without consulting ENV bootcmd. */
-	if (abortboot(3))
+	/* Keep the standard UART stop window without consulting ENV bootcmd.
+	 * A held RESET skips it: the flash selector starts at once. */
+	if (!h3c_release_reset_held() && abortboot(3))
 		return;
 	h3c_release_autoboot();
 	return;

@@ -9,9 +9,7 @@
 #ifdef CONFIG_H3C_IPQ5018_COMMON
 #include <rt3000_b_layout.h>
 #endif
-#ifdef CONFIG_H3C_HW_D_RAM_WEB
 #include <ipq_led.h>
-#endif
 #ifdef CONFIG_H3C_NAND_ECC_COMPAT
 #include <h3c_nand_ecc.h>
 #endif
@@ -148,12 +146,13 @@ static enum h3c_reset_state release_reset(enum h3c_boot_board board)
  return h3c_boot_sample_reset(board, &io);
 }
 
-#ifdef CONFIG_H3C_HW_D_RAM_WEB
 /*
- * HW-D has no early RESET countdown (do_httpd_check is compiled out), so the
- * release path runs the same flash selector as A/B/C: one short red flash per
- * second while RESET stays held; release after 1 or 2 flashes selects that
- * physical slot, holding through the third flash enters web rescue.
+ * RESET flash selector in the release boot path, for every board. HW-A has no
+ * /keys node and HW-D compiles out do_httpd_check, so neither runs the early
+ * countdown; on B/C it also catches a key pressed after that early check.
+ * One short red flash per second while RESET stays held; release after 1 or
+ * 2 flashes selects that physical slot, holding through the third flash
+ * enters web rescue, releasing before the first flash boots the default.
  */
 static int release_reset_blinks(enum h3c_boot_board board)
 {
@@ -194,7 +193,13 @@ static int release_reset_blinks(enum h3c_boot_board board)
          blinks, blinks);
  return blinks;
 }
-#endif
+
+/* RESET held right now: the caller skips the UART stop window so the flash
+ * selector starts without a 3 s delay. Sampling only; no state changes. */
+int h3c_release_reset_held(void)
+{
+ return release_reset(release_board()) == H3C_RESET_HELD;
+}
 
 void h3c_release_autoboot(void)
 {
@@ -210,7 +215,6 @@ void h3c_release_autoboot(void)
 #endif
  if (!in.forced_web)
   in.reset = release_reset(release_board());
-#ifdef CONFIG_H3C_HW_D_RAM_WEB
  if (in.reset == H3C_RESET_HELD) {
   int blinks = release_reset_blinks(release_board());
   if (blinks < 3) {
@@ -218,7 +222,6 @@ void h3c_release_autoboot(void)
    requested_blinks = blinks;
   }
  }
-#endif
  if (h3c_boot_decide(&in) == H3C_BOOT_SELECTED) {
   /* Exact audited default-slot command; never imported bootcmd/altbootcmd.
    * do_bootipq owns errors and recovery. Do not retry or enter HTTP twice. */

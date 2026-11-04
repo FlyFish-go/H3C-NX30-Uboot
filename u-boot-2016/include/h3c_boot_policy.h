@@ -33,5 +33,6 @@ enum h3c_blink_action h3c_boot_blink_action(int blinks, int dual_layout, int sin
 #ifndef H3C_BOOT_POLICY_HOST_TEST
 void h3c_release_autoboot(void);
 void h3c_boot_recovery(void);
+int h3c_release_reset_held(void);
 #endif
 #endif
