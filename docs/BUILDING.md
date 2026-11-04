@@ -44,6 +44,8 @@ KCFLAGS="-ffile-prefix-map=$PWD/=/build/" \
 
 ## 版本与字节一致性
 
+**pre.8.rc1**：从这一版起，构建入口不再有固定的默认日期（以前的默认值 `1792195200` 让每个版本都显示 2026-10-17）。在 git 检出里，`SOURCE_REVISION` 和 `SOURCE_DATE_EPOCH` 默认取当前提交和它的提交时间；用源码包构建必须显式传入。可选的 `H3C_RELEASE_LABEL`（如 `v0.1.0-pre.8.rc1`）会加进版本串。rc1 的重建参数：`SOURCE_REVISION=e1c2c60e9f37b5ff0b6f432beb16da006a6b02a1 SOURCE_DATE_EPOCH=1793797546 H3C_RELEASE_LABEL=v0.1.0-pre.8.rc1`。候选清单见 [pre.8.rc1 CANDIDATES.json](../release-metadata/uboot-v0.1.0-pre.8.rc1/CANDIDATES.json)。
+
 **pre.7**：候选嵌入的来源修订号是 git 提交号 `6d377e7daf4c7ae376d74cdee57cfa88bd821fab`，重建方法与 pre.3 相同。候选清单见 [pre.7 CANDIDATES.json](../release-metadata/uboot-v0.1.0-pre.7/CANDIDATES.json)。
 
 **pre.6**：候选嵌入的来源修订号是 git 提交号 `a67e4f6397abdf367b95b2c11366b16b9e5a28cd`，重建方法与 pre.3 相同。候选清单见 [pre.6 CANDIDATES.json](../release-metadata/uboot-v0.1.0-pre.6/CANDIDATES.json)。
