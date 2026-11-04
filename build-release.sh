@@ -41,12 +41,28 @@ done
 [[ ! -e "$out" && ! -L "$out" ]] || { echo "Refusing to reuse output path: $out" >&2; exit 2; }
 case "$out/" in "$src/"*) echo "Output must be outside source." >&2; exit 2;; esac
 
-# A source archive has no .git. Pin both the recorded source identity and
-# effective timestamp explicitly; neither is inferred from a local checkout.
-SOURCE_REVISION="${SOURCE_REVISION:-b0383f96b3282b0aedbd9765464778a9cf596836}"
-SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1792195200}"
+# Source identity and timestamp. In a Git checkout both default to the
+# commit being built (its commit time keeps builds reproducible). A source
+# archive has no .git, so both must then be passed explicitly. There is no
+# frozen default: an old fixed date made every release show 2026-10-17.
+if [[ -z "${SOURCE_REVISION:-}" ]]; then
+  SOURCE_REVISION="$(git -C "$src" rev-parse HEAD 2>/dev/null)" || {
+    echo "SOURCE_REVISION is required outside a Git checkout." >&2; exit 2;
+  }
+fi
+if [[ -z "${SOURCE_DATE_EPOCH:-}" ]]; then
+  SOURCE_DATE_EPOCH="$(git -C "$src" show -s --format=%ct "$SOURCE_REVISION" 2>/dev/null)" || {
+    echo "SOURCE_DATE_EPOCH is required outside a Git checkout (use the commit time)." >&2; exit 2;
+  }
+fi
 [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ && "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
   echo "Invalid SOURCE_REVISION or SOURCE_DATE_EPOCH." >&2; exit 2;
+}
+# Optional public release label shown in the banner and rescue page,
+# e.g. H3C_RELEASE_LABEL=v0.1.0-pre.8 -> 2016.01-h3c-common4-v0.1.0-pre.8-<rev>.
+H3C_RELEASE_LABEL="${H3C_RELEASE_LABEL:-}"
+[[ -z "$H3C_RELEASE_LABEL" || "$H3C_RELEASE_LABEL" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]{1,24})?$ ]] || {
+  echo "Invalid H3C_RELEASE_LABEL (expected vX.Y.Z or vX.Y.Z-pre.N)." >&2; exit 2;
 }
 SOURCE_REVISION_SHORT=${SOURCE_REVISION:0:12}
 export SOURCE_DATE_EPOCH TZ=UTC LC_ALL=C
@@ -91,6 +107,13 @@ make "${host_make_args[@]}" -C "$uboot" O="$build" "$config"
 # Explicit release profile. Keep production defaults otherwise unchanged.
 sed -i '/^# CONFIG_H3C_RELEASE_SYSTEM_DEFAULT is not set$/d; /^CONFIG_H3C_RELEASE_SYSTEM_DEFAULT=/d' "$build/.config"
 printf '%s\n' 'CONFIG_H3C_RELEASE_SYSTEM_DEFAULT=y' >> "$build/.config"
+if [[ -n "$H3C_RELEASE_LABEL" ]]; then
+  # Append the label to the board's existing LOCALVERSION (D: -h3c-common4-bridge10).
+  [[ "$(grep -c '^CONFIG_LOCALVERSION="-h3c-common4[a-z0-9-]*"$' "$build/.config")" == 1 ]] || {
+    echo "Unexpected CONFIG_LOCALVERSION; refusing to add a release label." >&2; exit 2;
+  }
+  sed -i "s/^CONFIG_LOCALVERSION=\"\(-h3c-common4[a-z0-9-]*\)\"\$/CONFIG_LOCALVERSION=\"\1-$H3C_RELEASE_LABEL\"/" "$build/.config"
+fi
 # A profile pin selects a reviewed OEM NAND format; it never converts ECC.
 if [[ -n "${H3C_NAND_PROFILE_ID:-}" ]]; then
   [[ "$H3C_NAND_PROFILE_ID" =~ ^h3c-oem-[a-z0-9-]+$ ]] || exit 2
@@ -110,6 +133,7 @@ fi
 make "${host_make_args[@]}" -C "$uboot" O="$build" olddefconfig
 [[ "${H3C_RAM_RESCUE:-0}" != 1 ]] || grep -Fxq 'CONFIG_H3C_RAM_RESCUE=y' "$build/.config"
 grep -Fxq 'CONFIG_H3C_RELEASE_SYSTEM_DEFAULT=y' "$build/.config"
+[[ -z "$H3C_RELEASE_LABEL" ]] || grep -q "^CONFIG_LOCALVERSION=\"-h3c-common4.*-$H3C_RELEASE_LABEL\"\$" "$build/.config"
 grep -Fxq "$target=y" "$build/.config"
 grep -Fxq 'CONFIG_H3C_IPQ5018_COMMON=y' "$build/.config"
 grep -Fq "CONFIG_DEFAULT_DEVICE_TREE=\"$name\"" "$build/.config"
@@ -164,6 +188,7 @@ cat > "$out/provenance.json" <<EOF
   "embedded_git_revision": "$SOURCE_REVISION_SHORT",
   "embedded_git_dirty": false,
   "source_date_epoch": "$SOURCE_DATE_EPOCH",
+  "release_label": "$H3C_RELEASE_LABEL",
   "source_tree_mode": "source snapshot identifier; no Git commit or hardware qualification implied",
   "board": "$board",
   "profile": "$profile",
