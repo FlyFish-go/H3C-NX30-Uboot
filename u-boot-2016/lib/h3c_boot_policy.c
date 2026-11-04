@@ -9,6 +9,9 @@
 #ifdef CONFIG_H3C_IPQ5018_COMMON
 #include <rt3000_b_layout.h>
 #endif
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+#include <ipq_led.h>
+#endif
 #ifdef CONFIG_H3C_NAND_ECC_COMPAT
 #include <h3c_nand_ecc.h>
 #endif
@@ -145,6 +148,54 @@ static enum h3c_reset_state release_reset(enum h3c_boot_board board)
  return h3c_boot_sample_reset(board, &io);
 }
 
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+/*
+ * HW-D has no early RESET countdown (do_httpd_check is compiled out), so the
+ * release path runs the same flash selector as A/B/C: one short red flash per
+ * second while RESET stays held; release after 1 or 2 flashes selects that
+ * physical slot, holding through the third flash enters web rescue.
+ */
+static int release_reset_blinks(enum h3c_boot_board board)
+{
+ int gpio = h3c_boot_reset_gpio(board), blinks = 0, released = 0, i;
+ ulong t0, t;
+ if (gpio < 0)
+  return 3;
+ led_all_off();
+ puts("RESET held: release after 1 flash = slot 1, 2 flashes = slot 2, hold for 3 = web failsafe\n");
+ t0 = get_timer(0);
+ /* Two consecutive released samples (10 ms apart) end the hold. */
+ while (released < 2) {
+  t = get_timer(t0);
+  if (t >= (ulong)(blinks + 1) * 1000UL) {
+   blinks++;
+   led_on("power_led");
+   printf("RESET flash %d\n", blinks);
+   if (blinks >= 3)
+    break;
+  } else if (blinks && t >= (ulong)blinks * 1000UL + 250UL) {
+   led_off("power_led");
+  }
+  released = gpio_get_value(gpio) ? released + 1 : 0;
+  udelay(10000);
+ }
+ if (blinks >= 3) {
+  led_on("power_led");
+  return 3;
+ }
+ led_all_off();
+ led_on("system_led");
+ for (i = 0; i < blinks; i++) {
+  led_off("system_led"); mdelay(200);
+  led_on("system_led"); mdelay(200);
+ }
+ if (blinks)
+  printf("RESET released after %d flash(es): physical slot %d requested\n",
+         blinks, blinks);
+ return blinks;
+}
+#endif
+
 void h3c_release_autoboot(void)
 {
  struct h3c_boot_inputs in = { 1, 0, 1, H3C_RESET_UNKNOWN };
@@ -159,6 +210,15 @@ void h3c_release_autoboot(void)
 #endif
  if (!in.forced_web)
   in.reset = release_reset(release_board());
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+ if (in.reset == H3C_RESET_HELD) {
+  int blinks = release_reset_blinks(release_board());
+  if (blinks < 3) {
+   in.reset = H3C_RESET_RELEASED;
+   requested_blinks = blinks;
+  }
+ }
+#endif
  if (h3c_boot_decide(&in) == H3C_BOOT_SELECTED) {
   /* Exact audited default-slot command; never imported bootcmd/altbootcmd.
    * do_bootipq owns errors and recovery. Do not retry or enter HTTP twice. */

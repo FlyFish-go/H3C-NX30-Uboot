@@ -22,6 +22,9 @@ void udelay(unsigned long);
 u32 readl(const void *);
 void writel(u32,void *);
 int gpio_get_value(unsigned int);
+typedef unsigned long ulong;
+unsigned long get_timer(unsigned long);
+void mdelay(unsigned long);
 int h3c_nand_ecc_ready(void);
 int rt3000b_prepare_boot_slot(int,char *const []);
 int do_boot_unsignedimg(cmd_tbl_t *,int,int,char *const []);
@@ -47,10 +50,23 @@ int run_command(const char *s,int flags) {
  if(!strcmp(s,"httpd")) { web++; if(nest) h3c_boot_recovery(); return 0; }
  assert(!strncmp(s,"setenv fdt_high ",16)); return fdt_error;
 }
-void udelay(unsigned long us) { assert(us==10000); delays++; }
+static unsigned long now_ms, hold_ms;
+static int leds;
+void udelay(unsigned long us) { assert(us==10000); delays++; now_ms+=10; }
+void mdelay(unsigned long ms) { now_ms+=ms; }
+unsigned long get_timer(unsigned long base) { return now_ms-base; }
+void led_on(const char *l) { (void)l; leds++; }
+void led_off(const char *l) { (void)l; leds++; }
+void led_all_off(void) { leds++; }
 u32 readl(const void *p) { (void)p; return bad_config ? 0xffffffffU : cfg; }
 void writel(u32 v,void *p) { (void)p; cfg=v; }
-int gpio_get_value(unsigned gpio) { assert(reads<20); gpio_seen=gpio; return levels[reads++]; }
+/* First 20 reads = release_reset sampling; later reads = D flash selector,
+ * key held (0) until hold_ms of fake time. */
+int gpio_get_value(unsigned gpio) {
+ gpio_seen=gpio;
+ if(reads<20) return levels[reads++];
+ reads++; assert(reads<1000); return now_ms<hold_ms ? 0 : 1;
+}
 int h3c_nand_ecc_ready(void) { return ready; }
 int rt3000b_prepare_boot_slot(int argc,char *const argv[]) {
  assert(argc==1&&!strcmp(argv[0],"bootipq")); prepare++; return prep_error;
@@ -62,6 +78,7 @@ static void reset(void) {
  unsigned i; web=boot=prepare=load=reads=delays=0;
  dispatch_error=0; prep_error=load_error=fdt_error=lan_error=nest=bad_config=0; ready=1;
  for(i=0;i<20;i++) levels[i]=1;
+ now_ms=0; hold_ms=1000000; leds=0;
 }
 int main(void) {
  int i; char *arg[]={"bootipq"};
@@ -84,9 +101,27 @@ int main(void) {
  reset(); dispatch_error=-19; h3c_release_autoboot(); assert(web==1&&boot==1&&prepare==0);
  reset(); ready=0; h3c_release_autoboot(); assert(web==1&&boot==0);
  reset(); lan_error=1; levels[0]=levels[1]=levels[2]=levels[3]=levels[4]=0;
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+ /* D keeps sampling the held key in the flash selector after HELD. */
+ for(i=5;i<20;i++) levels[i]=0;
+#endif
  h3c_release_autoboot(); assert(web==0&&boot==0);
  reset(); nest=1; for(i=0;i<20;i++) levels[i]=0;
  h3c_release_autoboot(); assert(web==1&&boot==0);
+#ifdef CONFIG_H3C_HW_D_RAM_WEB
+ /* D RESET flash selector: release before flash 1 = default, after 1 or 2
+  * flashes = slot request (plain bootipq here: no SMEM layout in host test),
+  * held through flash 3 = web rescue. */
+ reset(); for(i=0;i<20;i++) levels[i]=0; hold_ms=500;
+ h3c_release_autoboot(); assert(web==0&&boot==1&&load==1);
+ reset(); for(i=0;i<20;i++) levels[i]=0; hold_ms=1500;
+ h3c_release_autoboot(); assert(web==0&&boot==1&&load==1&&leds>0);
+ reset(); for(i=0;i<20;i++) levels[i]=0; hold_ms=2500;
+ h3c_release_autoboot(); assert(web==0&&boot==1&&load==1);
+ reset(); for(i=0;i<20;i++) levels[i]=0; hold_ms=3500;
+ h3c_release_autoboot(); assert(web==1&&boot==0);
+ puts("PASS D RESET flash selector 0/1/2/3");
+#endif
 #endif
  for(i=-20;i<=20;i++) {
   reset(); prep_error=i; h3c_release_autoboot();
@@ -116,7 +151,8 @@ with tempfile.TemporaryDirectory(prefix='h3c-boot-runtime-') as td:
   'asm/io.h':'#include <common.h>\n',
   'asm/arch-qca-common/gpio.h':'#include <common.h>\n#define GPIO_CONFIG_ADDR(gpio) ((uintptr_t)(gpio)*0x1000U)\n',
   'dt-bindings/qcom/gpio-ipq5018.h':'#define GPIO_PULL_UP 3U\n#define GPIO_INPUT 0U\n#define GPIO_8MA 3U\n#define GPIO_OE_DISABLE 0U\n',
-  'h3c_nand_ecc.h':'int h3c_nand_ecc_ready(void);\n'}
+  'h3c_nand_ecc.h':'int h3c_nand_ecc_ready(void);\n',
+  'ipq_led.h':'void led_on(const char *);\nvoid led_off(const char *);\nvoid led_all_off(void);\n'}
  for name,text in headers.items():
   q=p/name;q.parent.mkdir(parents=True,exist_ok=True);q.write_text(text)
  (p/'driver.c').write_text(driver+'\n'+body)
