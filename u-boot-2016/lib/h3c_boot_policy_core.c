@@ -44,6 +44,19 @@ enum h3c_boot_action h3c_boot_decide(const struct h3c_boot_inputs *in)
  return H3C_BOOT_SELECTED;
 }
 
+enum h3c_blink_action h3c_boot_blink_action(int blinks, int dual_layout,
+ int single_layout)
+{
+ if (blinks <= 0)
+  return H3C_BLINK_DEFAULT;
+ if (blinks >= 3 || (!dual_layout && !single_layout))
+  return H3C_BLINK_WEB;
+ if (dual_layout)
+  return H3C_BLINK_SLOT;
+ /* Single large rootfs: slot 1 is the only system; slot 2 does not exist. */
+ return blinks == 1 ? H3C_BLINK_DEFAULT : H3C_BLINK_WEB;
+}
+
 int h3c_boot_load_failed(int result)
 {
  /* boot_os success is 0; successful Linux OS_GO does not return. */

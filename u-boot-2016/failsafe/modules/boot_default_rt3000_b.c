@@ -10,6 +10,7 @@
 #include <rt3000_b_layout.h>
 #include <rt3000_b_fw_write.h>
 #include "boot_default_rt3000_b_core.h"
+#include <h3c_boot_policy.h>
 #ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
 #include <nx30_d_service.h>
 #endif
@@ -293,6 +294,148 @@ static void answer(struct httpd_response *r, int code, const char *json)
  r->data = json; r->size = strlen(json);
 }
 
+enum bd_result {
+ BD_OK_SAME, BD_OK_CHANGED, BD_E_LOCKED, BD_E_RETAINED, BD_E_LAYOUT,
+ BD_E_ALLOC, BD_E_BOOTCONFIG, BD_E_BOOTCMD, BD_E_PREFLIGHT,
+ BD_E_BASELINE_LAYOUT, BD_E_BASELINE, BD_P_BACKUP, BD_P_PRIMARY, BD_P_FINAL
+};
+
+/* One BOOTCONFIG default transaction, shared by the rescue page (by logical
+ * name) and the RESET blink selector (by physical selector, target == NULL).
+ * shown receives the active name (unchanged) or the new name (changed). */
+static enum bd_result boot_default_apply(int want_selector, const char *target,
+                                         char shown[16])
+{
+ struct rt3_layout layout;
+ struct bc_extent p, b;
+ struct mtd_info *m = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+ u8 *storage = NULL, *base0, *base1, *stage0, *stage1, *page = NULL, *check = NULL;
+ struct rt3_bootcfg_view view;
+ char active[16] = "", wanted[16] = "";
+ u32 selector = 0;
+ int r;
+ enum bd_result res;
+ shown[0] = 0;
+ if (partial_update_lock) return BD_E_LOCKED;
+#ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
+ {
+  struct nx30_d_result failure; u32 copy;
+  if (!nx30_d_default_failure_get(&failure,&copy)) return BD_E_RETAINED;
+ }
+#endif
+ if (layout_read_dual(&layout) || extent_read(&bc0, &p) ||
+     extent_read(&bc1, &b) || partition_ok(m, &p, &b))
+  return BD_E_LAYOUT;
+ storage = malloc(4U * BC_SIZE);
+ page = memalign(ARCH_DMA_MINALIGN, BC_PAGE);
+ check = memalign(ARCH_DMA_MINALIGN, BC_PAGE);
+ if (!storage || !page || !check) { res = BD_E_ALLOC; goto out; }
+ base0 = storage; base1 = base0 + BC_SIZE; stage0 = base1 + BC_SIZE; stage1 = stage0 + BC_SIZE;
+ /* The first two buffers are the complete in-RAM backups of both copies. */
+ if ((r = read_full(m, &p, base0, page)) || (r = read_full(m, &b, base1, page)) ||
+     rt3_bootcfg_validate_pair(base0, base1, BC_SIZE, &view) ||
+     current_name(&layout, view.rootfs_selector, active)) {
+  res = BD_E_BOOTCONFIG; goto out;
+ }
+ if (!bootcmd_compatible()) { res = BD_E_BOOTCMD; goto out; }
+ if (target)
+  strlcpy(wanted, target, sizeof(wanted));
+ else if (want_selector < 0 || want_selector > 1 ||
+          current_name(&layout, (u32)want_selector, wanted)) {
+  res = BD_E_PREFLIGHT; goto out;
+ }
+ if (!strcmp(active, wanted)) {
+  strlcpy(shown, active, 16); res = BD_OK_SAME; goto out;
+ }
+ if (selector_for_name(&layout, wanted, &selector) ||
+     rt3_bootcfg_stage(base0, BC_SIZE, selector, stage0) ||
+     rt3_bootcfg_stage(base1, BC_SIZE, selector, stage1) ||
+     no_bad_blocks(m, &p) || no_bad_blocks(m, &b)) {
+  res = BD_E_PREFLIGHT; goto out;
+ }
+ /* Recheck both full baselines and the complete layout immediately before erase. */
+ {
+  struct rt3_layout now; struct bc_extent pnow, bnow;
+  u32 off;
+  if (layout_read_dual(&now) || now.fingerprint != layout.fingerprint ||
+      extent_read(&bc0, &pnow) || extent_read(&bc1, &bnow) ||
+      pnow.off != p.off || bnow.off != b.off) {
+   res = BD_E_BASELINE_LAYOUT; goto out;
+  }
+  for (off = 0; off < BC_SIZE; off += BC_PAGE) {
+   r = read_exact(m, p.off + off, check, BC_PAGE);
+   if (r || memcmp(check, base0 + off, BC_PAGE)) break;
+  }
+  if (!r && off == BC_SIZE) for (off = 0; off < BC_SIZE; off += BC_PAGE) {
+   r = read_exact(m, b.off + off, check, BC_PAGE);
+   if (r || memcmp(check, base1 + off, BC_PAGE)) break;
+  }
+  if (r || off != BC_SIZE) { res = BD_E_BASELINE; goto out; }
+ }
+ /* Keep complete original copies in RAM for download/recovery after the write. */
+ free(last_backup_snapshot);
+ last_backup_snapshot = storage;
+ backup_snapshot_ready = 1;
+ storage = NULL;
+ /* Backup BOOTCONFIG1 first, then primary BOOTCONFIG. Never auto-retry/reset. */
+ {
+  int started = 0;
+  r = write_one(m, &bc1, &b, stage1, base1, layout.fingerprint, &layout,
+               &bc0, &p, base0, NULL, 0, page, check, &started);
+  if (r) { partial_update_lock = started; res = started ? BD_P_BACKUP : BD_E_PREFLIGHT; goto out; }
+ }
+ r = write_one(m, &bc0, &p, stage0, base0, layout.fingerprint, &layout,
+               &bc1, &b, base1, stage1, 1, page, check, NULL);
+ if (r) { partial_update_lock = 1; res = BD_P_PRIMARY; goto out; }
+ if (read_matches(m, &p, stage0, check) || read_matches(m, &b, stage1, check)) {
+  partial_update_lock = 1; res = BD_P_FINAL; goto out;
+ }
+ strlcpy(shown, wanted, 16);
+ res = BD_OK_CHANGED;
+ out:
+ free(check); free(page); free(storage);
+ return res;
+}
+
+int rt3_boot_default_set_physical(int selector, char name[16])
+{
+ char shown[16];
+ enum bd_result res;
+#if defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_A_RAM_READONLY)
+ (void)selector; if (name) name[0] = 0;
+ return 1;
+#endif
+ res = boot_default_apply(selector, NULL, shown);
+ if (name) strlcpy(name, shown, 16);
+ if (res == BD_OK_SAME || res == BD_OK_CHANGED) return res == BD_OK_CHANGED ? 0 : 2;
+ if (res == BD_P_BACKUP || res == BD_P_PRIMARY || res == BD_P_FINAL) return -EIO;
+ return 1;
+}
+
+static void answer_result(struct httpd_response *response, enum bd_result res,
+                          const char *shown)
+{
+ switch (res) {
+ case BD_OK_SAME:
+ case BD_OK_CHANGED:
+  snprintf(reply, sizeof(reply), "{\"status\":\"ok\",\"default\":\"%s\",\"changed\":%s}",
+           shown, res == BD_OK_CHANGED ? "true" : "false");
+  answer(response, 200, reply); return;
+ case BD_E_LOCKED: answer(response, 409, "{\"status\":\"partial\",\"error\":\"write_lock_after_partial_update\"}"); return;
+ case BD_E_RETAINED: answer(response,409,"{\"status\":\"partial\",\"error\":\"retained_service_failure\",\"diagnosis\":\"/boot/default/retained-failure\"}"); return;
+ case BD_E_LAYOUT: answer(response, 409, "{\"status\":\"fail\",\"error\":\"unsupported_layout_or_partitions\"}"); return;
+ case BD_E_ALLOC: answer(response, 500, "{\"status\":\"fail\",\"error\":\"allocation_failed\"}"); return;
+ case BD_E_BOOTCONFIG: answer(response, 409, "{\"status\":\"fail\",\"error\":\"invalid_or_ambiguous_bootconfig\"}"); return;
+ case BD_E_BOOTCMD: answer(response, 409, "{\"status\":\"fail\",\"error\":\"custom_bootcmd_may_override_default\"}"); return;
+ case BD_E_PREFLIGHT: answer(response, 409, "{\"status\":\"fail\",\"error\":\"preflight_failed_no_write\"}"); return;
+ case BD_E_BASELINE_LAYOUT: answer(response, 409, "{\"status\":\"fail\",\"error\":\"baseline_or_layout_changed_no_write\"}"); return;
+ case BD_E_BASELINE: answer(response, 409, "{\"status\":\"fail\",\"error\":\"baseline_changed_no_write\"}"); return;
+ case BD_P_BACKUP: answer(response, 500, "{\"status\":\"partial\",\"copy\":\"BOOTCONFIG1\",\"error\":\"backup_write_or_readback_failed\"}"); return;
+ case BD_P_PRIMARY: answer(response, 500, "{\"status\":\"partial\",\"copy\":\"BOOTCONFIG\",\"error\":\"primary_write_or_readback_failed\"}"); return;
+ default: answer(response, 500, "{\"status\":\"partial\",\"error\":\"final_full_readback_failed\"}"); return;
+ }
+}
+
 static void default_handler(enum httpd_uri_handler_status status,
                             struct httpd_request *request,
                             struct httpd_response *response)
@@ -300,10 +443,9 @@ static void default_handler(enum httpd_uri_handler_status status,
  struct rt3_layout layout;
  struct bc_extent p, b;
  struct mtd_info *m = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
- u8 *storage = NULL, *base0, *base1, *stage0, *stage1, *page = NULL, *check = NULL;
+ u8 *storage = NULL, *base0, *base1, *page = NULL, *check = NULL;
  struct rt3_bootcfg_view view;
  char active[16] = "", target[16] = "";
- u32 selector = 0;
  int r, post, duplicate = 0;
  unsigned int i;
  struct httpd_form_value *v = NULL;
@@ -319,6 +461,7 @@ static void default_handler(enum httpd_uri_handler_status status,
  }
 #endif
  if (post) {
+  char shown[16];
   for (i = 0; i < request->form.count; i++) {
    if (request->form.values[i].name && !strcmp(request->form.values[i].name, "target")) { v = &request->form.values[i]; duplicate++; }
   }
@@ -329,34 +472,23 @@ static void default_handler(enum httpd_uri_handler_status status,
    answer(response, 400, "{\"status\":\"fail\",\"error\":\"invalid_target\"}"); return;
   }
   memcpy(target, v->data, v->size); target[v->size] = 0;
+  answer_result(response, boot_default_apply(-1, target, shown), shown);
+  return;
  }
- if (partial_update_lock && post) {
-  answer(response, 409, "{\"status\":\"partial\",\"error\":\"write_lock_after_partial_update\"}"); return;
- }
- #ifdef CONFIG_H3C_HW_D_PRODUCTION_PORT
- if (post) {
-  struct nx30_d_result failure; u32 copy;
-  if (!nx30_d_default_failure_get(&failure,&copy)) {
-   answer(response,409,"{\"status\":\"partial\",\"error\":\"retained_service_failure\",\"diagnosis\":\"/boot/default/retained-failure\"}"); return;
-  }
- }
-#endif
  if ((r = layout_read_dual(&layout)) || (r = extent_read(&bc0, &p)) ||
      (r = extent_read(&bc1, &b)) || (r = partition_ok(m, &p, &b))) {
   answer(response, 409, "{\"status\":\"fail\",\"error\":\"unsupported_layout_or_partitions\"}"); return;
  }
- storage = malloc(4U * BC_SIZE);
+ storage = malloc(2U * BC_SIZE);
  page = memalign(ARCH_DMA_MINALIGN, BC_PAGE);
  check = memalign(ARCH_DMA_MINALIGN, BC_PAGE);
  if (!storage || !page || !check) { free(check); free(page); free(storage); answer(response, 500, "{\"status\":\"fail\",\"error\":\"allocation_failed\"}"); return; }
- base0 = storage; base1 = base0 + BC_SIZE; stage0 = base1 + BC_SIZE; stage1 = stage0 + BC_SIZE;
- /* The first two buffers are the complete in-RAM backups of both copies. */
+ base0 = storage; base1 = base0 + BC_SIZE;
  if ((r = read_full(m, &p, base0, page)) || (r = read_full(m, &b, base1, page)) ||
      rt3_bootcfg_validate_pair(base0, base1, BC_SIZE, &view) ||
      current_name(&layout, view.rootfs_selector, active)) {
   free(check); free(page); free(storage); answer(response, 409, "{\"status\":\"fail\",\"error\":\"invalid_or_ambiguous_bootconfig\"}"); return;
  }
- if (!post) {
 #if defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_A_RAM_READONLY)
   snprintf(reply, sizeof(reply), "{\"status\":\"ok\",\"default\":\"%s\",\"can_change\":false,\"locked\":%s,\"reason\":\"readonly_profile\",\"auto_web\":true,\"default_applies_to\":\"bootipq\"}",
            active, partial_update_lock ? "true" : "false");
@@ -376,59 +508,6 @@ static void default_handler(enum httpd_uri_handler_status status,
            partial_update_lock ? "true" : "false",
            partial_update_lock ? "partial_update" : (!bootcmd_compatible() ? "custom_bootcmd" : ""));
 #endif
-  free(check); free(page); free(storage); answer(response, 200, reply); return;
- }
- if (!bootcmd_compatible()) {
-  free(check); free(page); free(storage); answer(response, 409, "{\"status\":\"fail\",\"error\":\"custom_bootcmd_may_override_default\"}"); return;
- }
- if (!strcmp(active, target)) {
-  snprintf(reply, sizeof(reply), "{\"status\":\"ok\",\"default\":\"%s\",\"changed\":false}", active);
-  free(check); free(page); free(storage); answer(response, 200, reply); return;
- }
- if (selector_for_name(&layout, target, &selector) ||
-     rt3_bootcfg_stage(base0, BC_SIZE, selector, stage0) ||
-     rt3_bootcfg_stage(base1, BC_SIZE, selector, stage1) ||
-     no_bad_blocks(m, &p) || no_bad_blocks(m, &b)) {
-  free(check); free(page); free(storage); answer(response, 409, "{\"status\":\"fail\",\"error\":\"preflight_failed_no_write\"}"); return;
- }
- /* Recheck both full baselines and the complete layout immediately before erase. */
- {
-  struct rt3_layout now; struct bc_extent pnow, bnow;
-  u32 off;
-  if (layout_read_dual(&now) || now.fingerprint != layout.fingerprint ||
-      extent_read(&bc0, &pnow) || extent_read(&bc1, &bnow) ||
-      pnow.off != p.off || bnow.off != b.off) {
-   free(check); free(page); free(storage); answer(response, 409, "{\"status\":\"fail\",\"error\":\"baseline_or_layout_changed_no_write\"}"); return;
-  }
-  for (off = 0; off < BC_SIZE; off += BC_PAGE) {
-   r = read_exact(m, p.off + off, check, BC_PAGE);
-   if (r || memcmp(check, base0 + off, BC_PAGE)) break;
-  }
-  if (!r && off == BC_SIZE) for (off = 0; off < BC_SIZE; off += BC_PAGE) {
-   r = read_exact(m, b.off + off, check, BC_PAGE);
-   if (r || memcmp(check, base1 + off, BC_PAGE)) break;
-  }
-  if (r || off != BC_SIZE) { free(check); free(page); free(storage); answer(response, 409, "{\"status\":\"fail\",\"error\":\"baseline_changed_no_write\"}"); return; }
- }
- /* Keep complete original copies in RAM for download/recovery after the write. */
- free(last_backup_snapshot);
- last_backup_snapshot = storage;
- backup_snapshot_ready = 1;
- storage = NULL;
- /* Backup BOOTCONFIG1 first, then primary BOOTCONFIG. Never auto-retry/reset. */
- {
-  int started = 0;
-  r = write_one(m, &bc1, &b, stage1, base1, layout.fingerprint, &layout,
-               &bc0, &p, base0, NULL, 0, page, check, &started);
-  if (r) { partial_update_lock = started; free(check); free(page); free(storage); answer(response, started ? 500 : 409, started ? "{\"status\":\"partial\",\"copy\":\"BOOTCONFIG1\",\"error\":\"backup_write_or_readback_failed\"}" : "{\"status\":\"fail\",\"error\":\"preflight_failed_no_write\"}"); return; }
- }
- r = write_one(m, &bc0, &p, stage0, base0, layout.fingerprint, &layout,
-               &bc1, &b, base1, stage1, 1, page, check, NULL);
- if (r) { partial_update_lock = 1; free(check); free(page); free(storage); answer(response, 500, "{\"status\":\"partial\",\"copy\":\"BOOTCONFIG\",\"error\":\"primary_write_or_readback_failed\"}"); return; }
- if (read_matches(m, &p, stage0, check) || read_matches(m, &b, stage1, check)) {
-  partial_update_lock = 1; free(check); free(page); free(storage); answer(response, 500, "{\"status\":\"partial\",\"error\":\"final_full_readback_failed\"}"); return;
- }
- snprintf(reply, sizeof(reply), "{\"status\":\"ok\",\"default\":\"%s\",\"changed\":true}", target);
  free(check); free(page); free(storage); answer(response, 200, reply);
 }
 

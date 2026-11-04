@@ -38,6 +38,9 @@
 #include <failsafe/fw_dec.h>
 #include <mapmem.h>
 #include <flashrw.h>
+#ifdef CONFIG_H3C_RELEASE_SYSTEM_DEFAULT
+#include <h3c_boot_policy.h>
+#endif
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -119,52 +122,89 @@ static bool is_any_button_pressed(button_info_t *button_info)
 	return false;
 }
 
+/*
+ * RESET blink selector. While the key is held the red lamp gives one short
+ * flash at 1 s, 2 s and 3 s. Releasing after flash N selects:
+ *   0: normal default boot, 1: physical slot 1, 2: physical slot 2,
+ *   3 (still held at the third flash): web rescue, as before.
+ * The slot choice itself is resolved later by the release boot policy.
+ */
+#define H3C_BLINK_PERIOD_MS 1000
+#define H3C_BLINK_ON_MS 250
+#define H3C_BLINK_WEB 3
+
+static void confirm_blinks(int blinks)
+{
+	int i;
+
+	/* Green acknowledgement: N quick flashes for slot N. */
+	for (i = 0; i < blinks; i++) {
+		led_off("system_led");
+		mdelay(200);
+		led_on("system_led");
+		mdelay(200);
+	}
+}
+
 static bool is_any_button_pressed_for_enough_time(void)
 {
-	int counter = 3;
-	ulong ts;
-	bool led_state_on, still_pressed = true;
+	ulong t0, t;
+	int blinks = 0;
+	bool still_pressed = true;
 	button_info_t button;
 
-    if (!is_any_button_pressed(&button))
+	if (!is_any_button_pressed(&button))
 		return false;
 
 #if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
 	/* Green would mask the red RESET countdown on the shared status lamp. */
 	led_all_off();
 #endif
+	led_off("power_led");
 
-	printf("%s button pressed, enter web failsafe mode after: %-2d", button.name, counter);
+	printf("%s button pressed: release after 1 flash = slot 1, 2 flashes = slot 2, "
+	       "hold for 3 = web failsafe: %-2d", button.name, H3C_BLINK_WEB);
 
-	while (counter > 0 && still_pressed) {
-		counter--;
-		ts = get_timer(0);
-		led_state_on = false;
-		led_off("power_led");
-		do {
-			still_pressed = is_button_pressed(button.gpio, button.active_level);
-
-			if (!led_state_on && get_timer(ts) >= 500) {
-				led_state_on = true;
-				led_on("power_led");
-			}
-
-			udelay(10000);
-		} while (still_pressed && get_timer(ts) < 1000);
-
-		printf("\b\b%-2d", counter);
+	t0 = get_timer(0);
+	while (still_pressed) {
+		t = get_timer(t0);
+		if (t >= (ulong)(blinks + 1) * H3C_BLINK_PERIOD_MS) {
+			blinks++;
+			led_on("power_led");
+			printf("\b\b%-2d", H3C_BLINK_WEB - blinks);
+			if (blinks >= H3C_BLINK_WEB)
+				break;
+		} else if (blinks &&
+			   t >= (ulong)blinks * H3C_BLINK_PERIOD_MS + H3C_BLINK_ON_MS) {
+			led_off("power_led");
+		}
+		/* is_button_pressed() debounces with a 10 ms second sample. */
+		still_pressed = is_button_pressed(button.gpio, button.active_level);
 	}
 
 	putc('\n');
+	if (blinks >= H3C_BLINK_WEB) {
+		led_on("power_led");
+		return true;
+	}
+
 	led_on("power_led");
 #if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
-	if (!still_pressed) {
-		led_all_off();
-		led_on("system_led");
-	}
+	led_all_off();
+	led_on("system_led");
 #endif
+	if (blinks > 0) {
+		printf("%s button released after %d flash(es): physical slot %d requested\n",
+		       button.name, blinks, blinks);
+		confirm_blinks(blinks);
+#ifdef CONFIG_H3C_RELEASE_SYSTEM_DEFAULT
+		h3c_boot_request_blinks(blinks);
+#else
+		puts("Slot selection needs a release build; booting the default slot\n");
+#endif
+	}
 
-	return still_pressed;
+	return false;
 }
 
 static bool failsafe_env_exists(void)

@@ -50,6 +50,18 @@ int main(void)
  assert(h3c_boot_decide(0)==H3C_BOOT_WEB);
  for(rc=-4096;rc<4096;rc++) assert(h3c_boot_load_failed(rc)==(rc!=0));
  assert(h3c_boot_load_failed(INT_MIN)); assert(h3c_boot_load_failed(INT_MAX));
+ /* RESET blink selector: dual, single large rootfs, unsupported layout. */
+ assert(h3c_boot_blink_action(0,1,0)==H3C_BLINK_DEFAULT);
+ assert(h3c_boot_blink_action(-1,0,0)==H3C_BLINK_DEFAULT);
+ assert(h3c_boot_blink_action(1,1,0)==H3C_BLINK_SLOT);
+ assert(h3c_boot_blink_action(2,1,0)==H3C_BLINK_SLOT);
+ assert(h3c_boot_blink_action(3,1,0)==H3C_BLINK_WEB);
+ assert(h3c_boot_blink_action(1,0,1)==H3C_BLINK_DEFAULT);
+ assert(h3c_boot_blink_action(2,0,1)==H3C_BLINK_WEB);
+ assert(h3c_boot_blink_action(3,0,1)==H3C_BLINK_WEB);
+ assert(h3c_boot_blink_action(1,0,0)==H3C_BLINK_WEB);
+ assert(h3c_boot_blink_action(2,0,0)==H3C_BLINK_WEB);
+ assert(h3c_boot_blink_action(0,0,0)==H3C_BLINK_DEFAULT);
  puts("PASS: four board reset/debounce/errors, forced web, format gate, all nonzero load codes");
  return 0;
 }

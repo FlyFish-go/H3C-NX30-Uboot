@@ -6,6 +6,9 @@
 #include <asm/arch-qca-common/gpio.h>
 #include <dt-bindings/qcom/gpio-ipq5018.h>
 #include <h3c_boot_policy.h>
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+#include <rt3000_b_layout.h>
+#endif
 #ifdef CONFIG_H3C_NAND_ECC_COMPAT
 #include <h3c_nand_ecc.h>
 #endif
@@ -13,6 +16,66 @@
 static int recovery_active;
 static int release_dispatch_active;
 static int release_dispatch_recovered;
+static int requested_blinks;
+
+void h3c_boot_request_blinks(int blinks)
+{
+ requested_blinks = blinks;
+}
+
+/* Build the boot command for a RESET blink request. Returns 0 with cmd set,
+ * or -1 when the request must end in web recovery. */
+static int release_blink_command(int blinks, char *cmd, size_t size)
+{
+#ifdef CONFIG_H3C_IPQ5018_COMMON
+ struct rt3_layout layout;
+ const struct rt3_partition *part;
+ char name[16];
+ int dual = 0, single = 0, r;
+ if (!rt3_layout_read(&layout)) {
+  dual = layout.mode == RT3_LAYOUT_DUAL;
+  single = layout.mode == RT3_LAYOUT_SINGLE;
+ }
+ switch (h3c_boot_blink_action(blinks, dual, single)) {
+ case H3C_BLINK_DEFAULT:
+  if (single)
+   puts("H3C RESET: single-rootfs layout; booting the only system\n");
+  snprintf(cmd, size, "%s", "bootipq");
+  return 0;
+ case H3C_BLINK_WEB:
+  if (single)
+   puts("H3C RESET: single-rootfs layout has no slot 2; enter web recovery\n");
+  else if (!dual)
+   puts("H3C RESET: unsupported rootfs layout; enter web recovery\n");
+  return -1;
+ default:
+  break;
+ }
+ if (rt3_layout_default_target(&layout, blinks - 1, &part)) {
+  puts("H3C RESET: physical slot not resolvable; enter web recovery\n");
+  return -1;
+ }
+ printf("H3C RESET: physical slot %d = %s at 0x%llx\n", blinks, part->name,
+        (unsigned long long)part->offset);
+ r = rt3_boot_default_set_physical(blinks - 1, name);
+ if (r < 0) {
+  puts("H3C RESET: BOOTCONFIG write incomplete; enter web recovery\n");
+  return -1;
+ }
+ if (r == 0)
+  printf("H3C RESET: default is now physical slot %d\n", blinks);
+ else if (r == 2)
+  printf("H3C RESET: physical slot %d was already the default\n", blinks);
+ else
+  puts("H3C RESET: default not changed (refused before any write); booting this slot once\n");
+ snprintf(cmd, size, "bootipq %s", part->name);
+ return 0;
+#else
+ (void)blinks; (void)size;
+ snprintf(cmd, size, "%s", "bootipq");
+ return 0;
+#endif
+}
 
 static int recovery_lan(void)
 {
@@ -100,9 +163,16 @@ void h3c_release_autoboot(void)
   /* Exact audited default-slot command; never imported bootcmd/altbootcmd.
    * do_bootipq owns errors and recovery. Do not retry or enter HTTP twice. */
   int result;
+  char cmd[32] = "bootipq";
+  int blinks = requested_blinks;
+  requested_blinks = 0;
+  if (blinks && release_blink_command(blinks, cmd, sizeof(cmd))) {
+   h3c_boot_recovery();
+   return;
+  }
   release_dispatch_active = 1;
   release_dispatch_recovered = 0;
-  result = run_command("bootipq", 0);
+  result = run_command(cmd, 0);
   if (h3c_boot_load_failed(result) && !release_dispatch_recovered)
    h3c_boot_recovery();
   release_dispatch_active = 0;
