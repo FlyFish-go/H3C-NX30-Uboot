@@ -35,6 +35,7 @@
 #if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
 #include <qpic_nand_model.h>
 #include <h3c_build_id.h>
+#include <h3c_fem.h>
 #include <h3c_nand_catalog.h>
 #endif
 #include <malloc.h>
@@ -172,6 +173,22 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
         }
         APPEND_JSON_TO_BUF("\"uboot_build\":{\"board\":\"HW-%s\",\"nand_model\":\"%s\",\"ecc\":\"%s\",\"folder\":\"%s\"},",
             h3c_build_board(), model, ecc, folder);
+
+        /* MP02.1 only: which group this unit's 5 GHz FEM flags call for
+         * (no FEM -> HW-B, also on a D-PCB), and that group's folder. */
+        {
+            enum h3c_fem_state fem = h3c_fem_probe();
+            const char *grp = h3c_fem_group(fem);
+            char want[64] = "";
+
+            if (fem != H3C_FEM_NA) {
+                if (grp && model[0])
+                    snprintf(want, sizeof(want), "HW-%s/%s-ECC%s", grp, model, ecc);
+                APPEND_JSON_TO_BUF("\"fem\":{\"state\":\"%s\",\"group\":\"%s%s\",\"folder\":\"%s\",\"match\":%s},",
+                    h3c_fem_name(fem), grp ? "HW-" : "", grp ? grp : "", want,
+                    (!grp || !strcmp(grp, h3c_build_board())) ? "true" : "false");
+            }
+        }
     }
 #ifdef CONFIG_H3C_RAM_RESCUE
     APPEND_JSON_TO_BUF("\"ram_rescue\":true,");

@@ -1941,6 +1941,13 @@ class FileUploadComponent {
             box.textContent = zh
                 ? `本机：${b.board} · NAND ${b.nand_model} · ECC${b.ecc}。请从 ${b.board} 的 zip 中选择 ${b.folder}/appsbl.mbn，其他文件夹的文件会被拒绝。`
                 : `This device: ${b.board} · NAND ${b.nand_model} · ECC${b.ecc}. From the ${b.board} zip choose ${b.folder}/appsbl.mbn; files from other folders are refused.`;
+            const f = info.fem;
+            if (f && f.match === false && f.group && f.folder) {
+                box.textContent += zh
+                    ? ` 注意：本机 5 GHz ${f.state === 'absent' ? '没有' : '有'}外置 FEM，按规则属于 ${f.group}，系统固件请选 ${f.group}；对应的 U-Boot 是 ${f.group} 的 zip 中的 ${f.folder}/appsbl.mbn。当前 U-Boot 只接受本组（${b.board}）的文件，换组暂不能在本页完成。`
+                    : ` Note: this unit's 5 GHz radio ${f.state === 'absent' ? 'has no' : 'has'} external FEMs, so it belongs to ${f.group}: use the ${f.group} system image; its U-Boot is ${f.folder}/appsbl.mbn in the ${f.group} zip. This U-Boot only accepts ${b.board} files, so changing group is not possible from this page yet.`;
+                box.classList.add('warning');
+            }
         }).catch(() => {});
     }
 
@@ -6417,6 +6424,18 @@ const sysinfoManager = (() => {
             if (data.uboot_version) {
                 boardTable.appendChild(createInfoRow("sysinfo.uboot_version", data.uboot_version));
             }
+
+            // MP02.1: 5 GHz FEM (ART) -> board group to flash
+            if (data.fem && data.fem.state) {
+                let fem = t("sysinfo.fem." + data.fem.state);
+                if (data.fem.group) {
+                    fem += " → " + data.fem.group;
+                }
+                if (data.fem.match === false) {
+                    fem += " · " + t("sysinfo.fem.mismatch");
+                }
+                boardTable.appendChild(createInfoRow("sysinfo.fem", fem));
+            }
         }
 
         // ========== 存储信息 ==========
@@ -8075,6 +8094,11 @@ const I18N = (() => {
             "sysinfo.no_data": "No data available",
             "sysinfo.boot_mode": "Boot Mode",
             "sysinfo.boot_mode.ram_rescue": "RAM rescue build (not installed in flash)",
+            "sysinfo.fem": "5 GHz FEM (ART)",
+            "sysinfo.fem.present": "present",
+            "sysinfo.fem.absent": "none",
+            "sysinfo.fem.unknown": "not recognised",
+            "sysinfo.fem.mismatch": "this U-Boot is for another group",
             "syslog.title": "SYSTEM LOG",
             "syslog.copy": "Copy",
             "syslog.clear": "Clear",
@@ -8446,6 +8470,11 @@ const I18N = (() => {
             "sysinfo.no_data": "无数据",
             "sysinfo.boot_mode": "启动模式",
             "sysinfo.boot_mode.ram_rescue": "RAM 救援版（未写入闪存）",
+            "sysinfo.fem": "5 GHz FEM（ART）",
+            "sysinfo.fem.present": "有",
+            "sysinfo.fem.absent": "无",
+            "sysinfo.fem.unknown": "无法识别",
+            "sysinfo.fem.mismatch": "当前 U-Boot 不是这一组的",
             "syslog.title": "系统日志",
             "syslog.copy": "复制",
             "syslog.clear": "清空",
