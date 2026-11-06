@@ -10,6 +10,14 @@ int h3c_boot_reset_gpio(enum h3c_boot_board board)
  }
 }
 
+int h3c_boot_mesh_gpio(enum h3c_boot_board board)
+{
+ switch (board) {
+ case H3C_BOOT_A: case H3C_BOOT_B: case H3C_BOOT_C: case H3C_BOOT_D: return 38;
+ default: return -1;
+ }
+}
+
 enum h3c_reset_state h3c_boot_sample_reset(enum h3c_boot_board board,
  const struct h3c_reset_io *io)
 {

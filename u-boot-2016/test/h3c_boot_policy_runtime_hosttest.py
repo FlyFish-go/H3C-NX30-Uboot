@@ -62,7 +62,10 @@ u32 readl(const void *p) { (void)p; return bad_config ? 0xffffffffU : cfg; }
 void writel(u32 v,void *p) { (void)p; cfg=v; }
 /* First 20 reads = release_reset sampling; later reads = D flash selector,
  * key held (0) until hold_ms of fake time. */
+static unsigned long mesh_hold_ms;
 int gpio_get_value(unsigned gpio) {
+ /* Mesh/WPS (GPIO38) is modelled separately: held until mesh_hold_ms. */
+ if(gpio==38) return now_ms<mesh_hold_ms ? 0 : 1;
  gpio_seen=gpio;
  if(reads<20) return levels[reads++];
  reads++; assert(reads<1000); return now_ms<hold_ms ? 0 : 1;
@@ -78,7 +81,7 @@ static void reset(void) {
  unsigned i; web=boot=prepare=load=reads=delays=0;
  dispatch_error=0; prep_error=load_error=fdt_error=lan_error=nest=bad_config=0; ready=1;
  for(i=0;i<20;i++) levels[i]=1;
- now_ms=0; hold_ms=1000000; leds=0;
+ now_ms=0; hold_ms=1000000; leds=0; mesh_hold_ms=0;
 }
 int main(void) {
  int i; char *arg[]={"bootipq"};
@@ -117,7 +120,12 @@ int main(void) {
  h3c_release_autoboot(); assert(web==0&&boot==1&&load==1);
  reset(); for(i=0;i<20;i++) levels[i]=0; hold_ms=3500;
  h3c_release_autoboot(); assert(web==1&&boot==0);
- puts("PASS RESET flash selector 0/1/2/3");
+ /* Mesh alone drives the same selector (RESET stays released). */
+ reset(); hold_ms=0; mesh_hold_ms=1000000;
+ h3c_release_autoboot(); assert(web==1&&boot==0);
+ reset(); hold_ms=0; mesh_hold_ms=1500;
+ h3c_release_autoboot(); assert(web==0&&boot==1&&load==1&&leds>0);
+ puts("PASS RESET/Mesh flash selector 0/1/2/3");
 #endif
  for(i=-20;i<=20;i++) {
   reset(); prep_error=i; h3c_release_autoboot();

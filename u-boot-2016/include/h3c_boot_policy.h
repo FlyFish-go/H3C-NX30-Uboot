@@ -19,6 +19,10 @@ struct h3c_reset_io {
 enum h3c_reset_state h3c_boot_sample_reset(enum h3c_boot_board board,
  const struct h3c_reset_io *io);
 int h3c_boot_reset_gpio(enum h3c_boot_board board);
+/* Second selector button (WPS/Mesh); -1 when the board has none. */
+int h3c_boot_mesh_gpio(enum h3c_boot_board board);
+/* Release must stay stable this many 10 ms samples (pinhole RESET slips). */
+#define H3C_BOOT_RELEASE_SAMPLES 20
 enum h3c_boot_action h3c_boot_decide(const struct h3c_boot_inputs *inputs);
 int h3c_boot_load_failed(int result);
 /* Persist a physical default rootfs slot (0 = lower extent) through the

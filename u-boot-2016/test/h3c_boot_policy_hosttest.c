@@ -38,6 +38,10 @@ int main(void)
   sample(b,6,H3C_RESET_UNKNOWN);
  }
  assert(h3c_boot_sample_reset((enum h3c_boot_board)99,0)==H3C_RESET_UNKNOWN);
+ /* Mesh/WPS is the second selector button on every H3C board. */
+ for(b=H3C_BOOT_A;b<=H3C_BOOT_D;b++) assert(h3c_boot_mesh_gpio(b)==38);
+ assert(h3c_boot_mesh_gpio((enum h3c_boot_board)99)==-1);
+ assert(H3C_BOOT_RELEASE_SAMPLES*10>=200);
  assert(h3c_boot_sample_reset(H3C_BOOT_A,0)==H3C_RESET_UNKNOWN);
  assert(h3c_boot_decide(&in)==H3C_BOOT_SELECTED);
  in.reset=H3C_RESET_HELD; assert(h3c_boot_decide(&in)==H3C_BOOT_WEB);

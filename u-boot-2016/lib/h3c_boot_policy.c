@@ -114,10 +114,33 @@ static enum h3c_boot_board release_board(void)
 #endif
 }
 
+/* Selector buttons are active-low: 0 while RESET or Mesh is held. */
+static int buttons_level(enum h3c_boot_board board)
+{
+ int reset = h3c_boot_reset_gpio(board), mesh = h3c_boot_mesh_gpio(board);
+ int level = gpio_get_value(reset);
+ /* Only a clean "released" RESET consults Mesh; an invalid read must
+  * reach the sampler unchanged so it fails closed to web rescue. */
+ if (mesh >= 0 && level == 1)
+  level = gpio_get_value(mesh);
+ return level;
+}
+
 static int reset_read(void *context, unsigned int gpio)
 {
- (void)context;
- return gpio_get_value(gpio);
+ (void)gpio;
+ return buttons_level(*(const enum h3c_boot_board *)context);
+}
+
+static int button_input(int gpio)
+{
+ const u32 mask = 3U | (15U << 2) | (7U << 6) | (1U << 9);
+ const u32 input = GPIO_PULL_UP | (GPIO_INPUT << 2) |
+  (GPIO_8MA << 6) | (GPIO_OE_DISABLE << 9);
+ void *config = (void *)(uintptr_t)GPIO_CONFIG_ADDR(gpio);
+ /* Do not write the GPIO output latch while configuring its input. */
+ writel((readl(config) & ~mask) | input, config);
+ return (readl(config) & mask) == input ? 0 : -1;
 }
 
 static void reset_delay(void *context)
@@ -128,20 +151,11 @@ static void reset_delay(void *context)
 
 static enum h3c_reset_state release_reset(enum h3c_boot_board board)
 {
- const u32 mask = 3U | (15U << 2) | (7U << 6) | (1U << 9);
- const u32 input = GPIO_PULL_UP | (GPIO_INPUT << 2) |
-  (GPIO_8MA << 6) | (GPIO_OE_DISABLE << 9);
- struct h3c_reset_io io = { NULL, reset_read, reset_delay };
- int gpio = h3c_boot_reset_gpio(board);
- void *config;
- u32 value;
- if (gpio < 0)
+ struct h3c_reset_io io = { &board, reset_read, reset_delay };
+ int gpio = h3c_boot_reset_gpio(board), mesh = h3c_boot_mesh_gpio(board);
+ if (gpio < 0 || button_input(gpio))
   return H3C_RESET_UNKNOWN;
- config = (void *)(uintptr_t)GPIO_CONFIG_ADDR(gpio);
- value = readl(config);
- /* Do not write the GPIO output latch while configuring its input. */
- writel((value & ~mask) | input, config);
- if ((readl(config) & mask) != input)
+ if (mesh >= 0 && button_input(mesh))
   return H3C_RESET_UNKNOWN;
  return h3c_boot_sample_reset(board, &io);
 }
@@ -161,10 +175,11 @@ static int release_reset_blinks(enum h3c_boot_board board)
  if (gpio < 0)
   return 3;
  led_all_off();
- puts("RESET held: release after 1 flash = slot 1, 2 flashes = slot 2, hold for 3 = web failsafe\n");
+ puts("RESET/Mesh held: release after 1 flash = slot 1, 2 flashes = slot 2, hold for 3 = web failsafe\n");
  t0 = get_timer(0);
- /* Two consecutive released samples (10 ms apart) end the hold. */
- while (released < 2) {
+ /* A release counts only after 200 ms of released samples, so a slipping
+  * finger on the pinhole RESET does not end the hold early. */
+ while (released < H3C_BOOT_RELEASE_SAMPLES) {
   t = get_timer(t0);
   if (t >= (ulong)(blinks + 1) * 1000UL) {
    blinks++;
@@ -175,7 +190,7 @@ static int release_reset_blinks(enum h3c_boot_board board)
   } else if (blinks && t >= (ulong)blinks * 1000UL + 250UL) {
    led_off("power_led");
   }
-  released = gpio_get_value(gpio) ? released + 1 : 0;
+  released = buttons_level(board) ? released + 1 : 0;
   udelay(10000);
  }
  if (blinks >= 3) {
