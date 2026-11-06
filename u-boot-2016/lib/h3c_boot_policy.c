@@ -185,18 +185,21 @@ static int release_reset_blinks(enum h3c_boot_board board)
    blinks++;
    led_on("power_led");
    printf("RESET flash %d\n", blinks);
-   if (blinks >= 3)
+   if (blinks >= 3) {
+    /* Show the third flash in full: web rescue lights green at once
+     * and would hide a red that stays on. */
+    mdelay(250);
+    led_off("power_led");
     break;
+   }
   } else if (blinks && t >= (ulong)blinks * 1000UL + 250UL) {
    led_off("power_led");
   }
   released = buttons_level(board) ? released + 1 : 0;
   udelay(10000);
  }
- if (blinks >= 3) {
-  led_on("power_led");
+ if (blinks >= 3)
   return 3;
- }
  led_all_off();
  led_on("system_led");
  for (i = 0; i < blinks; i++) {

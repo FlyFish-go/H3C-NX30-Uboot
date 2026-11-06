@@ -132,6 +132,9 @@ static bool is_any_button_pressed(button_info_t *button_info)
 #define H3C_BLINK_PERIOD_MS 1000
 #define H3C_BLINK_ON_MS 250
 #define H3C_BLINK_WEB 3
+/* A release counts after 20 released 10 ms samples (200 ms): a slipping
+ * finger on the pinhole RESET must not end the hold early. */
+#define H3C_BLINK_RELEASE_SAMPLES 20
 
 static void confirm_blinks(int blinks)
 {
@@ -149,8 +152,7 @@ static void confirm_blinks(int blinks)
 static bool is_any_button_pressed_for_enough_time(void)
 {
 	ulong t0, t;
-	int blinks = 0;
-	bool still_pressed = true;
+	int blinks = 0, released = 0;
 	button_info_t button;
 
 	if (!is_any_button_pressed(&button))
@@ -166,27 +168,36 @@ static bool is_any_button_pressed_for_enough_time(void)
 	       "hold for 3 = web failsafe: %-2d", button.name, H3C_BLINK_WEB);
 
 	t0 = get_timer(0);
-	while (still_pressed) {
+	while (released < H3C_BLINK_RELEASE_SAMPLES) {
 		t = get_timer(t0);
 		if (t >= (ulong)(blinks + 1) * H3C_BLINK_PERIOD_MS) {
 			blinks++;
 			led_on("power_led");
 			printf("\b\b%-2d", H3C_BLINK_WEB - blinks);
-			if (blinks >= H3C_BLINK_WEB)
+			if (blinks >= H3C_BLINK_WEB) {
+				/* Show the third flash in full: web rescue lights
+				 * green at once and would hide a red that stays on. */
+				mdelay(H3C_BLINK_ON_MS);
+				led_off("power_led");
 				break;
+			}
 		} else if (blinks &&
 			   t >= (ulong)blinks * H3C_BLINK_PERIOD_MS + H3C_BLINK_ON_MS) {
 			led_off("power_led");
 		}
-		/* is_button_pressed() debounces with a 10 ms second sample. */
-		still_pressed = is_button_pressed(button.gpio, button.active_level);
+		/* is_button_pressed() spends 10 ms on its second sample only when
+		 * pressed; pace released samples the same way. */
+		if (is_button_pressed(button.gpio, button.active_level)) {
+			released = 0;
+		} else {
+			released++;
+			udelay(10000);
+		}
 	}
 
 	putc('\n');
-	if (blinks >= H3C_BLINK_WEB) {
-		led_on("power_led");
+	if (blinks >= H3C_BLINK_WEB)
 		return true;
-	}
 
 	led_on("power_led");
 #if defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
