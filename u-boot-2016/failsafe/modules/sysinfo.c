@@ -32,8 +32,9 @@
 #include <sdhci.h>
 #include <spi.h>
 #include <spi_flash.h>
-#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+/* Self-guarded: defines QPIC_NAND_HAVE_MODEL_INFO when the driver has it. */
 #include <qpic_nand_model.h>
+#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY) || defined(CONFIG_H3C_HW_D_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
 #include <h3c_build_id.h>
 #include <h3c_fem.h>
 #include <h3c_nand_catalog.h>
@@ -333,7 +334,7 @@ static void sysinfo_handler(enum httpd_uri_handler_status status,
             nand->name, (unsigned long long)nand->size,
             (ulong)nand->writesize, (ulong)nand->erasesize, (ulong)nand->oobsize,
             (ulong)nand->oobavail, nand->ecc_step_size, nand->ecc_strength);
-#if (defined(CONFIG_TARGET_IPQ5018_H3C_RT3000_B) || defined(CONFIG_H3C_HW_A_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_C_PRODUCTION_PORT) || defined(CONFIG_H3C_HW_A_RAM_READONLY) || defined(CONFIG_H3C_HW_C_RAM_READONLY)) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_A) || defined(CONFIG_TARGET_IPQ5018_H3C_HW_C)
+#ifdef QPIC_NAND_HAVE_MODEL_INFO
 		{
 			struct qpic_nand_model_info model;
 			char esc_nand_model[128];
