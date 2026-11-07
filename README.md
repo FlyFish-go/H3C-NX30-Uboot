@@ -6,7 +6,7 @@
 
 不拆机、不接 TTL：浏览器里生成桥接包，在原厂后台上传，跟着向导就能装好。装完原厂系统照常使用，随时可以回原厂。
 
-[![U-Boot](https://img.shields.io/badge/U--Boot-v0.1.0--pre.7-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.7)
+[![U-Boot](https://img.shields.io/badge/U--Boot-v0.1.0-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0)
 [![BootBridge](https://img.shields.io/badge/BootBridge-v0.2.0--pre.3-2a9d8f)](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/bootbridge-v0.2.0-pre.3)
 [![QSDK 固件](https://img.shields.io/badge/QSDK_11.5_固件-r6-e76f51)](https://github.com/FlyFish-go/H3C-RT3000-Product-R1)
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue)](LICENSE)
@@ -15,7 +15,7 @@
 
 ### [🚀 打开 BootBridge 网页版，开始安装](https://flyfish-go.github.io/H3C-NX30-Uboot/)
 
-[下载 U-Boot](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0-pre.7) · [配套 QSDK 11.5 固件](https://github.com/FlyFish-go/H3C-RT3000-Product-R1) · [支持的设备](#支持的设备) · [QQ 群 1131957442](#交流与反馈) · [English](README_EN.md)
+[下载 U-Boot](https://github.com/FlyFish-go/H3C-NX30-Uboot/releases/tag/uboot-v0.1.0) · [配套 QSDK 11.5 固件](https://github.com/FlyFish-go/H3C-RT3000-Product-R1) · [支持的设备](#支持的设备) · [QQ 群 1131957442](#交流与反馈) · [English](README_EN.md)
 
 </div>
 
@@ -33,7 +33,7 @@
 ## 能做什么
 
 - **🛟 网页救砖**：断电后按住 Reset 再通电，红灯闪满 3 下后松手，浏览器打开 `192.168.10.1`。刷固件、刷 U-Boot、备份整片闪存、写回 ART / CDT / MIBIB、加载 initramfs，都在网页上完成，不用 TTL。
-- **🔀 双系统共存**：原厂系统和第三方系统各占一个槽，在网页上选择启动哪一个、默认启动哪一个。pre.8.rc1 起也可以用按键切换：按住 Reset 通电，红灯闪 1 下松手启动一区、闪 2 下松手启动二区，并设为默认。不需要原厂系统时，可以把两个槽合并成一个 80 MiB 大分区。
+- **🔀 双系统共存**：原厂系统和第三方系统各占一个槽，在网页上选择启动哪一个、默认启动哪一个。v0.1.0 起也可以用按键切换：按住 Reset 或 Mesh/WPS 键通电，红灯闪 1 下松手启动一区、闪 2 下松手启动二区，并设为默认。不需要原厂系统时，可以把两个槽合并成一个 80 MiB 大分区。
 - **🧰 一键安装**：[BootBridge 网页版](https://flyfish-go.github.io/H3C-NX30-Uboot/)用官方固件生成桥接包，在原厂后台「固件升级」上传即可。固件只在你自己的浏览器里处理，不会上传。
 - **↩️ 能回原厂**：安装前先完整备份；桥接系统里随时可以返回原厂，长按 Mesh/WPS 键也行。
 - **🔍 自动识别硬件**：识别主板属于哪一类（HW-A/B/C/D）以及 NAND 型号和 ECC，只安装匹配的那一份。救援页也会拒绝写入不匹配的 U-Boot。
@@ -60,7 +60,7 @@
 
 之后想进救援页：断电，按住 Reset 再通电，打开 `http://192.168.10.1`。
 
-**已经装过本项目旧版 U-Boot：** 在救援页「U-Boot 更新」上传新版即可，见 [pre.7 升级说明](releases/uboot-v0.1.0-pre.7.md#从-pre3pre6-升级)（HW-D 的 ECC8 机器若还在 pre.5 或更早，要用 RAM 救援版）。比 pre.3 更旧的版本按 [pre.3 说明](releases/uboot-v0.1.0-pre.3.md#从旧版升级)操作，升级后需要再刷一次固件。
+**已经装过本项目旧版 U-Boot：** 在救援页「U-Boot 更新」上传新版即可，页面会写出该选的文件，见 [v0.1.0 说明](releases/uboot-v0.1.0.md#升级)（HW-D 的 ECC8 机器若还在 pre.5 或更早，要用 RAM 救援版）。比 pre.3 更旧的版本按 [pre.3 说明](releases/uboot-v0.1.0-pre.3.md#从旧版升级)操作，升级后需要再刷一次固件。
 
 ## 装好之后：刷 QSDK 11.5 固件
 
@@ -77,12 +77,12 @@
 | HW-C（RT3000 RTL8367S） | ✅ | ✅ | ✅ | ✅ |
 | HW-D（NX30） | ✅ | ✅ | ✅ | ✅ |
 
-U-Boot 共 84 个候选（4 类主板 × 21 种 NAND 配置），全部离线构建通过；实机测试的是上表 4 个，其余候选还没有在实物上跑过。pre.7 能直接启动上游 OpenWrt 固件，四类主板都用 RAM 救援版做了实机测试，HW-A 还实测了「U-Boot 更新」写入，见 [pre.7 说明](releases/uboot-v0.1.0-pre.7.md#验证状态)。每类主板目前只有一台样机，详细记录见[验证记录](docs/VALIDATION.md)。
+U-Boot 共 84 个候选（4 类主板 × 21 种 NAND 配置），全部离线构建通过；实机测试的是上表 4 个，其余候选还没有在实物上跑过。v0.1.0 在四类主板上都实测了「U-Boot 更新」写入和冷启动，见 [v0.1.0 说明](releases/uboot-v0.1.0.md#验证状态)。每类主板目前只有一台样机，详细记录见[验证记录](docs/VALIDATION.md)。
 
 ## 使用前请注意
 
 > [!WARNING]
-> 这仍是**测试版**。改写启动程序有变砖风险，如果你没有 TTL 串口等独立恢复手段，可以先观望一段时间。
+> 改写启动程序有变砖风险。每类主板目前只有一台样机实测，其余 NAND 配置只有离线构建结论；如果你没有 TTL 串口等独立恢复手段，请先在群里确认自己的机型和 NAND。
 
 - 只接受上表列出的官方固件版本，BootBridge 会核对文件大小和 SHA-256，不匹配时不会生成桥接包。
 - U-Boot 分区文件（`appsbl.mbn`）**不能**直接上传到原厂升级页，首次安装请用 BootBridge。
