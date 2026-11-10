@@ -18,6 +18,8 @@ No disassembly, no serial cable: build a bridge package in your browser, upload 
 
 </div>
 
+> **U-Boot development has moved to [IPQ50XX-Uboot](https://github.com/FlyFish-go/IPQ50XX-Uboot).** This repository stays at v0.1.0 and keeps BootBridge Web and past downloads. New releases and bug reports go to the new repository.
+
 <table>
 <tr>
 <td width="50%"><img src="docs/images/bootbridge-web.png" alt="BootBridge Web: choose your model"></td>

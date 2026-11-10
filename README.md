@@ -19,6 +19,8 @@
 
 </div>
 
+> **U-Boot 开发已迁到 [IPQ50XX-Uboot](https://github.com/FlyFish-go/IPQ50XX-Uboot)。** 本仓库停在 v0.1.0，继续提供 BootBridge 网页版和历史版本下载；新版本和问题反馈请到新仓库。
+
 <table>
 <tr>
 <td width="50%"><img src="docs/images/bootbridge-web.png" alt="BootBridge 网页版：选择机型"></td>
