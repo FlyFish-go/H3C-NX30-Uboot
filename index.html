@@ -1,30 +1,53 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="auto">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data:; connect-src 'self' https://magic.h3c.com https://h3c-magic.oss-cn-hangzhou.aliyuncs.com; base-uri 'none'; form-action 'none'; object-src 'none'">
-<meta name="referrer" content="no-referrer">
-<meta name="color-scheme" content="light dark">
-<meta name="description" content="BootBridge 网页版：在浏览器本地用 H3C 官方固件生成桥接包，不上传任何文件。">
-<title>BootBridge 网页版</title>
-<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/app.css?v=6839120fdd5c">
+<link rel="canonical" href="https://flyfish-go.github.io/IPQ50XX-Uboot/bootbridge/">
+<title>BootBridge 已迁移</title>
+<style>
+:root {
+  color-scheme: light dark;
+}
+body {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  color: #212529;
+  background-color: #ffffff;
+  overflow-wrap: break-word;
+}
+h1 {
+  font-size: 1.75rem;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  line-height: 1.3;
+}
+p {
+  margin: 1rem 0;
+}
+a {
+  color: #0f766e;
+}
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e5e7eb;
+    background-color: #121212;
+  }
+  a {
+    color: #5eead4;
+  }
+}
+</style>
 </head>
 <body>
-<div id="root"></div>
-<div id="boot-fail" class="boot-fail" role="alert">
-  <h1>BootBridge 网页版</h1>
-  <p id="boot-msg">页面没有正常启动。请用最新版的 Chrome、Edge、Firefox 或 Safari 打开，并确认没有禁用 JavaScript。从压缩包使用时，请先完整解压再打开 index.html。</p>
-  <p lang="en">The page did not start. Please use a current Chrome, Edge, Firefox or Safari with JavaScript enabled. When using the ZIP, extract it completely before opening index.html.</p>
-  <p id="boot-detail" class="mono"></p>
-</div>
-<script src="assets/strings.js?v=6839120fdd5c"></script>
-<script src="assets/catalog.js?v=6839120fdd5c"></script>
-<script src="assets/commands.js?v=6839120fdd5c"></script>
-<script src="assets/engine.js?v=6839120fdd5c"></script>
-<script src="assets/inject.js?v=6839120fdd5c"></script>
-<script src="assets/nx30.js?v=6839120fdd5c"></script>
-<script src="assets/app.js?v=6839120fdd5c"></script>
+<h1>BootBridge 已迁移</h1>
+<p>BootBridge 网页工具已迁到 IPQ50XX-Uboot 指南站，新站另外提供<a href="https://flyfish-go.github.io/IPQ50XX-Uboot/tools/fwunpack">离线固件拆包工具</a>。NX30 家族使用新版可直接安装 U-Boot v0.2.0。</p>
+<p><a href="https://flyfish-go.github.io/IPQ50XX-Uboot/bootbridge/">打开新版 BootBridge</a></p>
+<p><a href="https://flyfish-go.github.io/IPQ50XX-Uboot/tools/fwunpack">打开离线固件拆包工具</a></p>
+<p><a href="https://flyfish-go.github.io/IPQ50XX-Uboot/">打开安装指南与工具入口</a></p>
+<p>旧版 pre.5 等发布附件继续保留在 <a href="https://github.com/FlyFish-go/H3C-NX30-Uboot/releases">旧仓库 Releases</a>，已有安装的升级方法见新指南。</p>
 </body>
 </html>
